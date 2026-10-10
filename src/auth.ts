@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { isRole } from "@/lib/roles";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
@@ -20,9 +21,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email: credentials.email.trim().toLowerCase() },
         });
         if (!user || !(await compare(credentials.password, user.passwordHash))) {
+          return null;
+        }
+
+        if (!isRole(user.role)) {
           return null;
         }
 
@@ -45,8 +50,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.sub ?? "";
-        session.user.role =
-          typeof token.role === "string" ? token.role : "STUDENT";
+        session.user.role = isRole(token.role) ? token.role : "STUDENT";
       }
       return session;
     },

@@ -44,7 +44,18 @@ Email đăng nhập mẫu:
 npm run dev
 ```
 
-Mở <http://localhost:3000>. Giao diện sản phẩm chưa được triển khai.
+Mở <http://localhost:3000>. Đăng ký tài khoản Doanh nghiệp hoặc Sinh viên, hoặc đăng nhập bằng tài khoản seed.
+
+### Kiểm thử thủ công
+
+1. Đặt `SEED_USER_PASSWORD` trong `.env`, chạy `npm run db:seed`; tất cả tài khoản seed dùng cùng mật khẩu này.
+2. Đăng nhập bằng `business1@unibridge.local` và mật khẩu seed; xác nhận trang `/business` hiển thị điều hướng Doanh nghiệp.
+3. Đăng xuất, đăng nhập bằng `student1@unibridge.local`; xác nhận trang `/student` hiển thị điều hướng Sinh viên.
+4. Đăng xuất, đăng nhập bằng `admin@unibridge.local`; xác nhận trang `/admin` hiển thị điều hướng Quản trị viên.
+5. Khi đã đăng xuất, truy cập trực tiếp `/business`, `/student` và `/admin`; mỗi đường dẫn phải chuyển đến `/dang-nhap`. Sau khi đăng nhập, chuyển hướng về đường dẫn được yêu cầu nếu đúng vai trò.
+6. Đăng nhập với một vai trò rồi thử vào khu vực của vai trò khác; phải được chuyển về dashboard của chính mình.
+7. Tạo lần lượt tài khoản mới với vai trò Doanh nghiệp và Sinh viên; xác nhận mỗi tài khoản vào đúng dashboard. Thử đăng ký lại cùng email và xác nhận có thông báo email đã được sử dụng.
+8. Xác nhận form đăng ký chỉ cho chọn Doanh nghiệp hoặc Sinh viên, không có lựa chọn Admin.
 
 ## Lệnh hữu ích
 
