@@ -106,7 +106,7 @@ model Problem {
   budgetMax         Int?
   status            String          @default("PENDING_REVIEW")
   reviewNote        String?
-  submittedAt       DateTime        @default(now())
+  submittedAt       DateTime?
   approvedAt        DateTime?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -114,9 +114,23 @@ model Problem {
   reviewer          User?           @relation("ProblemReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   skills            ProblemSkill[]
   applications      Application[]
+  attachments       ProblemAttachment[]
 
   @@index([status, field])
   @@index([businessProfileId])
+}
+
+model ProblemAttachment {
+  id           String   @id @default(cuid())
+  problemId    String
+  originalName String
+  contentType  String
+  sizeBytes    Int
+  storageKey   String   @unique
+  createdAt    DateTime @default(now())
+  problem      Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@index([problemId])
 }
 
 model ProblemSkill {

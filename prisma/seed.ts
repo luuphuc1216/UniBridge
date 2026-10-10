@@ -1,6 +1,8 @@
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { hash } from "bcryptjs";
+import { randomUUID } from "node:crypto";
 import { PrismaClient } from "../src/generated/prisma/client";
+import { attachmentStorage } from "../src/lib/storage";
 
 function getRequiredEnvironmentVariable(name: string): string {
   const value = process.env[name];
@@ -385,6 +387,147 @@ async function main() {
         problemId: problem.id,
         skillId: getSkillId(name),
       })),
+    });
+  }
+
+  const reviewExamples = [
+    {
+      slug: "ban-nhap-thu-nghiem-cua-doanh-nghiep",
+      title: "Bản nháp bài toán đang soạn",
+      status: "DRAFT",
+      reviewNote: null,
+    },
+    {
+      slug: "bai-toan-can-chinh-sua-thu-nghiem",
+      title: "Bài toán mẫu cần chỉnh sửa",
+      status: "CHANGES_REQUESTED",
+      reviewNote: "Vui lòng làm rõ kết quả đầu ra và phạm vi dữ liệu cần phân tích.",
+    },
+  ];
+  for (const example of reviewExamples) {
+    await prisma.problem.upsert({
+      where: { slug: example.slug },
+      update: {
+        businessProfileId: businessProfiles[0].id,
+        title: example.title,
+        description: "Bài toán mẫu để doanh nghiệp kiểm thử trạng thái và luồng chỉnh sửa.",
+        goal: "Kiểm tra chức năng lưu, cập nhật và gửi duyệt bài toán.",
+        field: "Phân tích dữ liệu",
+        requirements: "Nhóm có kinh nghiệm xử lý và trình bày dữ liệu.",
+        expectedDuration: "4-6 tuần",
+        budgetMin: 5000000,
+        budgetMax: 10000000,
+        status: example.status,
+        reviewNote: example.reviewNote,
+        submittedAt: example.status === "DRAFT" ? null : new Date(),
+      },
+      create: {
+        businessProfileId: businessProfiles[0].id,
+        title: example.title,
+        slug: example.slug,
+        description: "Bài toán mẫu để doanh nghiệp kiểm thử trạng thái và luồng chỉnh sửa.",
+        goal: "Kiểm tra chức năng lưu, cập nhật và gửi duyệt bài toán.",
+        field: "Phân tích dữ liệu",
+        requirements: "Nhóm có kinh nghiệm xử lý và trình bày dữ liệu.",
+        expectedDuration: "4-6 tuần",
+        budgetMin: 5000000,
+        budgetMax: 10000000,
+        status: example.status,
+        reviewNote: example.reviewNote,
+        submittedAt: example.status === "DRAFT" ? null : new Date(),
+      },
+    });
+  }
+
+  const applicationProblem = await prisma.problem.findUniqueOrThrow({
+    where: { slug: problems[0].slug },
+  });
+  const publicAttachmentId = "seed-public-problem-attachment";
+  const existingPublicAttachment = await prisma.problemAttachment.findUnique({
+    where: { id: publicAttachmentId },
+  });
+  if (!existingPublicAttachment) {
+    const storageKey = randomUUID();
+    const content = new TextEncoder().encode(
+      "san_pham,mo_ta\nMat_hang_mau,Du_lieu_mau de xem tai lieu\n",
+    );
+    await attachmentStorage.save(storageKey, content);
+    try {
+      await prisma.problemAttachment.create({
+        data: {
+          id: publicAttachmentId,
+          problemId: applicationProblem.id,
+          originalName: "Tai-lieu-mau.csv",
+          contentType: "text/csv",
+          sizeBytes: content.byteLength,
+          storageKey,
+        },
+      });
+    } catch (error) {
+      try {
+        await attachmentStorage.delete(storageKey);
+      } catch (cleanupError) {
+        console.error("Không thể dọn tệp seed sau lỗi tạo metadata:", cleanupError);
+      }
+      throw error;
+    }
+  }
+
+  const applicationExamples = [
+    {
+      teamSlug: "nextgen-digital",
+      approach:
+        "Phỏng vấn doanh nghiệp, xác định luồng mua hàng chính, sau đó xây dựng prototype Next.js responsive và kiểm thử với người dùng.",
+      estimatedDuration: "8 tuần",
+      proposedBudget: 22000000,
+    },
+    {
+      teamSlug: "data-spark",
+      approach:
+        "Ưu tiên phân tích dữ liệu sản phẩm và thiết kế dashboard bán hàng trước, sau đó tích hợp luồng đặt hàng mẫu.",
+      estimatedDuration: "10 tuần",
+      proposedBudget: 18000000,
+    },
+    {
+      teamSlug: "creative-lab",
+      approach:
+        "Nghiên cứu hành vi mua trên thiết bị di động, dựng hệ thống giao diện và bộ hình ảnh sản phẩm nhất quán.",
+      estimatedDuration: "7 tuần",
+      proposedBudget: 16000000,
+    },
+    {
+      teamSlug: "market-minds",
+      approach:
+        "Khảo sát khách hàng mục tiêu, đề xuất định vị gian hàng và thử nghiệm nội dung bán hàng cho nhóm sản phẩm chủ lực.",
+      estimatedDuration: "6 tuần",
+      proposedBudget: 14000000,
+    },
+  ];
+
+  for (const application of applicationExamples) {
+    const team = await prisma.studentTeam.findUniqueOrThrow({
+      where: { slug: application.teamSlug },
+    });
+    await prisma.application.upsert({
+      where: {
+        problemId_teamId: {
+          problemId: applicationProblem.id,
+          teamId: team.id,
+        },
+      },
+      update: {
+        approach: application.approach,
+        estimatedDuration: application.estimatedDuration,
+        proposedBudget: application.proposedBudget,
+        status: "SUBMITTED",
+      },
+      create: {
+        problemId: applicationProblem.id,
+        teamId: team.id,
+        approach: application.approach,
+        estimatedDuration: application.estimatedDuration,
+        proposedBudget: application.proposedBudget,
+      },
     });
   }
 }

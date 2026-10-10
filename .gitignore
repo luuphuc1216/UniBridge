@@ -23,6 +23,7 @@
 # local database and generated Prisma client
 /prisma/*.db
 /src/generated/prisma/
+/uploads/
 
 # misc
 .DS_Store
