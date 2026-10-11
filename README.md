@@ -29,6 +29,7 @@ Seed có tính lặp lại an toàn và tạo:
 - 3 tài khoản doanh nghiệp cùng hồ sơ doanh nghiệp.
 - 4 tài khoản sinh viên đại diện cho 4 nhóm.
 - 10 Problem mẫu gắn với các doanh nghiệp.
+- Bài toán mẫu ở trạng thái chờ duyệt, cần chỉnh sửa và tài liệu để kiểm thử kiểm duyệt.
 
 Các tài khoản seed dùng chung mật khẩu được cấu hình qua `SEED_USER_PASSWORD`; mật khẩu được băm trước khi lưu.
 
@@ -56,6 +57,11 @@ Mở <http://localhost:3000>. Đăng ký tài khoản Doanh nghiệp hoặc Sinh
 6. Đăng nhập với một vai trò rồi thử vào khu vực của vai trò khác; phải được chuyển về dashboard của chính mình.
 7. Tạo lần lượt tài khoản mới với vai trò Doanh nghiệp và Sinh viên; xác nhận mỗi tài khoản vào đúng dashboard. Thử đăng ký lại cùng email và xác nhận có thông báo email đã được sử dụng.
 8. Xác nhận form đăng ký chỉ cho chọn Doanh nghiệp hoặc Sinh viên, không có lựa chọn Admin.
+9. Đăng nhập với `admin@unibridge.local`, mở `/admin/problems` và xác nhận bài toán mẫu đang chờ duyệt xuất hiện. Mở chi tiết, kiểm tra đủ thông tin doanh nghiệp và 8 trường bài toán; tải `Du-lieu-kiem-duyet.csv`.
+10. Thử duyệt khi chưa chọn đủ 6 mục và xác nhận hệ thống từ chối. Chọn đủ 6 mục, bấm “Duyệt”; bài toán phải chuyển sang `APPROVED` và biến mất khỏi danh sách mặc định.
+11. Đăng nhập với `student1@unibridge.local`, mở `/student/problems` và xác nhận bài vừa duyệt xuất hiện; mở chi tiết và tải tài liệu đính kèm.
+12. Gửi một bài toán khác đang chờ duyệt về chỉnh sửa với lý do để xác nhận trường hợp thiếu lý do bị từ chối. Nhập lý do hợp lệ, gửi lại yêu cầu; đăng nhập doanh nghiệp sở hữu bài toán, mở chuông thông báo và xác nhận lý do hiển thị cả trong thông báo lẫn trang chi tiết. Mở thông báo để xác nhận nó được đánh dấu đã đọc.
+13. Thử gửi action kiểm duyệt khi không đăng nhập Admin; máy chủ phải từ chối thao tác.
 
 ## Lệnh hữu ích
 

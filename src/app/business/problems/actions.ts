@@ -204,7 +204,7 @@ export async function updateProblemAction(
       where: {
         id: problemId,
         businessProfileId,
-        status: { in: ["DRAFT", "CHANGES_REQUESTED"] },
+        status: { in: ["DRAFT", "NEEDS_REVISION", "CHANGES_REQUESTED"] },
       },
       select: { id: true, status: true },
     });
@@ -236,7 +236,14 @@ export async function updateProblemAction(
         data: {
           ...fields,
           status: nextStatus,
-          ...(shouldSubmit ? { reviewNote: null, submittedAt: new Date() } : {}),
+          ...(shouldSubmit
+            ? {
+                reviewNote: null,
+                reviewedById: null,
+                approvedAt: null,
+                submittedAt: new Date(),
+              }
+            : {}),
           attachments: { create: stored },
         },
       });
@@ -297,7 +304,7 @@ export async function selectTeamAction(
         where: {
           id: problemId,
           businessProfileId,
-          status: "PUBLISHED",
+          status: { in: ["APPROVED", "PUBLISHED"] },
         },
         select: { id: true },
       });

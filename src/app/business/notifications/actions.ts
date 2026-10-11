@@ -1,0 +1,31 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function openNotificationAction(formData: FormData): Promise<void> {
+  const session = await auth();
+  if (!session?.user || session.user.role !== "BUSINESS") {
+    throw new Error("Bạn không có quyền xem thông báo doanh nghiệp.");
+  }
+
+  const notificationId = formData.get("notificationId");
+  if (typeof notificationId !== "string" || notificationId.length === 0) {
+    throw new Error("Không tìm thấy thông báo.");
+  }
+
+  const notification = await prisma.notification.findFirst({
+    where: { id: notificationId, userId: session.user.id },
+    select: { id: true, href: true },
+  });
+  if (!notification) {
+    throw new Error("Không tìm thấy thông báo của tài khoản này.");
+  }
+
+  await prisma.notification.updateMany({
+    where: { id: notification.id, userId: session.user.id, readAt: null },
+    data: { readAt: new Date() },
+  });
+  redirect(notification.href);
+}

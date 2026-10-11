@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { signOut } from "next-auth/react";
+import type { ReactNode } from "react";
 
 export type NavigationLink = {
   href: string;
@@ -11,9 +12,10 @@ export type NavigationLink = {
 type RoleNavigationProps = {
   title: string;
   links: NavigationLink[];
+  tools?: ReactNode;
 };
 
-export function RoleNavigation({ title, links }: RoleNavigationProps) {
+export function RoleNavigation({ title, links, tools }: RoleNavigationProps) {
   return (
     <header className="border-b border-border bg-card">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
@@ -37,9 +39,12 @@ export function RoleNavigation({ title, links }: RoleNavigationProps) {
           ))}
         </nav>
         <div className="flex items-center justify-between gap-3 border-t border-border pt-3 lg:border-0 lg:pt-0">
-          <span className="hidden rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary lg:inline-flex">
-            {title}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="hidden rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary lg:inline-flex">
+              {title}
+            </span>
+            {tools}
+          </div>
           <button
             className="rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-muted"
             onClick={() => signOut({ callbackUrl: "/" })}

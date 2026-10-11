@@ -18,7 +18,7 @@ export default async function EditBusinessProblemPage({
     where: {
       id: problemId,
       businessProfileId,
-      status: { in: ["DRAFT", "CHANGES_REQUESTED"] },
+      status: { in: ["DRAFT", "NEEDS_REVISION", "CHANGES_REQUESTED"] },
     },
     include: { attachments: { orderBy: { createdAt: "asc" } } },
   });

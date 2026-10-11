@@ -12,6 +12,43 @@ function getRequiredEnvironmentVariable(name: string): string {
   return value;
 }
 
+async function ensureSeedAttachment(
+  problemId: string,
+  attachmentId: string,
+  originalName: string,
+  contentType: string,
+  content: Uint8Array,
+) {
+  const existingAttachment = await prisma.problemAttachment.findUnique({
+    where: { id: attachmentId },
+  });
+  if (existingAttachment) {
+    return;
+  }
+
+  const storageKey = randomUUID();
+  await attachmentStorage.save(storageKey, content);
+  try {
+    await prisma.problemAttachment.create({
+      data: {
+        id: attachmentId,
+        problemId,
+        originalName,
+        contentType,
+        sizeBytes: content.byteLength,
+        storageKey,
+      },
+    });
+  } catch (error) {
+    try {
+      await attachmentStorage.delete(storageKey);
+    } catch (cleanupError) {
+      console.error("Không thể dọn tệp seed sau lỗi tạo metadata:", cleanupError);
+    }
+    throw error;
+  }
+}
+
 const databaseUrl = getRequiredEnvironmentVariable("DATABASE_URL");
 const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
 const prisma = new PrismaClient({ adapter });
@@ -400,8 +437,14 @@ async function main() {
     {
       slug: "bai-toan-can-chinh-sua-thu-nghiem",
       title: "Bài toán mẫu cần chỉnh sửa",
-      status: "CHANGES_REQUESTED",
+      status: "NEEDS_REVISION",
       reviewNote: "Vui lòng làm rõ kết quả đầu ra và phạm vi dữ liệu cần phân tích.",
+    },
+    {
+      slug: "bai-toan-cho-duyet-thu-nghiem",
+      title: "Bài toán mẫu đang chờ duyệt",
+      status: "PENDING_REVIEW",
+      reviewNote: null,
     },
   ];
   for (const example of reviewExamples) {
@@ -419,6 +462,8 @@ async function main() {
         budgetMax: 10000000,
         status: example.status,
         reviewNote: example.reviewNote,
+        reviewedById: null,
+        approvedAt: null,
         submittedAt: example.status === "DRAFT" ? null : new Date(),
       },
       create: {
@@ -434,6 +479,8 @@ async function main() {
         budgetMax: 10000000,
         status: example.status,
         reviewNote: example.reviewNote,
+        reviewedById: null,
+        approvedAt: null,
         submittedAt: example.status === "DRAFT" ? null : new Date(),
       },
     });
@@ -442,36 +489,27 @@ async function main() {
   const applicationProblem = await prisma.problem.findUniqueOrThrow({
     where: { slug: problems[0].slug },
   });
-  const publicAttachmentId = "seed-public-problem-attachment";
-  const existingPublicAttachment = await prisma.problemAttachment.findUnique({
-    where: { id: publicAttachmentId },
-  });
-  if (!existingPublicAttachment) {
-    const storageKey = randomUUID();
-    const content = new TextEncoder().encode(
+  await ensureSeedAttachment(
+    applicationProblem.id,
+    "seed-public-problem-attachment",
+    "Tai-lieu-mau.csv",
+    "text/csv",
+    new TextEncoder().encode(
       "san_pham,mo_ta\nMat_hang_mau,Du_lieu_mau de xem tai lieu\n",
-    );
-    await attachmentStorage.save(storageKey, content);
-    try {
-      await prisma.problemAttachment.create({
-        data: {
-          id: publicAttachmentId,
-          problemId: applicationProblem.id,
-          originalName: "Tai-lieu-mau.csv",
-          contentType: "text/csv",
-          sizeBytes: content.byteLength,
-          storageKey,
-        },
-      });
-    } catch (error) {
-      try {
-        await attachmentStorage.delete(storageKey);
-      } catch (cleanupError) {
-        console.error("Không thể dọn tệp seed sau lỗi tạo metadata:", cleanupError);
-      }
-      throw error;
-    }
-  }
+    ),
+  );
+  const pendingReviewProblem = await prisma.problem.findUniqueOrThrow({
+    where: { slug: "bai-toan-cho-duyet-thu-nghiem" },
+  });
+  await ensureSeedAttachment(
+    pendingReviewProblem.id,
+    "seed-pending-problem-attachment",
+    "Du-lieu-kiem-duyet.csv",
+    "text/csv",
+    new TextEncoder().encode(
+      "hang_muc,mo_ta\nTai_lieu_kiem_duyet,Du_lieu mau cho admin tai xuong\n",
+    ),
+  );
 
   const applicationExamples = [
     {

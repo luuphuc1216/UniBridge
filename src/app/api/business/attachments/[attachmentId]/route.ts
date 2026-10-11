@@ -35,7 +35,7 @@ export async function GET(
   const isStudentWithPublicProblem =
     session.user.role === "STUDENT" &&
     attachment.problem.approvedAt !== null &&
-    ["PUBLISHED", "TEAM_SELECTED"].includes(attachment.problem.status);
+    ["APPROVED", "PUBLISHED", "TEAM_SELECTED"].includes(attachment.problem.status);
   if (!isAdmin && !isOwner && !isStudentWithPublicProblem) {
     return new Response("Bạn không có quyền tải tài liệu này.", { status: 403 });
   }

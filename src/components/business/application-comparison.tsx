@@ -76,7 +76,7 @@ export function ApplicationComparison({
   problemSkills,
   problemStatus,
 }: ApplicationComparisonProps) {
-  const canSelect = problemStatus === "PUBLISHED";
+  const canSelect = ["APPROVED", "PUBLISHED"].includes(problemStatus);
 
   if (applications.length === 0) {
     return (

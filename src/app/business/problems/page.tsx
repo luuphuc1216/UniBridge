@@ -7,7 +7,9 @@ export const instant = false;
 const statusLabels: Record<string, string> = {
   DRAFT: "Bản nháp",
   PENDING_REVIEW: "Chờ duyệt",
+  NEEDS_REVISION: "Cần chỉnh sửa",
   CHANGES_REQUESTED: "Cần chỉnh sửa",
+  APPROVED: "Đã duyệt",
   PUBLISHED: "Đang nhận hồ sơ",
   TEAM_SELECTED: "Đã chọn nhóm",
 };
@@ -15,7 +17,9 @@ const statusLabels: Record<string, string> = {
 const statusClasses: Record<string, string> = {
   DRAFT: "bg-muted text-muted-foreground",
   PENDING_REVIEW: "bg-amber-100 text-amber-800",
+  NEEDS_REVISION: "bg-rose-100 text-rose-800",
   CHANGES_REQUESTED: "bg-rose-100 text-rose-800",
+  APPROVED: "bg-emerald-100 text-emerald-800",
   PUBLISHED: "bg-emerald-100 text-emerald-800",
   TEAM_SELECTED: "bg-blue-100 text-blue-800",
 };

@@ -8,7 +8,9 @@ export const instant = false;
 const statusLabels: Record<string, string> = {
   DRAFT: "Bản nháp",
   PENDING_REVIEW: "Chờ duyệt",
+  NEEDS_REVISION: "Cần chỉnh sửa",
   CHANGES_REQUESTED: "Cần chỉnh sửa",
+  APPROVED: "Đã duyệt",
   PUBLISHED: "Đang nhận hồ sơ",
   TEAM_SELECTED: "Đã chọn nhóm",
   COMPLETED: "Đã hoàn thành",
@@ -42,8 +44,8 @@ export default async function BusinessProblemDetailPage({
     notFound();
   }
 
-  const editable = ["DRAFT", "CHANGES_REQUESTED"].includes(problem.status);
-  const canReviewApplications = ["PUBLISHED", "TEAM_SELECTED"].includes(
+  const editable = ["DRAFT", "NEEDS_REVISION", "CHANGES_REQUESTED"].includes(problem.status);
+  const canReviewApplications = ["APPROVED", "PUBLISHED", "TEAM_SELECTED"].includes(
     problem.status,
   );
 
