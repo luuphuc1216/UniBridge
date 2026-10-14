@@ -88,6 +88,10 @@ const teams = [
     major: "Công nghệ thông tin",
     description: "Nhóm phát triển ứng dụng web và sản phẩm số.",
     skills: ["TypeScript", "Next.js", "Thiết kế giao diện"],
+    experience: "Đã xây dựng các ứng dụng web responsive cho dự án môn học và câu lạc bộ.",
+    relevantProducts: "https://nextgen.example/portfolio",
+    achievements: "Giải Nhì cuộc thi sản phẩm số cấp trường.",
+    interests: "Thương mại điện tử, giáo dục số",
   },
   {
     slug: "market-minds",
@@ -96,6 +100,10 @@ const teams = [
     major: "Marketing",
     description: "Nhóm nghiên cứu thị trường và xây dựng chiến lược tiếp thị.",
     skills: ["Nghiên cứu thị trường", "Marketing số", "Phân tích dữ liệu"],
+    experience: "Đã thực hiện khảo sát người dùng và kế hoạch truyền thông cho các dự án sinh viên.",
+    relevantProducts: "https://marketminds.example/portfolio",
+    achievements: "Chứng chỉ Google Analytics; Giải Ba cuộc thi Marketing sinh viên.",
+    interests: "Nghiên cứu thị trường, bán lẻ, du lịch",
   },
   {
     slug: "data-spark",
@@ -104,6 +112,10 @@ const teams = [
     major: "Khoa học dữ liệu",
     description: "Nhóm khai thác dữ liệu để hỗ trợ quyết định kinh doanh.",
     skills: ["Python", "Phân tích dữ liệu", "Trực quan hóa dữ liệu"],
+    experience: "Đã xử lý bộ dữ liệu bán lẻ và xây dựng dashboard phân tích trong dự án học thuật.",
+    relevantProducts: "https://dataspark.example/portfolio",
+    achievements: "Chứng chỉ phân tích dữ liệu cơ bản.",
+    interests: "Phân tích dữ liệu, trí tuệ nhân tạo",
   },
   {
     slug: "creative-lab",
@@ -112,6 +124,10 @@ const teams = [
     major: "Thiết kế đồ họa",
     description: "Nhóm thiết kế nhận diện thương hiệu và trải nghiệm số.",
     skills: ["Thiết kế đồ họa", "Thiết kế giao diện", "Marketing số"],
+    experience: "Đã thiết kế bộ nhận diện và giao diện truyền thông cho một số hoạt động sinh viên.",
+    relevantProducts: "https://creativelab.example/portfolio",
+    achievements: "Giải Khuyến khích cuộc thi thiết kế sáng tạo.",
+    interests: "Thiết kế thương hiệu, trải nghiệm số",
   },
 ];
 
@@ -344,15 +360,25 @@ async function main() {
     const team = await prisma.studentTeam.upsert({
       where: { slug: teamData.slug },
       update: {
+        ownerId: user.id,
         name: teamData.name,
         university: teamData.university,
         description: teamData.description,
+        experience: teamData.experience,
+        relevantProducts: teamData.relevantProducts,
+        achievements: teamData.achievements,
+        interests: teamData.interests,
       },
       create: {
+        ownerId: user.id,
         slug: teamData.slug,
         name: teamData.name,
         university: teamData.university,
         description: teamData.description,
+        experience: teamData.experience,
+        relevantProducts: teamData.relevantProducts,
+        achievements: teamData.achievements,
+        interests: teamData.interests,
       },
     });
     await prisma.teamMembership.upsert({
@@ -362,10 +388,17 @@ async function main() {
           studentProfileId: studentProfile.id,
         },
       },
-      update: { title: "Trưởng nhóm", isLead: true },
+      update: {
+        name: studentNames[index],
+        major: teamData.major,
+        title: "Trưởng nhóm",
+        isLead: true,
+      },
       create: {
         teamId: team.id,
         studentProfileId: studentProfile.id,
+        name: studentNames[index],
+        major: teamData.major,
         title: "Trưởng nhóm",
         isLead: true,
       },
@@ -397,7 +430,7 @@ async function main() {
         expectedDuration: problemData.expectedDuration,
         budgetMin: problemData.budgetMin,
         budgetMax: problemData.budgetMax,
-        status: "PUBLISHED",
+        status: "APPROVED",
         reviewNote: "Đã kiểm duyệt nội dung mẫu.",
         approvedAt: new Date(),
       },
@@ -413,7 +446,7 @@ async function main() {
         expectedDuration: problemData.expectedDuration,
         budgetMin: problemData.budgetMin,
         budgetMax: problemData.budgetMax,
-        status: "PUBLISHED",
+        status: "APPROVED",
         reviewNote: "Đã kiểm duyệt nội dung mẫu.",
         approvedAt: new Date(Date.now() - index * 86_400_000),
       },
@@ -515,14 +548,30 @@ async function main() {
     {
       teamSlug: "nextgen-digital",
       approach:
-        "Phỏng vấn doanh nghiệp, xác định luồng mua hàng chính, sau đó xây dựng prototype Next.js responsive và kiểm thử với người dùng.",
+        "Phỏng vấn doanh nghiệp, xác định luồng mua hàng chính, đề xuất cấu trúc website responsive và kiểm thử luồng với người dùng.",
+      problemUnderstanding:
+        "Doanh nghiệp thiếu kênh bán hàng trực tuyến thuận tiện để giới thiệu sản phẩm và nhận đơn.",
+      solutionDirection:
+        "Xây dựng website bán hàng ưu tiên thiết bị di động, tập trung vào danh mục, nguồn gốc và đặt hàng.",
+      methodology: "Phỏng vấn doanh nghiệp, lập luồng người dùng và kiểm thử khả năng sử dụng.",
+      keySteps: "Phân tích yêu cầu; thiết kế giao diện; xây dựng website; kiểm thử và bàn giao.",
+      tools: "Next.js, TypeScript, Figma",
+      resources: "Một thành viên phụ trách giao diện, một thành viên phát triển và một đại diện doanh nghiệp phản hồi.",
       estimatedDuration: "8 tuần",
       proposedBudget: 22000000,
     },
     {
       teamSlug: "data-spark",
       approach:
-        "Ưu tiên phân tích dữ liệu sản phẩm và thiết kế dashboard bán hàng trước, sau đó tích hợp luồng đặt hàng mẫu.",
+        "Ưu tiên phân tích dữ liệu sản phẩm, xác định chỉ số cần theo dõi và đề xuất cấu trúc dashboard bán hàng.",
+      problemUnderstanding:
+        "Thông tin sản phẩm và hiệu quả bán hàng hiện chưa được trình bày tập trung.",
+      solutionDirection:
+        "Phân tích dữ liệu bán hàng, xác định chỉ số chính và đề xuất dashboard thử nghiệm.",
+      methodology: "Kiểm tra dữ liệu mẫu, phân tích mô tả và rà soát kết quả cùng doanh nghiệp.",
+      keySteps: "Xác định chỉ số; làm sạch dữ liệu; dựng dashboard; kiểm tra khuyến nghị.",
+      tools: "Python, pandas, Power BI",
+      resources: "Cần bộ dữ liệu bán hàng mẫu đã ẩn thông tin nhạy cảm.",
       estimatedDuration: "10 tuần",
       proposedBudget: 18000000,
     },
@@ -530,6 +579,14 @@ async function main() {
       teamSlug: "creative-lab",
       approach:
         "Nghiên cứu hành vi mua trên thiết bị di động, dựng hệ thống giao diện và bộ hình ảnh sản phẩm nhất quán.",
+      problemUnderstanding:
+        "Trải nghiệm thương hiệu và giao diện mua hàng chưa nhất quán giữa các kênh.",
+      solutionDirection:
+        "Thiết kế lại bộ giao diện và hình ảnh sản phẩm theo một hệ thống nhận diện thống nhất.",
+      methodology: "Phân tích hiện trạng, xây dựng moodboard và thử nghiệm mẫu giao diện.",
+      keySteps: "Khảo sát hiện trạng; đề xuất phong cách; thiết kế mẫu; lấy phản hồi và hoàn thiện.",
+      tools: "Figma, Adobe Illustrator",
+      resources: "Cần bộ nhận diện hiện tại và hình ảnh sản phẩm được phép sử dụng.",
       estimatedDuration: "7 tuần",
       proposedBudget: 16000000,
     },
@@ -537,6 +594,14 @@ async function main() {
       teamSlug: "market-minds",
       approach:
         "Khảo sát khách hàng mục tiêu, đề xuất định vị gian hàng và thử nghiệm nội dung bán hàng cho nhóm sản phẩm chủ lực.",
+      problemUnderstanding:
+        "Doanh nghiệp cần hiểu nhu cầu khách hàng và cách giới thiệu sản phẩm hiệu quả trên kênh trực tuyến.",
+      solutionDirection:
+        "Nghiên cứu nhóm khách hàng mục tiêu và đề xuất thông điệp bán hàng dựa trên dữ liệu khảo sát.",
+      methodology: "Khảo sát trực tuyến, phỏng vấn ngắn và tổng hợp kết quả theo phân khúc.",
+      keySteps: "Thiết kế khảo sát; thu thập dữ liệu; phân tích; đề xuất thông điệp và thử nghiệm.",
+      tools: "Google Forms, Google Sheets",
+      resources: "Cần doanh nghiệp hỗ trợ tiếp cận một số khách hàng hiện tại.",
       estimatedDuration: "6 tuần",
       proposedBudget: 14000000,
     },
@@ -555,6 +620,12 @@ async function main() {
       },
       update: {
         approach: application.approach,
+        problemUnderstanding: application.problemUnderstanding,
+        solutionDirection: application.solutionDirection,
+        methodology: application.methodology,
+        keySteps: application.keySteps,
+        tools: application.tools,
+        resources: application.resources,
         estimatedDuration: application.estimatedDuration,
         proposedBudget: application.proposedBudget,
         status: "SUBMITTED",
@@ -563,11 +634,34 @@ async function main() {
         problemId: applicationProblem.id,
         teamId: team.id,
         approach: application.approach,
+        problemUnderstanding: application.problemUnderstanding,
+        solutionDirection: application.solutionDirection,
+        methodology: application.methodology,
+        keySteps: application.keySteps,
+        tools: application.tools,
+        resources: application.resources,
         estimatedDuration: application.estimatedDuration,
         proposedBudget: application.proposedBudget,
       },
     });
   }
+
+  const firstStudent = await prisma.user.findUniqueOrThrow({
+    where: { email: "student1@unibridge.local" },
+  });
+  const savedExample = await prisma.problem.findUniqueOrThrow({
+    where: { slug: problems[1].slug },
+  });
+  await prisma.savedProblem.upsert({
+    where: {
+      userId_problemId: {
+        userId: firstStudent.id,
+        problemId: savedExample.id,
+      },
+    },
+    update: {},
+    create: { userId: firstStudent.id, problemId: savedExample.id },
+  });
 }
 
 main()

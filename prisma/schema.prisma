@@ -17,9 +17,13 @@ model User {
   updatedAt        DateTime         @updatedAt
   businessProfile  BusinessProfile?
   studentProfile   StudentProfile?
+  ownedTeam        StudentTeam?     @relation("StudentTeamOwner")
   reviewedProblems Problem[]        @relation("ProblemReviewer")
   reviews          Review[]
   notifications    Notification[]
+  savedProblems    SavedProblem[]
+  problemViews     ViewLog[]
+  problemSearches  SearchLog[]
 }
 
 model BusinessProfile {
@@ -47,31 +51,39 @@ model StudentProfile {
 }
 
 model StudentTeam {
-  id            String           @id @default(cuid())
-  name          String
-  slug          String           @unique
-  university    String
-  description   String
-  ratingAverage Float            @default(0)
-  ratingCount   Int              @default(0)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  memberships   TeamMembership[]
-  skills        TeamSkill[]
-  applications  Application[]
-  projects      Project[]
-  reviews       Review[]
+  id               String           @id @default(cuid())
+  ownerId          String?          @unique
+  name             String
+  slug             String           @unique
+  university       String
+  description      String
+  experience       String           @default("")
+  relevantProducts String           @default("")
+  achievements     String           @default("")
+  interests        String           @default("")
+  ratingAverage    Float            @default(0)
+  ratingCount      Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  owner            User?            @relation("StudentTeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  memberships      TeamMembership[]
+  skills           TeamSkill[]
+  applications     Application[]
+  projects         Project[]
+  reviews          Review[]
 }
 
 model TeamMembership {
-  id               String         @id @default(cuid())
+  id               String          @id @default(cuid())
   teamId           String
-  studentProfileId String
+  studentProfileId String?
+  name             String          @default("")
+  major            String          @default("")
   title            String
-  isLead           Boolean        @default(false)
-  joinedAt         DateTime       @default(now())
-  team             StudentTeam    @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  studentProfile   StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  isLead           Boolean         @default(false)
+  joinedAt         DateTime        @default(now())
+  team             StudentTeam     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  studentProfile   StudentProfile? @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, studentProfileId])
 }
@@ -93,11 +105,11 @@ model TeamSkill {
 }
 
 model Problem {
-  id                String          @id @default(cuid())
+  id                String              @id @default(cuid())
   businessProfileId String
   reviewedById      String?
   title             String
-  slug              String          @unique
+  slug              String              @unique
   description       String
   goal              String
   field             String
@@ -105,17 +117,19 @@ model Problem {
   expectedDuration  String
   budgetMin         Int?
   budgetMax         Int?
-  status            String          @default("PENDING_REVIEW")
+  status            String              @default("PENDING_REVIEW")
   reviewNote        String?
   submittedAt       DateTime?
   approvedAt        DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  businessProfile   BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
-  reviewer          User?           @relation("ProblemReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  businessProfile   BusinessProfile     @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+  reviewer          User?               @relation("ProblemReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   skills            ProblemSkill[]
   applications      Application[]
   attachments       ProblemAttachment[]
+  savedBy           SavedProblem[]
+  viewLogs          ViewLog[]
 
   @@index([status, field])
   @@index([businessProfileId])
@@ -144,22 +158,65 @@ model ProblemSkill {
 }
 
 model Application {
-  id                String            @id @default(cuid())
-  problemId         String
-  teamId            String
-  approach          String
-  estimatedDuration String
-  proposedBudget    Int?
-  status            String            @default("SUBMITTED")
-  submittedAt       DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  problem           Problem           @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  team              StudentTeam       @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  solutionProposal  SolutionProposal?
-  project           Project?
+  id                   String            @id @default(cuid())
+  problemId            String
+  teamId               String
+  approach             String
+  problemUnderstanding String            @default("")
+  solutionDirection    String            @default("")
+  methodology          String            @default("")
+  keySteps             String            @default("")
+  tools                String            @default("")
+  resources            String            @default("")
+  estimatedDuration    String
+  proposedBudget       Int?
+  status               String            @default("SUBMITTED")
+  submittedAt          DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  problem              Problem           @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  team                 StudentTeam       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  solutionProposal     SolutionProposal?
+  project              Project?
 
   @@unique([problemId, teamId])
   @@index([status])
+}
+
+model SavedProblem {
+  userId    String
+  problemId String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem   Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@id([userId, problemId])
+  @@index([userId, createdAt])
+}
+
+model ViewLog {
+  id        String   @id @default(cuid())
+  userId    String
+  problemId String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem   Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@index([userId, problemId, createdAt])
+}
+
+model SearchLog {
+  id        String   @id @default(cuid())
+  userId    String
+  query     String   @default("")
+  field     String?
+  skill     String?
+  duration  String?
+  budgetMin Int?
+  budgetMax Int?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model SolutionProposal {

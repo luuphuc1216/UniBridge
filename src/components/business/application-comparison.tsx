@@ -6,6 +6,12 @@ import { selectTeamAction, type ProblemActionState } from "@/app/business/proble
 type ApplicationCardData = {
   id: string;
   approach: string;
+  problemUnderstanding: string;
+  solutionDirection: string;
+  methodology: string;
+  keySteps: string;
+  tools: string;
+  resources: string;
   estimatedDuration: string;
   proposedBudget: number | null;
   status: string;
@@ -13,10 +19,14 @@ type ApplicationCardData = {
     name: string;
     university: string;
     description: string;
+    experience: string;
+    relevantProducts: string;
+    achievements: string;
+    interests: string;
     ratingAverage: number;
     ratingCount: number;
     skills: string[];
-    majors: string[];
+    members: { name: string; major: string }[];
     projects: { title: string }[];
   };
 };
@@ -95,6 +105,15 @@ export function ApplicationComparison({
         const matchedSkills = application.team.skills.filter((skill) =>
           problemSkills.includes(skill),
         );
+        const approachDetails = [
+          ["Cách nhóm hiểu vấn đề", application.problemUnderstanding],
+          ["Hướng giải quyết", application.solutionDirection],
+          ["Phương pháp thực hiện", application.methodology],
+          ["Các bước chính", application.keySteps],
+          ["Công cụ hoặc công nghệ", application.tools],
+          ["Nguồn lực cần thiết", application.resources],
+        ];
+        const hasStructuredApproach = approachDetails.some(([, value]) => value);
         return (
           <article
             className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6"
@@ -151,7 +170,9 @@ export function ApplicationComparison({
                   Chuyên môn thành viên
                 </dt>
                 <dd className="mt-2 text-sm">
-                  {application.team.majors.join(", ") || "Chưa cập nhật"}
+                  {application.team.members.length > 0
+                    ? application.team.members.map(({ name, major }) => `${name} — ${major}`).join(", ")
+                    : "Chưa cập nhật"}
                 </dd>
               </div>
               <div className="rounded-xl bg-muted/50 p-3">
@@ -159,11 +180,40 @@ export function ApplicationComparison({
                   Kinh nghiệm
                 </dt>
                 <dd className="mt-2 text-sm">
-                  {application.team.projects.length > 0
-                    ? `${application.team.projects.length} dự án: ${application.team.projects
-                        .map(({ title }) => title)
-                        .join(", ")}`
-                    : "Nhóm chưa có dự án hoàn thành trên nền tảng"}
+                  {application.team.experience || "Chưa cập nhật"}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-muted/50 p-3">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Sản phẩm liên quan
+                </dt>
+                <dd className="mt-2 whitespace-pre-wrap break-words text-sm">
+                  {application.team.relevantProducts || "Chưa cập nhật"}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-muted/50 p-3">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Thành tích và chứng chỉ
+                </dt>
+                <dd className="mt-2 whitespace-pre-wrap text-sm">
+                  {application.team.achievements || "Chưa cập nhật"}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-muted/50 p-3">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Lĩnh vực quan tâm
+                </dt>
+                <dd className="mt-2 whitespace-pre-wrap text-sm">
+                  {application.team.interests || "Chưa cập nhật"}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-muted/50 p-3">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Dự án đã hoàn thành trên nền tảng
+                </dt>
+                <dd className="mt-2 text-sm">
+                  {application.team.projects.map(({ title }) => title).join(", ") ||
+                    "Chưa có"}
                 </dd>
               </div>
               <div className="rounded-xl bg-muted/50 p-3">
@@ -183,11 +233,24 @@ export function ApplicationComparison({
             </dl>
             <section className="mt-5 rounded-xl border border-border p-4">
               <h3 className="text-sm font-semibold">Approach</h3>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-                {application.approach}
-              </p>
+              {hasStructuredApproach ? (
+                <dl className="mt-3 grid gap-4">
+                  {approachDetails.map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
+                      <dd className="mt-1 whitespace-pre-wrap text-sm leading-6">
+                        {value || "Chưa cập nhật"}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                  {application.approach || "Chưa cập nhật Approach"}
+                </p>
+              )}
             </section>
-            {canSelect ? (
+            {canSelect && application.status === "SUBMITTED" ? (
               <SelectTeamForm
                 applicationId={application.id}
                 problemId={problemId}

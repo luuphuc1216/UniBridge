@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { activeApplicationsWhere } from "@/lib/applications";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 
@@ -37,7 +38,9 @@ export default async function BusinessProblemDetailPage({
     where: { id: problemId, businessProfileId },
     include: {
       attachments: { orderBy: { createdAt: "asc" } },
-      _count: { select: { applications: true } },
+      _count: {
+        select: { applications: { where: activeApplicationsWhere } },
+      },
     },
   });
   if (!problem) {
@@ -76,7 +79,9 @@ export default async function BusinessProblemDetailPage({
               className="rounded-xl bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground hover:opacity-90"
               href={`/business/problems/${problem.id}/applications`}
             >
-              Xem {problem._count.applications} hồ sơ ứng tuyển
+              {problem._count.applications > 0
+                ? `Xem ${problem._count.applications} hồ sơ ứng tuyển`
+                : "Chưa có hồ sơ"}
             </Link>
           )}
         </div>

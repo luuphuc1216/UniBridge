@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ApplicationForm } from "@/components/student/application-form";
+import { ApplicationWithdrawButton } from "@/components/student/application-withdraw-button";
+import { SavedProblemButton } from "@/components/student/saved-problem-button";
 import { requireStudent } from "@/lib/student-access";
+import { getOwnedTeam } from "@/lib/student-team";
 import { prisma } from "@/lib/prisma";
 
 export const instant = false;
@@ -20,7 +24,7 @@ export default async function StudentProblemDetailPage({
 }: {
   params: Promise<{ problemId: string }>;
 }) {
-  await requireStudent();
+  const { userId } = await requireStudent();
   const { problemId } = await params;
   const problem = await prisma.problem.findFirst({
     where: {
@@ -36,6 +40,32 @@ export default async function StudentProblemDetailPage({
     notFound();
   }
 
+  const team = await getOwnedTeam(userId);
+  const [savedProblem, application] = await Promise.all([
+    prisma.savedProblem.findUnique({
+      where: { userId_problemId: { userId, problemId } },
+      select: { problemId: true },
+    }),
+    team
+      ? prisma.application.findUnique({
+          where: { problemId_teamId: { problemId, teamId: team.id } },
+          select: {
+            id: true,
+            status: true,
+            problemUnderstanding: true,
+            solutionDirection: true,
+            methodology: true,
+            keySteps: true,
+            tools: true,
+            resources: true,
+            estimatedDuration: true,
+            proposedBudget: true,
+          },
+        })
+      : Promise.resolve(null),
+  ]);
+  await prisma.viewLog.create({ data: { userId, problemId } });
+
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
       <Link
@@ -49,6 +79,12 @@ export default async function StudentProblemDetailPage({
       <p className="mt-2 text-sm text-muted-foreground">
         {problem.businessProfile.companyName} · {problem.businessProfile.industry}
       </p>
+      <div className="mt-4">
+        <SavedProblemButton
+          isSaved={Boolean(savedProblem)}
+          problemId={problem.id}
+        />
+      </div>
 
       <div className="mt-8 grid gap-5">
         <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">
@@ -108,6 +144,55 @@ export default async function StudentProblemDetailPage({
           )}
         </section>
       </div>
+
+      <section className="mt-7 rounded-2xl border border-border bg-card p-5 sm:p-7">
+        <h2 className="text-xl font-semibold">Hồ sơ ứng tuyển</h2>
+        {problem.status !== "APPROVED" ? (
+          <p className="mt-3 rounded-xl bg-muted p-4 text-sm leading-6 text-muted-foreground">
+            Bài toán hiện không nhận hồ sơ mới. Bạn vẫn có thể xem thông tin và hồ sơ đã gửi.
+          </p>
+        ) : !team ? (
+          <div className="mt-3 rounded-xl bg-muted p-4 text-sm leading-6">
+            Bạn cần hoàn thiện hồ sơ nhóm trước khi gửi hồ sơ ứng tuyển.{" "}
+            <Link className="font-semibold text-primary hover:underline" href="/student/team">
+              Tạo hồ sơ nhóm
+            </Link>
+          </div>
+        ) : application && !["SUBMITTED", "WITHDRAWN"].includes(application.status) ? (
+          <p className="mt-3 rounded-xl bg-muted p-4 text-sm leading-6">
+            {application.status === "SELECTED"
+              ? "Doanh nghiệp đã chọn nhóm cho bài toán này."
+              : "Doanh nghiệp đã xử lý hồ sơ này; bạn không thể chỉnh sửa hoặc rút."}
+          </p>
+        ) : (
+          <>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Trình bày năng lực nhóm và cách tiếp cận. Chưa cần nộp Prototype.
+            </p>
+            <ApplicationForm
+              application={
+                application
+                  ? {
+                      problemUnderstanding: application.problemUnderstanding,
+                      solutionDirection: application.solutionDirection,
+                      methodology: application.methodology,
+                      keySteps: application.keySteps,
+                      tools: application.tools,
+                      resources: application.resources,
+                      estimatedDuration: application.estimatedDuration,
+                      proposedBudget: application.proposedBudget,
+                    }
+                  : null
+              }
+              isResubmission={application?.status === "WITHDRAWN"}
+              problemId={problem.id}
+            />
+            {application?.status === "SUBMITTED" && (
+              <ApplicationWithdrawButton problemId={problem.id} />
+            )}
+          </>
+        )}
+      </section>
     </main>
   );
 }

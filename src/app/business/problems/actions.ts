@@ -325,7 +325,7 @@ export async function selectTeamAction(
         data: { status: "TEAM_SELECTED" },
       });
       await transaction.application.updateMany({
-        where: { problemId, id: { not: applicationId } },
+        where: { problemId, id: { not: applicationId }, status: "SUBMITTED" },
         data: { status: "REJECTED" },
       });
       await transaction.application.update({
@@ -343,5 +343,7 @@ export async function selectTeamAction(
 
   revalidatePath(`/business/problems/${problemId}`);
   revalidatePath(`/business/problems/${problemId}/applications`);
+  revalidatePath("/student/applications");
+  revalidatePath(`/student/problems/${problemId}`);
   redirect(`/business/problems/${problemId}`);
 }

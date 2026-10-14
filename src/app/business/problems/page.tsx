@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { activeApplicationsWhere } from "@/lib/applications";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 
@@ -30,7 +31,12 @@ export default async function BusinessProblemsPage() {
     where: { businessProfileId },
     orderBy: { updatedAt: "desc" },
     include: {
-      _count: { select: { applications: true, attachments: true } },
+      _count: {
+        select: {
+          applications: { where: activeApplicationsWhere },
+          attachments: true,
+        },
+      },
     },
   });
 

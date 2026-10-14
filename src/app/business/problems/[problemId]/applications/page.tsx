@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApplicationComparison } from "@/components/business/application-comparison";
+import { activeApplicationsWhere } from "@/lib/applications";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 
@@ -18,16 +19,13 @@ export default async function BusinessProblemApplicationsPage({
     include: {
       skills: { include: { skill: { select: { name: true } } } },
       applications: {
+        where: activeApplicationsWhere,
         orderBy: { submittedAt: "asc" },
         include: {
           team: {
             include: {
               skills: { include: { skill: { select: { name: true } } } },
-              memberships: {
-                include: {
-                  studentProfile: { select: { major: true } },
-                },
-              },
+              memberships: { orderBy: [{ isLead: "desc" }, { joinedAt: "asc" }] },
               projects: { select: { title: true } },
             },
           },
@@ -45,6 +43,12 @@ export default async function BusinessProblemApplicationsPage({
   const applications = problem.applications.map((application) => ({
     id: application.id,
     approach: application.approach,
+    problemUnderstanding: application.problemUnderstanding,
+    solutionDirection: application.solutionDirection,
+    methodology: application.methodology,
+    keySteps: application.keySteps,
+    tools: application.tools,
+    resources: application.resources,
     estimatedDuration: application.estimatedDuration,
     proposedBudget: application.proposedBudget,
     status: application.status,
@@ -52,16 +56,14 @@ export default async function BusinessProblemApplicationsPage({
       name: application.team.name,
       university: application.team.university,
       description: application.team.description,
+      experience: application.team.experience,
+      relevantProducts: application.team.relevantProducts,
+      achievements: application.team.achievements,
+      interests: application.team.interests,
       ratingAverage: application.team.ratingAverage,
       ratingCount: application.team.ratingCount,
       skills: application.team.skills.map(({ skill }) => skill.name),
-      majors: [
-        ...new Set(
-          application.team.memberships.map(
-            ({ studentProfile }) => studentProfile.major,
-          ),
-        ),
-      ],
+      members: application.team.memberships.map(({ name, major }) => ({ name, major })),
       projects: application.team.projects,
     },
   }));

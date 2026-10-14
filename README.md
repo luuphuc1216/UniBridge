@@ -27,8 +27,9 @@ Seed có tính lặp lại an toàn và tạo:
 
 - 1 tài khoản quản trị.
 - 3 tài khoản doanh nghiệp cùng hồ sơ doanh nghiệp.
-- 4 tài khoản sinh viên đại diện cho 4 nhóm.
+- 4 tài khoản sinh viên đại diện cho 4 nhóm có hồ sơ, thành viên và kỹ năng.
 - 10 Problem mẫu gắn với các doanh nghiệp.
+- Hồ sơ ứng tuyển mẫu, một bài toán đã lưu và các bài toán `APPROVED` để kiểm thử luồng sinh viên.
 - Bài toán mẫu ở trạng thái chờ duyệt, cần chỉnh sửa và tài liệu để kiểm thử kiểm duyệt.
 
 Các tài khoản seed dùng chung mật khẩu được cấu hình qua `SEED_USER_PASSWORD`; mật khẩu được băm trước khi lưu.
@@ -62,6 +63,13 @@ Mở <http://localhost:3000>. Đăng ký tài khoản Doanh nghiệp hoặc Sinh
 11. Đăng nhập với `student1@unibridge.local`, mở `/student/problems` và xác nhận bài vừa duyệt xuất hiện; mở chi tiết và tải tài liệu đính kèm.
 12. Gửi một bài toán khác đang chờ duyệt về chỉnh sửa với lý do để xác nhận trường hợp thiếu lý do bị từ chối. Nhập lý do hợp lệ, gửi lại yêu cầu; đăng nhập doanh nghiệp sở hữu bài toán, mở chuông thông báo và xác nhận lý do hiển thị cả trong thông báo lẫn trang chi tiết. Mở thông báo để xác nhận nó được đánh dấu đã đọc.
 13. Thử gửi action kiểm duyệt khi không đăng nhập Admin; máy chủ phải từ chối thao tác.
+14. Đăng nhập `student1@unibridge.local`, mở `/student/team`, sửa hồ sơ nhóm và lưu. Kiểm tra thành viên/chuyên ngành, kỹ năng, kinh nghiệm/dự án, sản phẩm, thành tích và lĩnh vực quan tâm được lưu sau khi tải lại trang.
+15. Mở `/student/problems`; thử tìm theo từ khóa và lọc lần lượt lĩnh vực, kỹ năng, thời lượng, khoảng ngân sách. Lưu một bài toán, xác nhận nó xuất hiện ở `/student/saved-problems`, rồi bỏ lưu và xác nhận nó biến mất. Bài toán mẫu đã lưu ban đầu là “Làm mới nhận diện thương hiệu An Nhiên”.
+16. Mở chi tiết bài toán `Xây dựng website bán hàng cho thực phẩm địa phương`; kiểm tra form Approach có đủ sáu phần, thời gian và chi phí. Sửa hồ sơ mẫu của NextGen Digital và mở `/student/applications` để kiểm tra trạng thái. Tạo một tài khoản sinh viên mới, chưa tạo hồ sơ nhóm, thử gửi hồ sơ; thao tác phải bị từ chối ở server.
+17. Đăng nhập `business1@unibridge.local`, mở bài toán bán hàng và chọn “So sánh nhóm ứng tuyển”. Kiểm tra hồ sơ nhóm, từng thành viên/chuyên ngành, kỹ năng, kinh nghiệm, sản phẩm, thành tích, lĩnh vực quan tâm, các phần Approach, thời gian và chi phí đề xuất. Mở một hồ sơ sinh viên vừa sửa và tải lại trang so sánh để xác nhận doanh nghiệp thấy dữ liệu mới nhất.
+18. Đăng nhập lại `student1@unibridge.local`, rút hồ sơ NextGen Digital cho bài toán bán hàng. Đăng nhập doanh nghiệp và xác nhận hồ sơ rút không còn trong bảng so sánh; chọn một nhóm còn `SUBMITTED`. Đăng nhập sinh viên và xác nhận hồ sơ rút vẫn là `WITHDRAWN`, nhóm được chọn là `SELECTED`, các hồ sơ `SUBMITTED` còn lại thành `REJECTED`, và hồ sơ `WITHDRAWN` không bị đổi trạng thái.
+19. Gửi một hồ sơ mới cho bài toán APPROVED thứ hai với `student1@unibridge.local`; đăng nhập doanh nghiệp sở hữu bài toán và xác nhận chuông thông báo có liên kết tới danh sách hồ sơ ứng tuyển.
+20. Trong Prisma Studio, kiểm tra `ViewLog` sau khi xem chi tiết, `SearchLog` sau khi tìm/lọc và `SavedProblem` sau khi lưu bài toán.
 
 ## Lệnh hữu ích
 
