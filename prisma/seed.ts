@@ -92,6 +92,8 @@ const teams = [
     relevantProducts: "https://nextgen.example/portfolio",
     achievements: "Giải Nhì cuộc thi sản phẩm số cấp trường.",
     interests: "Thương mại điện tử, giáo dục số",
+    ratingAverage: 4.7,
+    ratingCount: 6,
   },
   {
     slug: "market-minds",
@@ -104,6 +106,8 @@ const teams = [
     relevantProducts: "https://marketminds.example/portfolio",
     achievements: "Chứng chỉ Google Analytics; Giải Ba cuộc thi Marketing sinh viên.",
     interests: "Nghiên cứu thị trường, bán lẻ, du lịch",
+    ratingAverage: 4.2,
+    ratingCount: 3,
   },
   {
     slug: "data-spark",
@@ -116,6 +120,8 @@ const teams = [
     relevantProducts: "https://dataspark.example/portfolio",
     achievements: "Chứng chỉ phân tích dữ liệu cơ bản.",
     interests: "Phân tích dữ liệu, trí tuệ nhân tạo",
+    ratingAverage: 4.8,
+    ratingCount: 1,
   },
   {
     slug: "creative-lab",
@@ -128,6 +134,8 @@ const teams = [
     relevantProducts: "https://creativelab.example/portfolio",
     achievements: "Giải Khuyến khích cuộc thi thiết kế sáng tạo.",
     interests: "Thiết kế thương hiệu, trải nghiệm số",
+    ratingAverage: 0,
+    ratingCount: 0,
   },
 ];
 
@@ -368,6 +376,8 @@ async function main() {
         relevantProducts: teamData.relevantProducts,
         achievements: teamData.achievements,
         interests: teamData.interests,
+        ratingAverage: teamData.ratingAverage,
+        ratingCount: teamData.ratingCount,
       },
       create: {
         ownerId: user.id,
@@ -379,6 +389,8 @@ async function main() {
         relevantProducts: teamData.relevantProducts,
         achievements: teamData.achievements,
         interests: teamData.interests,
+        ratingAverage: teamData.ratingAverage,
+        ratingCount: teamData.ratingCount,
       },
     });
     await prisma.teamMembership.upsert({
@@ -662,6 +674,86 @@ async function main() {
     update: {},
     create: { userId: firstStudent.id, problemId: savedExample.id },
   });
+
+  const recommendationActivity = [
+    {
+      teamSlug: "nextgen-digital",
+      viewedSlugs: ["so-hoa-quy-trinh-dat-tour"],
+      savedSlugs: ["nhan-dien-thuong-hieu-an-nhien"],
+      searches: [
+        { query: "ứng dụng web", field: "Công nghệ thông tin", skill: "Next.js" },
+      ],
+    },
+    {
+      teamSlug: "market-minds",
+      viewedSlugs: ["chien-dich-du-lich-mua-thap-diem"],
+      savedSlugs: ["chien-dich-du-lich-mua-thap-diem"],
+      searches: [
+        { query: "nghiên cứu thị trường", field: "Marketing", skill: "Nghiên cứu thị trường" },
+      ],
+    },
+    {
+      teamSlug: "data-spark",
+      viewedSlugs: ["dashboard-theo-doi-hieu-qua-kinh-doanh"],
+      savedSlugs: ["phan-tich-hanh-vi-khach-hang"],
+      searches: [
+        { query: "phân tích dữ liệu", field: "Phân tích dữ liệu", skill: "Python" },
+      ],
+    },
+    {
+      teamSlug: "creative-lab",
+      viewedSlugs: ["bo-nhan-dien-so-du-lich-cong-dong"],
+      savedSlugs: ["nhan-dien-thuong-hieu-an-nhien"],
+      searches: [
+        { query: "thiết kế thương hiệu", field: "Thiết kế", skill: "Thiết kế đồ họa" },
+      ],
+    },
+  ];
+
+  for (const activity of recommendationActivity) {
+    const team = await prisma.studentTeam.findUniqueOrThrow({
+      where: { slug: activity.teamSlug },
+      select: { ownerId: true },
+    });
+    if (!team.ownerId) {
+      throw new Error(`Nhóm seed không có chủ sở hữu: ${activity.teamSlug}`);
+    }
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: team.ownerId },
+      select: { id: true },
+    });
+
+    for (const slug of activity.viewedSlugs) {
+      const problem = await prisma.problem.findUniqueOrThrow({ where: { slug } });
+      const id = `recommendation-view-${activity.teamSlug}-${slug}`;
+      await prisma.viewLog.upsert({
+        where: { id },
+        update: { userId: user.id, problemId: problem.id },
+        create: { id, userId: user.id, problemId: problem.id },
+      });
+    }
+    for (const slug of activity.savedSlugs) {
+      const problem = await prisma.problem.findUniqueOrThrow({ where: { slug } });
+      await prisma.savedProblem.upsert({
+        where: { userId_problemId: { userId: user.id, problemId: problem.id } },
+        update: {},
+        create: { userId: user.id, problemId: problem.id },
+      });
+    }
+    for (const [index, search] of activity.searches.entries()) {
+      const id = `recommendation-search-${activity.teamSlug}-${index}`;
+      await prisma.searchLog.upsert({
+        where: { id },
+        update: {
+          userId: user.id,
+          query: search.query,
+          field: search.field,
+          skill: search.skill,
+        },
+        create: { id, userId: user.id, ...search },
+      });
+    }
+  }
 }
 
 main()

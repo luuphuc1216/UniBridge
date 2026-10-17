@@ -1,14 +1,18 @@
-export default function StudentDashboard() {
+import { RecommendedProblems } from "@/components/student/recommended-problems";
+import { requireStudent } from "@/lib/student-access";
+import { getStudentRecommendations } from "@/lib/student-recommendations";
+
+export const instant = false;
+
+export default async function StudentDashboard() {
+  const { userId } = await requireStudent();
+  const { hasTeam, recommendations } = await getStudentRecommendations(userId);
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <p className="text-sm font-semibold text-primary">Khu vực sinh viên</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight">Tổng quan</h1>
-      <section className="mt-8 rounded-2xl border border-dashed border-border bg-card p-8 text-center sm:p-12">
-        <h2 className="text-lg font-semibold">Không gian phát triển của bạn</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Dashboard đang sẵn sàng. Bài toán phù hợp và hoạt động nhóm sẽ hiển thị tại đây.
-        </p>
-      </section>
+      <RecommendedProblems hasTeam={hasTeam} problems={recommendations} />
     </main>
   );
 }
