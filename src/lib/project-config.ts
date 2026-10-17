@@ -1,0 +1,1 @@
+export const PLATFORM_FEE_BASIS_POINTS = 1500;

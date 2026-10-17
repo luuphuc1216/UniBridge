@@ -2,6 +2,8 @@ import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { hash } from "bcryptjs";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "../src/generated/prisma/client";
+import { PLATFORM_FEE_BASIS_POINTS } from "../src/lib/project-config";
+import { calculateProjectFinancialBreakdown } from "../src/lib/project-money";
 import { attachmentStorage } from "../src/lib/storage";
 
 function getRequiredEnvironmentVariable(name: string): string {
@@ -823,6 +825,271 @@ async function main() {
     "De-xuat-dashboard.csv",
     new TextEncoder().encode("chi_so,mo_ta\nDoanh thu,Doanh thu theo thoi gian\n"),
   );
+
+  const projectBusiness = businessProfiles[2];
+  if (!projectBusiness) throw new Error("Thiếu doanh nghiệp seed cho Paid Implementation.");
+  const projectProblem = await prisma.problem.upsert({
+    where: { slug: "du-an-mau-paid-implementation" },
+    update: {
+      businessProfileId: projectBusiness.id,
+      title: "Xây dựng trang giới thiệu du lịch cộng đồng",
+      description: "Doanh nghiệp cần một trải nghiệm giới thiệu tour trên thiết bị di động.",
+      goal: "Giúp khách tìm hiểu lịch trình và gửi yêu cầu tư vấn.",
+      field: "Công nghệ thông tin",
+      requirements: "Thiết kế responsive, trình bày lịch trình và biểu mẫu liên hệ.",
+      expectedDuration: "6 tuần",
+      budgetMin: 10000000,
+      budgetMax: 12000000,
+      status: "READY_FOR_IMPLEMENTATION",
+      approvedAt: new Date(),
+    },
+    create: {
+      businessProfileId: projectBusiness.id,
+      reviewedById: admin.id,
+      title: "Xây dựng trang giới thiệu du lịch cộng đồng",
+      slug: "du-an-mau-paid-implementation",
+      description: "Doanh nghiệp cần một trải nghiệm giới thiệu tour trên thiết bị di động.",
+      goal: "Giúp khách tìm hiểu lịch trình và gửi yêu cầu tư vấn.",
+      field: "Công nghệ thông tin",
+      requirements: "Thiết kế responsive, trình bày lịch trình và biểu mẫu liên hệ.",
+      expectedDuration: "6 tuần",
+      budgetMin: 10000000,
+      budgetMax: 12000000,
+      status: "READY_FOR_IMPLEMENTATION",
+      approvedAt: new Date(),
+    },
+  });
+  const projectTeam = await prisma.studentTeam.findUniqueOrThrow({
+    where: { slug: "creative-lab" },
+  });
+  const projectApplication = await prisma.application.upsert({
+    where: {
+      problemId_teamId: {
+        problemId: projectProblem.id,
+        teamId: projectTeam.id,
+      },
+    },
+    update: { status: "SELECTED" },
+    create: {
+      problemId: projectProblem.id,
+      teamId: projectTeam.id,
+      approach: "Thiết kế giao diện di động và luồng đăng ký tư vấn tour.",
+      estimatedDuration: "6 tuần",
+      proposedBudget: 10000001,
+      status: "SELECTED",
+    },
+  });
+  await prisma.application.updateMany({
+    where: {
+      problemId: projectProblem.id,
+      id: { not: projectApplication.id },
+      status: "SELECTED",
+    },
+    data: { status: "REJECTED" },
+  });
+  const projectTotalAmount = 10_000_001;
+  const projectMilestonePercents = [33, 33, 34];
+  const projectBreakdown = calculateProjectFinancialBreakdown(
+    projectTotalAmount,
+    projectMilestonePercents,
+    PLATFORM_FEE_BASIS_POINTS,
+  );
+  const project = await prisma.project.upsert({
+    where: { applicationId: projectApplication.id },
+    update: {
+      teamId: projectTeam.id,
+      title: "Trang giới thiệu du lịch cộng đồng",
+      agreedScope: "Thiết kế và triển khai trang giới thiệu tour responsive.",
+      deliverables: "Bộ giao diện, trang giới thiệu tour và biểu mẫu liên hệ.",
+      duration: "6 tuần",
+      totalAmount: projectTotalAmount,
+      generalAcceptanceCriteria: "Trang hoạt động trên điện thoại và máy tính.",
+      businessResponsibilities: "Cung cấp nội dung tour và phản hồi trong 3 ngày làm việc.",
+      teamResponsibilities: "Cập nhật tiến độ và bàn giao sản phẩm theo Milestone.",
+      paymentMethod: "Nạp giả lập một lần; giải ngân theo nghiệm thu Milestone.",
+      agreementRevision: 1,
+      businessAcceptedAt: new Date(),
+      teamAcceptedAt: new Date(),
+      status: "IN_PROGRESS",
+      startedAt: new Date(),
+      completedAt: null,
+      cancelledAt: null,
+    },
+    create: {
+      applicationId: projectApplication.id,
+      teamId: projectTeam.id,
+      title: "Trang giới thiệu du lịch cộng đồng",
+      agreedScope: "Thiết kế và triển khai trang giới thiệu tour responsive.",
+      deliverables: "Bộ giao diện, trang giới thiệu tour và biểu mẫu liên hệ.",
+      duration: "6 tuần",
+      totalAmount: projectTotalAmount,
+      generalAcceptanceCriteria: "Trang hoạt động trên điện thoại và máy tính.",
+      businessResponsibilities: "Cung cấp nội dung tour và phản hồi trong 3 ngày làm việc.",
+      teamResponsibilities: "Cập nhật tiến độ và bàn giao sản phẩm theo Milestone.",
+      paymentMethod: "Nạp giả lập một lần; giải ngân theo nghiệm thu Milestone.",
+      agreementRevision: 1,
+      businessAcceptedAt: new Date(),
+      teamAcceptedAt: new Date(),
+      status: "IN_PROGRESS",
+      startedAt: new Date(),
+    },
+  });
+  const milestoneSeed = [
+    {
+      id: "seed-paid-milestone-1",
+      title: "Chốt nội dung và cấu trúc trang",
+      description: "Hoàn thiện sitemap và nội dung chính của trang giới thiệu.",
+      acceptanceCriteria: "Doanh nghiệp xác nhận sitemap và nội dung các trang chính.",
+    },
+    {
+      id: "seed-paid-milestone-2",
+      title: "Thiết kế giao diện responsive",
+      description: "Thiết kế giao diện trang chủ và trang chi tiết tour.",
+      acceptanceCriteria: "Bản thiết kế hiển thị đúng trên kích thước điện thoại và máy tính.",
+    },
+    {
+      id: "seed-paid-milestone-3",
+      title: "Hoàn thiện và bàn giao",
+      description: "Tích hợp giao diện, biểu mẫu tư vấn và tài liệu hướng dẫn.",
+      acceptanceCriteria: "Biểu mẫu hoạt động và doanh nghiệp xác nhận bàn giao.",
+    },
+  ];
+  const milestoneIds: string[] = [];
+  for (const [index, details] of milestoneSeed.entries()) {
+    milestoneIds.push(details.id);
+    await prisma.milestone.upsert({
+      where: { id: details.id },
+      update: {
+        projectId: project.id,
+        ...details,
+        paymentPercent: projectMilestonePercents[index] ?? 0,
+        amount: projectBreakdown.milestones[index]?.grossAmount ?? 0,
+        dueAt: new Date(Date.now() + (index + 1) * 14 * 86_400_000),
+        sortOrder: index,
+        status: index === 0 ? "ACCEPTED" : index === 1 ? "IN_PROGRESS" : "PENDING",
+        submittedAt: index === 0 ? new Date() : null,
+        acceptedAt: index === 0 ? new Date() : null,
+        progressNote: index === 1 ? "Đang dựng bố cục giao diện trên thiết bị di động." : null,
+        revisionFeedback: null,
+      },
+      create: {
+        projectId: project.id,
+        ...details,
+        paymentPercent: projectMilestonePercents[index] ?? 0,
+        amount: projectBreakdown.milestones[index]?.grossAmount ?? 0,
+        dueAt: new Date(Date.now() + (index + 1) * 14 * 86_400_000),
+        sortOrder: index,
+        status: index === 0 ? "ACCEPTED" : index === 1 ? "IN_PROGRESS" : "PENDING",
+        submittedAt: index === 0 ? new Date() : null,
+        acceptedAt: index === 0 ? new Date() : null,
+        progressNote: index === 1 ? "Đang dựng bố cục giao diện trên thiết bị di động." : null,
+      },
+    });
+  }
+  await prisma.projectTransaction.upsert({
+    where: { idempotencyKey: `deposit:${project.id}` },
+    update: {
+      projectId: project.id,
+      type: "DEPOSIT",
+      amount: projectTotalAmount,
+      platformFee: projectBreakdown.totalPlatformFee,
+      platformFeeBasisPoints: PLATFORM_FEE_BASIS_POINTS,
+      status: "ESCROW",
+      paidAt: new Date(),
+    },
+    create: {
+      projectId: project.id,
+      idempotencyKey: `deposit:${project.id}`,
+      type: "DEPOSIT",
+      amount: projectTotalAmount,
+      platformFee: projectBreakdown.totalPlatformFee,
+      platformFeeBasisPoints: PLATFORM_FEE_BASIS_POINTS,
+      status: "ESCROW",
+      paidAt: new Date(),
+    },
+  });
+  const firstMilestoneAllocation = projectBreakdown.milestones[0];
+  const firstMilestoneId = milestoneIds[0];
+  if (!firstMilestoneAllocation || !firstMilestoneId) {
+    throw new Error("Thiếu phân bổ Milestone mẫu.");
+  }
+  await prisma.projectTransaction.upsert({
+    where: { idempotencyKey: `release:${firstMilestoneId}` },
+    update: {
+      projectId: project.id,
+      milestoneId: firstMilestoneId,
+      type: "MILESTONE_RELEASE",
+      amount: firstMilestoneAllocation.teamAmount,
+      platformFee: firstMilestoneAllocation.platformFee,
+      platformFeeBasisPoints: PLATFORM_FEE_BASIS_POINTS,
+      status: "RELEASED",
+      paidAt: new Date(),
+    },
+    create: {
+      projectId: project.id,
+      milestoneId: firstMilestoneId,
+      idempotencyKey: `release:${firstMilestoneId}`,
+      type: "MILESTONE_RELEASE",
+      amount: firstMilestoneAllocation.teamAmount,
+      platformFee: firstMilestoneAllocation.platformFee,
+      platformFeeBasisPoints: PLATFORM_FEE_BASIS_POINTS,
+      status: "RELEASED",
+      paidAt: new Date(),
+    },
+  });
+
+  const agreementTestProblem = await prisma.problem.upsert({
+    where: { slug: "kiem-thu-thoa-thuan-paid-implementation" },
+    update: {
+      businessProfileId: businessProfiles[0].id,
+      title: "Bài toán mẫu để kiểm thử thỏa thuận Paid Implementation",
+      description: "Bài toán seed dành riêng để thử đề nghị, chỉnh sửa và hủy thỏa thuận.",
+      goal: "Kiểm thử vòng đời thỏa thuận trước khi nạp tiền.",
+      field: "Công nghệ thông tin",
+      requirements: "Hai bên thống nhất phạm vi, sản phẩm và Milestone.",
+      expectedDuration: "4 tuần",
+      budgetMin: 5000000,
+      budgetMax: 10000000,
+      status: "READY_FOR_IMPLEMENTATION",
+      approvedAt: new Date(),
+    },
+    create: {
+      businessProfileId: businessProfiles[0].id,
+      reviewedById: admin.id,
+      title: "Bài toán mẫu để kiểm thử thỏa thuận Paid Implementation",
+      slug: "kiem-thu-thoa-thuan-paid-implementation",
+      description: "Bài toán seed dành riêng để thử đề nghị, chỉnh sửa và hủy thỏa thuận.",
+      goal: "Kiểm thử vòng đời thỏa thuận trước khi nạp tiền.",
+      field: "Công nghệ thông tin",
+      requirements: "Hai bên thống nhất phạm vi, sản phẩm và Milestone.",
+      expectedDuration: "4 tuần",
+      budgetMin: 5000000,
+      budgetMax: 10000000,
+      status: "READY_FOR_IMPLEMENTATION",
+      approvedAt: new Date(),
+    },
+  });
+  const agreementTestTeam = await prisma.studentTeam.findUniqueOrThrow({
+    where: { slug: "nextgen-digital" },
+  });
+  await prisma.application.upsert({
+    where: {
+      problemId_teamId: {
+        problemId: agreementTestProblem.id,
+        teamId: agreementTestTeam.id,
+      },
+    },
+    update: { status: "SELECTED" },
+    create: {
+      problemId: agreementTestProblem.id,
+      teamId: agreementTestTeam.id,
+      approach: "Kiểm thử thỏa thuận, sửa điều khoản và thanh toán giả lập theo Milestone.",
+      estimatedDuration: "4 tuần",
+      proposedBudget: 8000000,
+      status: "SELECTED",
+    },
+  });
+
   const sampleMessages = [
     {
       id: "seed-prototyping-message-1",

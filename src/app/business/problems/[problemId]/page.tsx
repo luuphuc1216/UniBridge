@@ -65,6 +65,7 @@ export default async function BusinessProblemDetailPage({
     "EVALUATING",
     "CLOSED",
     "READY_FOR_IMPLEMENTATION",
+    "COMPLETED",
   ].includes(problem.status);
 
   return (

@@ -241,6 +241,8 @@ Sau khi hai bên thống nhất, dự án được tạo thành một giao dịc
 
 Việc tách riêng giai đoạn Paid Implementation giúp nền tảng phân biệt rõ giữa giai đoạn đề xuất giải pháp và giai đoạn thực hiện dự án có trả phí.
 
+Trên UniBridge, Project đi qua các trạng thái `AGREEING`, `AWAITING_PAYMENT`, `IN_PROGRESS`, `COMPLETED` hoặc `CANCELLED`. Doanh nghiệp soạn thỏa thuận; nhóm có thể đồng ý hoặc đề nghị chỉnh sửa. Mỗi lần cập nhật điều khoản sẽ xóa xác nhận trước đó và yêu cầu cả hai bên đồng ý lại. Tổng tỷ lệ thanh toán của các Milestone phải bằng 100%. Chỉ có thể hủy dự án ở trạng thái `AGREEING` hoặc `AWAITING_PAYMENT`.
+
 ### Bước 9. Giao dịch trên nền tảng
 
 Sau khi thống nhất điều kiện triển khai, doanh nghiệp thực hiện thanh toán thông qua nền tảng.
@@ -264,6 +266,8 @@ Ví dụ:
 
 Khoản phí 15% này là nguồn doanh thu cốt lõi của nền tảng.
 
+UniBridge hiện chỉ mô phỏng thanh toán; mọi màn hình giao dịch phải ghi rõ “Thanh toán giả lập, không phát sinh giao dịch thật”. Doanh nghiệp nạp đủ tổng chi phí một lần. Tỷ lệ phí được cấu hình tập trung tại `src/lib/project-config.ts`; giao dịch escrow lưu tỷ lệ đã áp dụng để các lần giải ngân sau không bị ảnh hưởng nếu cấu hình thay đổi. Sau khi nạp, không được sửa tổng chi phí, số Milestone hoặc tỷ lệ thanh toán. Mọi số tiền được lưu bằng số nguyên VND; phí tổng được làm tròn đến VND gần nhất (0,5 làm tròn lên), các phần tỷ lệ trước Milestone cuối làm tròn xuống và toàn bộ phần dư được cộng vào Milestone cuối để tổng giải ngân ròng và phí luôn bằng tổng nạp.
+
 ### Bước 10. Thực hiện dự án theo Milestone
 
 Sau khi giao dịch được xác nhận, nhóm sinh viên bắt đầu triển khai dự án theo các Milestone đã thống nhất.
@@ -285,6 +289,8 @@ Ví dụ, một dự án xây dựng website có thể chia thành:
 - Milestone 5: Bàn giao sản phẩm.
 
 Trong quá trình thực hiện, nhóm sinh viên cập nhật tiến độ trên nền tảng để doanh nghiệp theo dõi.
+
+Các Milestone được mở tuần tự: chỉ mở mốc đầu sau khi nạp escrow; mỗi mốc tiếp theo chỉ mở khi mốc trước được nghiệm thu. Nhóm có thể nộp ghi chú kết quả và tệp qua lớp lưu trữ an toàn dùng cho tệp đính kèm.
 
 Doanh nghiệp có thể:
 
@@ -309,6 +315,8 @@ Nếu kết quả đạt yêu cầu:
 - Khoản thanh toán tương ứng được xử lý theo thỏa thuận.
 - Nhóm chuyển sang Milestone tiếp theo nếu còn.
 
+Việc đổi trạng thái nghiệm thu, ghi giao dịch giải ngân, ghi phí và tạo thông báo được thực hiện trong cùng một giao dịch cơ sở dữ liệu. Thao tác nghiệm thu lặp lại không được giải ngân lần thứ hai.
+
 Nếu kết quả chưa đạt yêu cầu:
 
 - Doanh nghiệp gửi phản hồi.
@@ -319,6 +327,8 @@ Nếu kết quả chưa đạt yêu cầu:
 Quy trình nghiệm thu tiếp tục cho đến khi các Milestone và toàn bộ dự án đáp ứng yêu cầu.
 
 Khi tất cả các Milestone đã hoàn thành và được nghiệm thu, dự án được xác định là hoàn tất.
+
+Khi toàn bộ Milestone được nghiệm thu, Project và Problem cùng chuyển sang `COMPLETED`. Hủy dự án khi đang `IN_PROGRESS`, hoàn tiền và xử lý tranh chấp chưa thuộc phạm vi giai đoạn này; hiện chỉ hỗ trợ hủy trước khi nạp tiền.
 
 ### Bước 12. Rating và Reputation
 

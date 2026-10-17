@@ -77,6 +77,8 @@ export default async function StudentApplicationsPage() {
                           ? "Đã kết thúc – không triển khai"
                           : application.problem.status === "READY_FOR_IMPLEMENTATION"
                             ? "Sẵn sàng sang Paid Implementation"
+                            : application.problem.status === "COMPLETED"
+                              ? "Paid Implementation đã hoàn tất"
                             : application.problem.status === "TEAM_SELECTED"
                               ? "Đã chọn nhóm"
                               : ""}
@@ -104,7 +106,7 @@ export default async function StudentApplicationsPage() {
                 Xem bài toán và hồ sơ
               </Link>
               {application.status === "SELECTED" &&
-                ["TEAM_SELECTED", "PROTOTYPING", "EVALUATING", "CLOSED", "READY_FOR_IMPLEMENTATION"].includes(
+                ["TEAM_SELECTED", "PROTOTYPING", "EVALUATING", "CLOSED", "READY_FOR_IMPLEMENTATION", "COMPLETED"].includes(
                   application.problem.status,
                 ) && (
                   <Link

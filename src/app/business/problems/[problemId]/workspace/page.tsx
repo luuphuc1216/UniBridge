@@ -39,6 +39,7 @@ export default async function BusinessWorkspacePage({
         },
         messages: problem.workspaceMessages,
         proposals: application.proposals,
+        project: application.project,
         isBusiness: true,
       }}
     />

@@ -1,5 +1,6 @@
 import {
   ALLOWED_ATTACHMENT_EXTENSIONS,
+  ALLOWED_ATTACHMENT_TYPES,
   MAX_ATTACHMENT_COUNT,
   MAX_ATTACHMENT_SIZE_BYTES,
   MAX_ATTACHMENT_TOTAL_BYTES,
@@ -29,7 +30,13 @@ export function validateSelectedAttachments(
     return !ALLOWED_ATTACHMENT_EXTENSIONS.includes(extension);
   });
   if (invalidFile) {
-    return `Tệp "${invalidFile.name}" không đúng định dạng. Chỉ nhận PDF, DOCX, XLSX, PPTX, CSV, PNG và JPG.`;
+    const allowedFormats = ALLOWED_ATTACHMENT_EXTENSIONS.map(
+      (extension) =>
+        ALLOWED_ATTACHMENT_TYPES[
+          extension as keyof typeof ALLOWED_ATTACHMENT_TYPES
+        ].label,
+    ).join(", ");
+    return `Tệp "${invalidFile.name}" không đúng định dạng. Chỉ nhận ${allowedFormats}.`;
   }
 
   const totalBytes =

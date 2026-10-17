@@ -35,6 +35,7 @@ export default async function StudentWorkspacePage({
         },
         messages: problem.workspaceMessages,
         proposals: application.proposals,
+        project: application.project,
         isBusiness: false,
       }}
     />

@@ -1,0 +1,472 @@
+import Link from "next/link";
+import {
+  acceptMilestoneAction,
+  cancelProjectAction,
+  depositProjectAction,
+  requestMilestoneRevisionAction,
+  respondAgreementAction,
+  updateMilestoneProgressAction,
+} from "@/app/projects/actions";
+import { AgreementForm, type AgreementFormValues } from "@/components/projects/agreement-form";
+import { MilestoneSubmissionForm } from "@/components/projects/milestone-submission-form";
+import { ProjectActionForm } from "@/components/projects/project-action-form";
+import { PLATFORM_FEE_BASIS_POINTS } from "@/lib/project-config";
+import { calculateProjectFinancialBreakdown } from "@/lib/project-money";
+import { getStoredMilestoneSubmissionLinks } from "@/lib/milestone-submission-validation";
+import type { findAccessibleProject } from "@/lib/project-access";
+
+export type ProjectDetailData = NonNullable<
+  Awaited<ReturnType<typeof findAccessibleProject>>
+>;
+
+const projectStatusLabels: Record<string, string> = {
+  AGREEING: "Đang thỏa thuận",
+  AWAITING_PAYMENT: "Chờ nạp tiền",
+  IN_PROGRESS: "Đang thực hiện",
+  COMPLETED: "Đã hoàn thành",
+  CANCELLED: "Đã hủy",
+};
+
+const milestoneStatusLabels: Record<string, string> = {
+  PENDING: "Chưa mở",
+  IN_PROGRESS: "Đang thực hiện",
+  SUBMITTED: "Chờ nghiệm thu",
+  ACCEPTED: "Đã nghiệm thu",
+  REVISION_REQUESTED: "Cần chỉnh sửa",
+};
+
+function formatCurrency(amount: number): string {
+  return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(amount)} ₫`;
+}
+
+function formatDate(date: Date | null): string {
+  if (!date) return "Chưa xác định";
+  return new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(date);
+}
+
+function formatDateTime(date: Date): string {
+  return new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function getAgreementFormValues(project: ProjectDetailData): AgreementFormValues {
+  return {
+    title: project.title,
+    agreedScope: project.agreedScope,
+    deliverables: project.deliverables,
+    duration: project.duration,
+    totalAmount: project.totalAmount,
+    generalAcceptanceCriteria: project.generalAcceptanceCriteria,
+    businessResponsibilities: project.businessResponsibilities,
+    teamResponsibilities: project.teamResponsibilities,
+    paymentMethod: project.paymentMethod,
+    milestones: project.milestones.map((milestone) => ({
+      title: milestone.title,
+      description: milestone.description,
+      acceptanceCriteria: milestone.acceptanceCriteria,
+      dueAt: milestone.dueAt?.toISOString().slice(0, 10) ?? "",
+      paymentPercent: milestone.paymentPercent,
+    })),
+  };
+}
+
+function getPaymentSummary(project: ProjectDetailData) {
+  const deposits = project.transactions.filter(
+    (transaction) => transaction.type === "DEPOSIT",
+  );
+  const releases = project.transactions.filter(
+    (transaction) => transaction.type === "MILESTONE_RELEASE",
+  );
+  const deposited = deposits.reduce((sum, transaction) => sum + transaction.amount, 0);
+  const paidOut = releases.reduce((sum, transaction) => sum + transaction.amount, 0);
+  const fees = releases.reduce((sum, transaction) => sum + transaction.platformFee, 0);
+  return {
+    deposited,
+    paidOut,
+    fees,
+    escrow: Math.max(0, deposited - paidOut - fees),
+    deposit: deposits[0],
+  };
+}
+
+export function ProjectDetailView({
+  project,
+  role,
+  applicationId,
+}: {
+  project: ProjectDetailData;
+  role: "BUSINESS" | "STUDENT";
+  applicationId?: string;
+}) {
+  const isBusiness = role === "BUSINESS";
+  const summary = getPaymentSummary(project);
+  const canEditAgreement =
+    isBusiness &&
+    ["AGREEING", "AWAITING_PAYMENT"].includes(project.status) &&
+    project.transactions.every((transaction) => transaction.type !== "DEPOSIT");
+  const canCancel = ["AGREEING", "AWAITING_PAYMENT"].includes(project.status);
+  const feeRate = summary.deposit?.platformFeeBasisPoints ?? PLATFORM_FEE_BASIS_POINTS;
+  const feePreview =
+    summary.deposit?.platformFee ??
+    calculateProjectFinancialBreakdown(
+      project.totalAmount,
+      project.milestones.map(({ paymentPercent }) => paymentPercent),
+      PLATFORM_FEE_BASIS_POINTS,
+    ).totalPlatformFee;
+
+  return (
+    <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-10">
+      <Link
+        className="text-sm font-semibold text-primary hover:underline"
+        href={isBusiness ? "/business/projects" : "/student/projects"}
+      >
+        ← Dự án
+      </Link>
+      <div className="mt-4 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+        <div>
+          <p className="text-sm font-semibold text-primary">
+            {project.application.problem.businessProfile.companyName} · Nhóm {project.team.name}
+          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{project.title}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Bài toán: {project.application.problem.title}
+          </p>
+        </div>
+        <span className="w-fit rounded-full bg-primary/10 px-3 py-1.5 text-sm font-semibold text-primary">
+          {projectStatusLabels[project.status] ?? project.status}
+        </span>
+      </div>
+
+      <aside
+        className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-950"
+        role="note"
+      >
+        Thanh toán giả lập, không phát sinh giao dịch thật.
+      </aside>
+
+      <section className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          ["Tổng chi phí", formatCurrency(project.totalAmount)],
+          ["Đã nạp vào escrow", formatCurrency(summary.deposited)],
+          ["Đã giải ngân cho nhóm", formatCurrency(summary.paidOut)],
+          ["Phí đã ghi nhận", formatCurrency(summary.fees)],
+        ].map(([label, value]) => (
+          <article className="rounded-xl border border-border bg-card p-4" key={label}>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="mt-1 text-lg font-bold">{value}</p>
+          </article>
+        ))}
+      </section>
+      <section className="mt-4 flex flex-col justify-between gap-2 rounded-xl border border-border bg-card p-4 sm:flex-row">
+        <div>
+          <h2 className="font-semibold">Tiền còn trong escrow</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Phí áp dụng: {(feeRate / 100).toFixed(2)}% · Tỷ lệ được chụp tại thời điểm nạp.
+          </p>
+        </div>
+        <p className="text-xl font-bold">{formatCurrency(summary.escrow)}</p>
+      </section>
+
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]">
+        <div className="space-y-6">
+          <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+            <h2 className="text-lg font-semibold">Điều khoản thỏa thuận</h2>
+            {project.revisionNote && (
+              <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+                Đề nghị chỉnh sửa từ nhóm: {project.revisionNote}
+              </p>
+            )}
+            <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+              {[
+                ["Phạm vi công việc", project.agreedScope],
+                ["Sản phẩm đầu ra", project.deliverables],
+                ["Thời gian thực hiện", project.duration],
+                ["Tiêu chí nghiệm thu chung", project.generalAcceptanceCriteria],
+                ["Trách nhiệm doanh nghiệp", project.businessResponsibilities],
+                ["Trách nhiệm nhóm", project.teamResponsibilities],
+                ["Phương thức thanh toán", project.paymentMethod],
+              ].map(([label, value]) => (
+                <div className="rounded-xl bg-muted/50 p-3" key={label}>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+                  <dd className="mt-1 whitespace-pre-wrap text-sm leading-6">{value || "Chưa cập nhật"}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="mt-4 flex flex-wrap gap-3 text-sm">
+              <span>
+                Doanh nghiệp:{" "}
+                <strong>{project.businessAcceptedAt ? "Đã đồng ý" : "Chưa đồng ý"}</strong>
+              </span>
+              <span>
+                Nhóm: <strong>{project.teamAcceptedAt ? "Đã đồng ý" : "Chưa đồng ý"}</strong>
+              </span>
+              <span>Phiên bản {project.agreementRevision}</span>
+            </div>
+
+            {project.status === "AGREEING" && (
+              <div className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2">
+                {project.revisionNote ? (
+                  <p className="text-sm text-amber-900">
+                    Cần cập nhật điều khoản theo đề nghị chỉnh sửa trước khi xác nhận lại.
+                  </p>
+                ) : (isBusiness ? project.businessAcceptedAt : project.teamAcceptedAt) ? (
+                  <p className="text-sm text-emerald-800">
+                    Bạn đã đồng ý phiên bản {project.agreementRevision}; đang chờ đối tác.
+                  </p>
+                ) : (
+                  <ProjectActionForm
+                    action={respondAgreementAction}
+                    buttonLabel="Đồng ý thỏa thuận"
+                    hiddenFields={{ projectId: project.id, response: "ACCEPT" }}
+                  />
+                )}
+                {!isBusiness && (
+                  <ProjectActionForm
+                    action={respondAgreementAction}
+                    buttonClassName="rounded-lg border border-amber-400 px-4 py-2.5 text-sm font-semibold text-amber-900 disabled:opacity-60"
+                    buttonLabel="Đề nghị chỉnh sửa"
+                    hiddenFields={{ projectId: project.id, response: "REQUEST_CHANGES" }}
+                  >
+                    <textarea
+                      className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                      maxLength={4000}
+                      name="note"
+                      placeholder="Mô tả nội dung cần làm rõ hoặc chỉnh sửa"
+                      required
+                    />
+                  </ProjectActionForm>
+                )}
+              </div>
+            )}
+          </section>
+
+          {canEditAgreement && applicationId && (
+            <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+              <h2 className="text-lg font-semibold">
+                {project.status === "AWAITING_PAYMENT" ? "Chỉnh sửa thỏa thuận" : "Cập nhật thỏa thuận"}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Mọi thay đổi sẽ xóa xác nhận cũ; cả hai bên cần đồng ý lại.
+              </p>
+              <div className="mt-4">
+                <AgreementForm
+                  applicationId={applicationId}
+                  initialValues={getAgreementFormValues(project)}
+                  problemId={project.application.problem.id}
+                  projectId={project.id}
+                />
+              </div>
+            </section>
+          )}
+
+          <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+            <h2 className="text-lg font-semibold">Milestone và nghiệm thu</h2>
+            <ol className="mt-4 space-y-4">
+              {project.milestones.map((milestone, index) => {
+                const isCurrent =
+                  project.status === "IN_PROGRESS" &&
+                  ["IN_PROGRESS", "SUBMITTED", "REVISION_REQUESTED"].includes(milestone.status);
+                return (
+                  <li className="rounded-xl border border-border p-4" key={milestone.id}>
+                    <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                      <div>
+                        <p className="text-xs font-semibold text-primary">Milestone {index + 1}</p>
+                        <h3 className="mt-1 font-semibold">{milestone.title}</h3>
+                      </div>
+                      <span className="w-fit rounded-full bg-muted px-3 py-1 text-xs font-semibold">
+                        {milestoneStatusLabels[milestone.status] ?? milestone.status}
+                      </span>
+                    </div>
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{milestone.description}</p>
+                    <p className="mt-3 text-sm">
+                      <strong>Tiêu chí nghiệm thu:</strong> {milestone.acceptanceCriteria}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                      <span>Hạn: {formatDate(milestone.dueAt)}</span>
+                      <span>Thanh toán: {milestone.paymentPercent}%</span>
+                      <span>Giá trị: {formatCurrency(milestone.amount ?? 0)}</span>
+                    </div>
+                    {milestone.progressNote && (
+                      <p className="mt-3 rounded-lg bg-muted/60 p-3 text-sm">
+                        <strong>Cập nhật tiến độ:</strong> {milestone.progressNote}
+                      </p>
+                    )}
+                    {milestone.revisionFeedback && (
+                      <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+                        <strong>Phản hồi cần chỉnh sửa:</strong> {milestone.revisionFeedback}
+                      </p>
+                    )}
+                    {milestone.submissions.length > 0 && (
+                      <div className="mt-4 space-y-3">
+                        <h4 className="text-sm font-semibold">Lịch sử nộp kết quả</h4>
+                        {milestone.submissions.map((submission) => (
+                          <article className="rounded-lg bg-muted/50 p-3" key={submission.id}>
+                            <p className="text-xs text-muted-foreground">
+                              {submission.submittedBy.name} · {formatDateTime(submission.createdAt)}
+                            </p>
+                            <p className="mt-2 whitespace-pre-wrap text-sm">{submission.note}</p>
+                            {getStoredMilestoneSubmissionLinks(submission.links).length > 0 && (
+                              <ul className="mt-2 space-y-1">
+                                {getStoredMilestoneSubmissionLinks(submission.links).map((link) => (
+                                  <li key={link}>
+                                    <a
+                                      className="break-all text-sm font-medium text-primary hover:underline"
+                                      href={link}
+                                      rel="noopener noreferrer"
+                                      target="_blank"
+                                    >
+                                      {link}
+                                    </a>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {submission.files.length > 0 && (
+                              <ul className="mt-2 space-y-1">
+                                {submission.files.map((file) => (
+                                  <li key={file.id}>
+                                    <a
+                                      className="break-all text-sm font-medium text-primary hover:underline"
+                                      href={`/api/projects/files/${file.id}`}
+                                    >
+                                      Tải {file.originalName}
+                                    </a>
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                      ({(file.sizeBytes / 1024 / 1024).toFixed(2)} MB)
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </article>
+                        ))}
+                      </div>
+                    )}
+
+                    {isCurrent && !isBusiness && ["IN_PROGRESS", "REVISION_REQUESTED"].includes(milestone.status) && (
+                      <>
+                        <ProjectActionForm
+                          action={updateMilestoneProgressAction}
+                          buttonClassName="rounded-lg border border-border px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                          buttonLabel="Cập nhật tiến độ"
+                          hiddenFields={{ projectId: project.id, milestoneId: milestone.id }}
+                        >
+                          <textarea
+                            className="min-h-20 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                            maxLength={4000}
+                            name="progressNote"
+                            placeholder="Cập nhật tình hình thực hiện"
+                            required
+                          />
+                        </ProjectActionForm>
+                        <MilestoneSubmissionForm milestoneId={milestone.id} />
+                      </>
+                    )}
+                    {isCurrent && isBusiness && milestone.status === "SUBMITTED" && (
+                      <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
+                        <ProjectActionForm
+                          action={acceptMilestoneAction}
+                          buttonLabel="Nghiệm thu và giải ngân"
+                          hiddenFields={{ projectId: project.id, milestoneId: milestone.id }}
+                        />
+                        <ProjectActionForm
+                          action={requestMilestoneRevisionAction}
+                          buttonClassName="rounded-lg border border-amber-400 px-4 py-2.5 text-sm font-semibold text-amber-900 disabled:opacity-60"
+                          buttonLabel="Yêu cầu chỉnh sửa"
+                          hiddenFields={{ projectId: project.id, milestoneId: milestone.id }}
+                        >
+                          <textarea
+                            className="min-h-20 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                            maxLength={4000}
+                            name="feedback"
+                            placeholder="Ghi rõ nội dung cần điều chỉnh trong phạm vi"
+                            required
+                          />
+                        </ProjectActionForm>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        </div>
+
+        <aside className="space-y-4">
+          {project.status === "AWAITING_PAYMENT" && isBusiness && (
+            <section className="rounded-2xl border border-primary/30 bg-card p-5">
+              <h2 className="font-semibold">Nạp tiền vào escrow</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Nạp một lần toàn bộ {formatCurrency(project.totalAmount)}. Sau khi nạp, tổng chi phí,
+                số Milestone và tỷ lệ chia không thể chỉnh sửa.
+              </p>
+              <p className="mt-2 text-sm">
+                Phí nền tảng hiện tại: {(PLATFORM_FEE_BASIS_POINTS / 100).toFixed(2)}% (
+                {formatCurrency(feePreview)})
+              </p>
+              <div className="mt-4">
+                <ProjectActionForm
+                  action={depositProjectAction}
+                  buttonLabel="Nạp đủ tổng chi phí"
+                  hiddenFields={{ projectId: project.id }}
+                />
+              </div>
+            </section>
+          )}
+          {canCancel && (
+            <section className="rounded-2xl border border-rose-200 bg-card p-5">
+              <h2 className="font-semibold">Hủy dự án</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Chỉ có thể hủy khi đang thỏa thuận hoặc chờ nạp tiền.
+              </p>
+              <div className="mt-3">
+                <ProjectActionForm
+                  action={cancelProjectAction}
+                  buttonClassName="rounded-lg border border-rose-300 px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:opacity-60"
+                  buttonLabel="Hủy dự án"
+                  hiddenFields={{ projectId: project.id }}
+                />
+              </div>
+            </section>
+          )}
+          <section className="rounded-2xl border border-border bg-card p-5">
+            <h2 className="font-semibold">Lịch sử giao dịch</h2>
+            {project.transactions.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">Chưa có giao dịch giả lập.</p>
+            ) : (
+              <ul className="mt-3 space-y-3">
+                {project.transactions.map((transaction) => (
+                  <li className="border-t border-border pt-3 first:border-0 first:pt-0" key={transaction.id}>
+                    <p className="text-sm font-semibold">
+                      {transaction.type === "DEPOSIT" ? "Nạp vào escrow" : "Giải ngân Milestone"}
+                    </p>
+                    <p className="mt-1 text-sm">
+                      {transaction.type === "DEPOSIT" ? "Tổng nạp" : "Phần nhóm nhận"}:{" "}
+                      {formatCurrency(transaction.amount)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {transaction.type === "DEPOSIT" ? "Phí dự kiến" : "Phí đã ghi nhận"}:{" "}
+                      {formatCurrency(transaction.platformFee)} · Tỷ lệ chụp lúc nạp:{" "}
+                      {(transaction.platformFeeBasisPoints / 100).toFixed(2)}%
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {transaction.status === "ESCROW" ? "Đang giữ trong escrow giả lập" : "Đã ghi nhận"}
+                      {transaction.paidAt ? ` · ${formatDateTime(transaction.paidAt)}` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          {project.status === "COMPLETED" && (
+            <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900">
+              Tất cả Milestone đã được nghiệm thu. Dự án và bài toán đã hoàn thành.
+            </p>
+          )}
+        </aside>
+      </div>
+    </main>
+  );
+}

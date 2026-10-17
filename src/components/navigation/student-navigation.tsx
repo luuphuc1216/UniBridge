@@ -32,6 +32,8 @@ export async function StudentNavigation() {
         { href: "/student/saved-problems", label: "Bài toán đã lưu" },
         { href: "/student/team", label: "Hồ sơ nhóm" },
         { href: "/student/applications", label: "Hồ sơ đã gửi" },
+        { href: "/student/projects", label: "Dự án" },
+        { href: "/student/transactions", label: "Giao dịch" },
       ]}
       tools={
         session?.user?.role === "STUDENT" ? (

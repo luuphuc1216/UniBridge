@@ -15,6 +15,7 @@ export async function findAuthorizedWorkspace(
           "EVALUATING",
           "CLOSED",
           "READY_FOR_IMPLEMENTATION",
+          "COMPLETED",
         ],
       },
       applications: {
@@ -61,6 +62,7 @@ export async function findAuthorizedWorkspace(
               evaluations: { orderBy: { createdAt: "desc" } },
             },
           },
+          project: { select: { id: true, status: true } },
         },
       },
       workspaceMessages: {
@@ -74,5 +76,5 @@ export async function findAuthorizedWorkspace(
 }
 
 export function isFinalWorkspaceStatus(status: string): boolean {
-  return status === "CLOSED" || status === "READY_FOR_IMPLEMENTATION";
+  return ["CLOSED", "READY_FOR_IMPLEMENTATION", "COMPLETED"].includes(status);
 }

@@ -6,6 +6,7 @@ import {
   useTransition,
   type FormEvent,
 } from "react";
+import Link from "next/link";
 import {
   evaluateProposalAction,
   sendWorkspaceMessageAction,
@@ -14,7 +15,6 @@ import {
   type WorkspaceActionState,
 } from "@/app/workspace/actions";
 import {
-  ALLOWED_ATTACHMENT_EXTENSIONS,
   MAX_PROPOSAL_FILE_COUNT,
   MAX_PROPOSAL_FILE_SIZE_BYTES,
   MAX_PROPOSAL_FILE_TOTAL_BYTES,
@@ -25,6 +25,7 @@ import {
   proposalEvaluationFields,
   proposalTypeOptions,
 } from "@/lib/workspace";
+import { FilePicker } from "@/components/uploads/file-picker";
 
 type WorkspaceFile = {
   id: string;
@@ -73,6 +74,7 @@ export type WorkspaceViewData = {
     sender: { id: string; name: string; role: string };
   }[];
   proposals: Proposal[];
+  project: { id: string; status: string } | null;
   isBusiness: boolean;
 };
 
@@ -82,6 +84,7 @@ const statusLabels: Record<string, string> = {
   EVALUATING: "Doanh nghiệp đang đánh giá",
   CLOSED: "Đã kết thúc – không triển khai",
   READY_FOR_IMPLEMENTATION: "Sẵn sàng sang Paid Implementation",
+  COMPLETED: "Đã hoàn thành",
   SUBMITTED: "Đã nộp",
   CHANGES_REQUESTED: "Được yêu cầu chỉnh sửa",
   NOT_IMPLEMENTED: "Không triển khai",
@@ -242,22 +245,21 @@ function ProposalForm({ problemId }: { problemId: string }) {
           required
         />
       </label>
-      <label className="block text-sm font-medium">
-        Tệp đính kèm (PDF, DOCX, XLSX, PPTX, CSV, PNG, JPG; tối đa {MAX_PROPOSAL_FILE_COUNT} tệp, {MAX_PROPOSAL_FILE_SIZE_BYTES / 1024 / 1024} MB mỗi tệp; tổng tối đa {MAX_PROPOSAL_FILE_TOTAL_BYTES / 1024 / 1024} MB)
-        <input
-          accept={ALLOWED_ATTACHMENT_EXTENSIONS.join(",")}
-          className="mt-1.5 block w-full rounded-xl border border-border bg-background p-2 text-sm"
-          multiple
-          name="files"
-          onChange={() => setFileError(null)}
-          type="file"
-        />
-        {fileError && (
-          <span className="mt-2 block rounded-lg bg-destructive/10 p-3 text-sm text-destructive" role="alert">
-            {fileError}
-          </span>
-        )}
-      </label>
+      <FilePicker
+        label="Tệp đính kèm"
+        limits={{
+          count: MAX_PROPOSAL_FILE_COUNT,
+          fileSizeBytes: MAX_PROPOSAL_FILE_SIZE_BYTES,
+          totalBytes: MAX_PROPOSAL_FILE_TOTAL_BYTES,
+        }}
+        name="files"
+        onFilesChange={() => setFileError(null)}
+      />
+      {fileError && (
+        <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+          {fileError}
+        </p>
+      )}
       <button
         className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60 sm:w-auto"
         disabled={pending}
@@ -346,7 +348,7 @@ function EvaluationForm({
 
 export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
   const { problem, messages, proposals, isBusiness } = data;
-  const readonly = ["CLOSED", "READY_FOR_IMPLEMENTATION"].includes(problem.status);
+  const readonly = ["CLOSED", "READY_FOR_IMPLEMENTATION", "COMPLETED"].includes(problem.status);
   const latestProposal = proposals[0];
   return (
     <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-10">
@@ -376,9 +378,8 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
 
       {readonly ? (
         <p className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-          Doanh nghiệp đã đưa ra quyết định cuối cùng. Không thể gửi thêm tin nhắn hoặc Proposal; lịch sử vẫn được xem.
-          {problem.status === "READY_FOR_IMPLEMENTATION" &&
-            " Thỏa thuận, thanh toán và Milestone chưa được tạo trong giai đoạn này."}
+          Quy trình Prototype / Solution Proposal đã kết thúc. Không thể gửi thêm tin nhắn hoặc Proposal tại đây;
+          lịch sử vẫn được xem. Thỏa thuận và Milestone được quản lý trong trang dự án.
         </p>
       ) : problem.status === "TEAM_SELECTED" && !isBusiness ? (
         <section className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-5">
@@ -389,6 +390,36 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
           <StartWorkspaceForm problemId={problem.id} />
         </section>
       ) : null}
+
+      {["READY_FOR_IMPLEMENTATION", "COMPLETED"].includes(problem.status) && (
+        <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+          <h2 className="font-semibold text-emerald-950">
+            {problem.status === "COMPLETED" ? "Paid Implementation đã hoàn tất" : "Sẵn sàng sang Paid Implementation"}
+          </h2>
+          <p className="mt-1 text-sm text-emerald-900">
+            Thỏa thuận, thanh toán giả lập và tiến độ theo Milestone được quản lý riêng trong trang dự án.
+          </p>
+          {data.project ? (
+            <Link
+              className="mt-3 inline-flex rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+              href={`${isBusiness ? "/business" : "/student"}/projects/${data.project.id}`}
+            >
+              Mở dự án
+            </Link>
+          ) : isBusiness && problem.status === "READY_FOR_IMPLEMENTATION" ? (
+            <Link
+              className="mt-3 inline-flex rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+              href={`/business/problems/${problem.id}/agreement`}
+            >
+              Soạn thỏa thuận dự án
+            </Link>
+          ) : (
+            <p className="mt-3 text-sm text-emerald-900">
+              Doanh nghiệp đang chuẩn bị thỏa thuận. Nhóm sẽ nhận thông báo khi có đề nghị.
+            </p>
+          )}
+        </section>
+      )}
 
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
         <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">

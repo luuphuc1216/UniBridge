@@ -7,12 +7,13 @@ import {
   type FormEvent,
 } from "react";
 import {
-  ALLOWED_ATTACHMENT_EXTENSIONS,
   MAX_ATTACHMENT_COUNT,
   MAX_ATTACHMENT_SIZE_BYTES,
+  MAX_ATTACHMENT_TOTAL_BYTES,
 } from "@/lib/business-attachments/config";
 import { validateSelectedAttachments } from "@/lib/business-attachments/client-validation";
 import type { ProblemActionState } from "@/app/business/problems/actions";
+import { FilePicker } from "@/components/uploads/file-picker";
 
 type ProblemFormValues = {
   id: string;
@@ -221,11 +222,6 @@ export function ProblemForm({
       <section className="space-y-3 rounded-2xl border border-border bg-muted/20 p-4 sm:p-5">
         <div>
           <h2 className="font-semibold">Tài liệu liên quan</h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Tối đa {MAX_ATTACHMENT_COUNT} tệp, mỗi tệp không quá{" "}
-            {MAX_ATTACHMENT_SIZE_BYTES / 1024 / 1024} MB. Định dạng: PDF, DOCX,
-            XLSX, PPTX, CSV, PNG, JPG.
-          </p>
         </div>
         {visibleAttachments.length > 0 && (
           <ul className="space-y-2">
@@ -264,16 +260,23 @@ export function ProblemForm({
             Tệp được gỡ khỏi bài toán khi bạn lưu thay đổi.
           </p>
         )}
-        <input
-          accept={ALLOWED_ATTACHMENT_EXTENSIONS.join(",")}
-          className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:font-semibold file:text-primary hover:file:bg-primary/15"
-          multiple
+        <FilePicker
+          existingBytes={visibleAttachments.reduce(
+            (total, attachment) => total + attachment.sizeBytes,
+            0,
+          )}
+          existingCount={visibleAttachments.length}
+          label="Tài liệu mới"
+          limits={{
+            count: MAX_ATTACHMENT_COUNT,
+            fileSizeBytes: MAX_ATTACHMENT_SIZE_BYTES,
+            totalBytes: MAX_ATTACHMENT_TOTAL_BYTES,
+          }}
           name="attachments"
-          onChange={() => {
+          onFilesChange={() => {
             setClientError(null);
             setState({ error: null });
           }}
-          type="file"
         />
       </section>
 
