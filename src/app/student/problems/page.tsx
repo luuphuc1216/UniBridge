@@ -70,7 +70,13 @@ export default async function StudentProblemsPage({
     filters.push({ budgetMin: { lte: budgetMax } });
   }
 
-  const publicProblemStatuses = ["APPROVED", "PUBLISHED", "TEAM_SELECTED"];
+  const publicProblemStatuses = [
+    "APPROVED",
+    "PUBLISHED",
+    "TEAM_SELECTED",
+    "PROTOTYPING",
+    "EVALUATING",
+  ];
   const [problems, fields, durations, skills, savedRows] = await Promise.all([
     prisma.problem.findMany({
       where: { status: { in: publicProblemStatuses }, AND: filters },
@@ -133,7 +139,8 @@ export default async function StudentProblemsPage({
         <ProblemResults
           problems={problems.map((problem) => ({
             ...problem,
-            saved: savedIds.has(problem.id),
+              status: problem.status,
+              saved: savedIds.has(problem.id),
           }))}
         />
       </section>

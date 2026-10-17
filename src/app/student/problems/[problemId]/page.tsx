@@ -9,6 +9,14 @@ import { prisma } from "@/lib/prisma";
 
 export const instant = false;
 
+const workspaceStatusLabels: Record<string, string> = {
+  TEAM_SELECTED: "Đã chọn nhóm",
+  PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
+  EVALUATING: "Đang được doanh nghiệp đánh giá",
+  CLOSED: "Đã kết thúc – không triển khai",
+  READY_FOR_IMPLEMENTATION: "Sẵn sàng sang Paid Implementation",
+};
+
 function formatCurrency(amount: number | null): string {
   return amount === null
     ? "Chưa xác định"
@@ -29,7 +37,27 @@ export default async function StudentProblemDetailPage({
   const problem = await prisma.problem.findFirst({
     where: {
       id: problemId,
-      status: { in: ["APPROVED", "PUBLISHED", "TEAM_SELECTED"] },
+      OR: [
+        {
+          status: {
+            in: ["APPROVED", "PUBLISHED", "TEAM_SELECTED", "PROTOTYPING", "EVALUATING"],
+          },
+        },
+        {
+          status: { in: ["CLOSED", "READY_FOR_IMPLEMENTATION"] },
+          applications: {
+            some: {
+              status: "SELECTED",
+              team: {
+                OR: [
+                  { ownerId: userId },
+                  { memberships: { some: { studentProfile: { userId } } } },
+                ],
+              },
+            },
+          },
+        },
+      ],
     },
     include: {
       businessProfile: { select: { companyName: true, industry: true } },
@@ -79,12 +107,30 @@ export default async function StudentProblemDetailPage({
       <p className="mt-2 text-sm text-muted-foreground">
         {problem.businessProfile.companyName} · {problem.businessProfile.industry}
       </p>
-      <div className="mt-4">
-        <SavedProblemButton
-          isSaved={Boolean(savedProblem)}
-          problemId={problem.id}
-        />
-      </div>
+      {workspaceStatusLabels[problem.status] && (
+        <span className="mt-3 inline-flex rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
+          {workspaceStatusLabels[problem.status]}
+        </span>
+      )}
+      {!["CLOSED", "READY_FOR_IMPLEMENTATION"].includes(problem.status) && (
+        <div className="mt-4">
+          <SavedProblemButton
+            isSaved={Boolean(savedProblem)}
+            problemId={problem.id}
+          />
+        </div>
+      )}
+      {application?.status === "SELECTED" &&
+        ["TEAM_SELECTED", "PROTOTYPING", "EVALUATING", "CLOSED", "READY_FOR_IMPLEMENTATION"].includes(
+          problem.status,
+        ) && (
+          <Link
+            className="mt-4 inline-flex rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            href={`/student/workspace/${problem.id}`}
+          >
+            Mở không gian làm việc của nhóm
+          </Link>
+        )}
 
       <div className="mt-8 grid gap-5">
         <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">

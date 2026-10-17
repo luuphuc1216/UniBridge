@@ -6,8 +6,8 @@ import { prisma } from "@/lib/prisma";
 
 export async function openNotificationAction(formData: FormData): Promise<void> {
   const session = await auth();
-  if (!session?.user || session.user.role !== "BUSINESS") {
-    throw new Error("Bạn không có quyền xem thông báo doanh nghiệp.");
+  if (!session?.user) {
+    throw new Error("Vui lòng đăng nhập để xem thông báo.");
   }
 
   const notificationId = formData.get("notificationId");

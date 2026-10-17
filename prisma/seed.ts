@@ -49,6 +49,38 @@ async function ensureSeedAttachment(
   }
 }
 
+async function ensureSeedProposalFile(
+  proposalId: string,
+  fileId: string,
+  originalName: string,
+  content: Uint8Array,
+) {
+  const existingFile = await prisma.proposalFile.findUnique({ where: { id: fileId } });
+  if (existingFile) return;
+
+  const storageKey = randomUUID();
+  await attachmentStorage.save(storageKey, content);
+  try {
+    await prisma.proposalFile.create({
+      data: {
+        id: fileId,
+        proposalId,
+        originalName,
+        contentType: "text/csv",
+        sizeBytes: content.byteLength,
+        storageKey,
+      },
+    });
+  } catch (error) {
+    try {
+      await attachmentStorage.delete(storageKey);
+    } catch (cleanupError) {
+      console.error("Không thể dọn tệp Proposal seed sau lỗi tạo metadata:", cleanupError);
+    }
+    throw error;
+  }
+}
+
 const databaseUrl = getRequiredEnvironmentVariable("DATABASE_URL");
 const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
 const prisma = new PrismaClient({ adapter });
@@ -655,6 +687,167 @@ async function main() {
         estimatedDuration: application.estimatedDuration,
         proposedBudget: application.proposedBudget,
       },
+    });
+  }
+
+  const prototypingProblem = await prisma.problem.findUniqueOrThrow({
+    where: { slug: problems[0].slug },
+  });
+  const prototypingSelectedTeam = await prisma.studentTeam.findUniqueOrThrow({
+    where: { slug: "nextgen-digital" },
+  });
+  if (!prototypingSelectedTeam.ownerId) {
+    throw new Error("Nhóm seed không có chủ sở hữu: nextgen-digital");
+  }
+  const prototypingApplication = await prisma.application.findUniqueOrThrow({
+    where: {
+      problemId_teamId: {
+        problemId: prototypingProblem.id,
+        teamId: prototypingSelectedTeam.id,
+      },
+    },
+  });
+  await prisma.application.update({
+    where: { id: prototypingApplication.id },
+    data: { status: "SELECTED" },
+  });
+  await prisma.application.updateMany({
+    where: {
+      problemId: prototypingProblem.id,
+      id: { not: prototypingApplication.id },
+      status: "SUBMITTED",
+    },
+    data: { status: "REJECTED" },
+  });
+  await prisma.problem.update({
+    where: { id: prototypingProblem.id },
+    data: { status: "PROTOTYPING" },
+  });
+
+  const evaluationBusiness = businessProfiles[1];
+  if (!evaluationBusiness) throw new Error("Thiếu doanh nghiệp seed cho Proposal.");
+  const evaluationProblem = await prisma.problem.upsert({
+    where: { slug: "de-xuat-dashboard-phan-tich-ban-hang" },
+    update: {
+      businessProfileId: evaluationBusiness.id,
+      title: "Đề xuất dashboard phân tích bán hàng",
+      description: "Doanh nghiệp cần tổng hợp dữ liệu bán hàng để theo dõi hiệu quả theo kênh.",
+      goal: "Có góc nhìn rõ ràng về doanh thu, sản phẩm và xu hướng theo thời gian.",
+      field: "Phân tích dữ liệu",
+      requirements: "Nhóm đề xuất mô hình dashboard và các chỉ số ưu tiên.",
+      expectedDuration: "5-7 tuần",
+      budgetMin: 10000000,
+      budgetMax: 20000000,
+      status: "EVALUATING",
+      approvedAt: new Date(),
+    },
+    create: {
+      businessProfileId: evaluationBusiness.id,
+      reviewedById: admin.id,
+      title: "Đề xuất dashboard phân tích bán hàng",
+      slug: "de-xuat-dashboard-phan-tich-ban-hang",
+      description: "Doanh nghiệp cần tổng hợp dữ liệu bán hàng để theo dõi hiệu quả theo kênh.",
+      goal: "Có góc nhìn rõ ràng về doanh thu, sản phẩm và xu hướng theo thời gian.",
+      field: "Phân tích dữ liệu",
+      requirements: "Nhóm đề xuất mô hình dashboard và các chỉ số ưu tiên.",
+      expectedDuration: "5-7 tuần",
+      budgetMin: 10000000,
+      budgetMax: 20000000,
+      status: "EVALUATING",
+      approvedAt: new Date(),
+    },
+  });
+  const evaluationTeam = await prisma.studentTeam.findUniqueOrThrow({
+    where: { slug: "data-spark" },
+  });
+  if (!evaluationTeam.ownerId) {
+    throw new Error("Nhóm seed không có chủ sở hữu: data-spark");
+  }
+  const evaluationApplication = await prisma.application.upsert({
+    where: {
+      problemId_teamId: {
+        problemId: evaluationProblem.id,
+        teamId: evaluationTeam.id,
+      },
+    },
+    update: {
+      approach: "Phân tích dữ liệu bán hàng, xác định chỉ số chính và đề xuất dashboard thử nghiệm.",
+      problemUnderstanding: "Dữ liệu hiện phân tán, gây khó khăn khi so sánh hiệu quả giữa các kênh.",
+      solutionDirection: "Tạo dashboard thử nghiệm theo doanh thu, sản phẩm và kênh bán.",
+      methodology: "Rà soát dữ liệu mẫu, xây dựng chỉ số và kiểm tra trực quan hóa.",
+      keySteps: "Kiểm tra dữ liệu; chọn KPI; dựng bản mẫu; rà soát cùng doanh nghiệp.",
+      tools: "Python, Power BI",
+      resources: "Cần bộ dữ liệu mẫu đã ẩn thông tin cá nhân.",
+      estimatedDuration: "6 tuần",
+      proposedBudget: 15000000,
+      status: "SELECTED",
+    },
+    create: {
+      problemId: evaluationProblem.id,
+      teamId: evaluationTeam.id,
+      approach: "Phân tích dữ liệu bán hàng, xác định chỉ số chính và đề xuất dashboard thử nghiệm.",
+      problemUnderstanding: "Dữ liệu hiện phân tán, gây khó khăn khi so sánh hiệu quả giữa các kênh.",
+      solutionDirection: "Tạo dashboard thử nghiệm theo doanh thu, sản phẩm và kênh bán.",
+      methodology: "Rà soát dữ liệu mẫu, xây dựng chỉ số và kiểm tra trực quan hóa.",
+      keySteps: "Kiểm tra dữ liệu; chọn KPI; dựng bản mẫu; rà soát cùng doanh nghiệp.",
+      tools: "Python, Power BI",
+      resources: "Cần bộ dữ liệu mẫu đã ẩn thông tin cá nhân.",
+      estimatedDuration: "6 tuần",
+      proposedBudget: 15000000,
+      status: "SELECTED",
+    },
+  });
+  const evaluationProposal = await prisma.proposal.upsert({
+    where: {
+      applicationId_version: {
+        applicationId: evaluationApplication.id,
+        version: 1,
+      },
+    },
+    update: {
+      type: "DATA_ANALYSIS",
+      description: "Bản đề xuất gồm bộ KPI bán hàng, bố cục dashboard và dữ liệu mẫu minh họa.",
+      status: "SUBMITTED",
+    },
+    create: {
+      applicationId: evaluationApplication.id,
+      version: 1,
+      type: "DATA_ANALYSIS",
+      description: "Bản đề xuất gồm bộ KPI bán hàng, bố cục dashboard và dữ liệu mẫu minh họa.",
+      status: "SUBMITTED",
+    },
+  });
+  await ensureSeedProposalFile(
+    evaluationProposal.id,
+    "seed-evaluation-proposal-file",
+    "De-xuat-dashboard.csv",
+    new TextEncoder().encode("chi_so,mo_ta\nDoanh thu,Doanh thu theo thoi gian\n"),
+  );
+  const sampleMessages = [
+    {
+      id: "seed-prototyping-message-1",
+      problemId: prototypingProblem.id,
+      senderId: prototypingSelectedTeam.ownerId,
+      content: "Nhóm đã rà soát luồng mua hàng hiện tại. Doanh nghiệp có thể chia sẻ thứ tự ưu tiên giữa thanh toán và nhận đơn không?",
+    },
+    {
+      id: "seed-prototyping-message-2",
+      problemId: prototypingProblem.id,
+      senderId: evaluationBusiness.userId,
+      content: "Ưu tiên nhận đơn trên điện thoại trước; thanh toán trực tuyến có thể để ở giai đoạn sau.",
+    },
+    {
+      id: "seed-evaluating-message-1",
+      problemId: evaluationProblem.id,
+      senderId: evaluationTeam.ownerId,
+      content: "Nhóm đã nộp bản đề xuất ban đầu. Các chỉ số có thể điều chỉnh theo dữ liệu doanh nghiệp cung cấp.",
+    },
+  ];
+  for (const message of sampleMessages) {
+    await prisma.workspaceMessage.upsert({
+      where: { id: message.id },
+      update: message,
+      create: message,
     });
   }
 

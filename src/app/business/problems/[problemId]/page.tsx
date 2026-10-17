@@ -14,6 +14,10 @@ const statusLabels: Record<string, string> = {
   APPROVED: "Đã duyệt",
   PUBLISHED: "Đang nhận hồ sơ",
   TEAM_SELECTED: "Đã chọn nhóm",
+  PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
+  EVALUATING: "Doanh nghiệp đang đánh giá",
+  CLOSED: "Đã kết thúc – không triển khai",
+  READY_FOR_IMPLEMENTATION: "Sẵn sàng sang Paid Implementation",
   COMPLETED: "Đã hoàn thành",
 };
 
@@ -48,9 +52,20 @@ export default async function BusinessProblemDetailPage({
   }
 
   const editable = ["DRAFT", "NEEDS_REVISION", "CHANGES_REQUESTED"].includes(problem.status);
-  const canReviewApplications = ["APPROVED", "PUBLISHED", "TEAM_SELECTED"].includes(
-    problem.status,
-  );
+  const canReviewApplications = [
+    "APPROVED",
+    "PUBLISHED",
+    "TEAM_SELECTED",
+    "PROTOTYPING",
+    "EVALUATING",
+  ].includes(problem.status);
+  const hasWorkspace = [
+    "TEAM_SELECTED",
+    "PROTOTYPING",
+    "EVALUATING",
+    "CLOSED",
+    "READY_FOR_IMPLEMENTATION",
+  ].includes(problem.status);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
@@ -82,6 +97,14 @@ export default async function BusinessProblemDetailPage({
               {problem._count.applications > 0
                 ? `Xem ${problem._count.applications} hồ sơ ứng tuyển`
                 : "Chưa có hồ sơ"}
+            </Link>
+          )}
+          {hasWorkspace && (
+            <Link
+              className="rounded-xl bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground hover:opacity-90"
+              href={`/business/problems/${problem.id}/workspace`}
+            >
+              Mở không gian làm việc
             </Link>
           )}
         </div>

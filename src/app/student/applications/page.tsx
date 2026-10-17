@@ -7,9 +7,9 @@ export const instant = false;
 
 const statusLabels: Record<string, string> = {
   SUBMITTED: "Đã gửi",
-  SELECTED: "Đã được chọn",
   REJECTED: "Chưa được chọn",
   WITHDRAWN: "Đã rút",
+  SELECTED: "Đã được chọn",
 };
 
 export default async function StudentApplicationsPage() {
@@ -68,6 +68,19 @@ export default async function StudentApplicationsPage() {
                   <p className="mt-1 text-sm text-muted-foreground">
                     {application.problem.businessProfile.companyName}
                   </p>
+                  <p className="mt-2 text-xs font-medium text-primary">
+                    {application.problem.status === "PROTOTYPING"
+                      ? "Đang xây dựng Prototype / Solution Proposal"
+                      : application.problem.status === "EVALUATING"
+                        ? "Doanh nghiệp đang đánh giá Proposal"
+                        : application.problem.status === "CLOSED"
+                          ? "Đã kết thúc – không triển khai"
+                          : application.problem.status === "READY_FOR_IMPLEMENTATION"
+                            ? "Sẵn sàng sang Paid Implementation"
+                            : application.problem.status === "TEAM_SELECTED"
+                              ? "Đã chọn nhóm"
+                              : ""}
+                  </p>
                 </div>
                 <span
                   className={`rounded-full px-3 py-1 text-xs font-semibold ${
@@ -90,6 +103,17 @@ export default async function StudentApplicationsPage() {
               >
                 Xem bài toán và hồ sơ
               </Link>
+              {application.status === "SELECTED" &&
+                ["TEAM_SELECTED", "PROTOTYPING", "EVALUATING", "CLOSED", "READY_FOR_IMPLEMENTATION"].includes(
+                  application.problem.status,
+                ) && (
+                  <Link
+                    className="ml-4 inline-flex text-sm font-semibold text-primary hover:underline"
+                    href={`/student/workspace/${application.problem.id}`}
+                  >
+                    Mở không gian làm việc
+                  </Link>
+                )}
             </article>
           ))}
         </div>

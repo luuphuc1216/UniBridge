@@ -35,7 +35,9 @@ export default async function BusinessProblemApplicationsPage({
   });
   if (
     !problem ||
-    !["APPROVED", "PUBLISHED", "TEAM_SELECTED"].includes(problem.status)
+    !["APPROVED", "PUBLISHED", "TEAM_SELECTED", "PROTOTYPING", "EVALUATING"].includes(
+      problem.status,
+    )
   ) {
     notFound();
   }

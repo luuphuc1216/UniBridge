@@ -209,11 +209,17 @@ Problem → Kết thúc
 
 Thông tin về quá trình tham gia có thể được lưu lại trên hệ thống để phục vụ quản lý lịch sử và Reputation theo chính sách của nền tảng.
 
+Trên UniBridge, mỗi lần nhóm nộp là một phiên bản Proposal riêng. Doanh nghiệp chấm từng tiêu chí theo thang điểm 1–5, kèm nhận xét và chọn một trong ba quyết định: yêu cầu chỉnh sửa, không triển khai hoặc sẵn sàng sang Paid Implementation. Yêu cầu chỉnh sửa đưa Problem về trạng thái PROTOTYPING để nhóm gửi phiên bản tiếp theo; hai quyết định cuối lần lượt chuyển Problem sang CLOSED hoặc READY_FOR_IMPLEMENTATION. Sau quyết định cuối, không thể gửi tin nhắn hoặc Proposal mới nhưng hai bên vẫn xem được lịch sử.
+
+Không gian làm việc và tệp Proposal chỉ dành cho doanh nghiệp sở hữu Problem, nhóm được chọn và Admin. Tệp được kiểm tra ở máy chủ và lưu bằng lớp lưu trữ an toàn dùng cho tệp đính kèm.
+
 **Trường hợp 2: Muốn triển khai**
 
 Nếu doanh nghiệp đánh giá giải pháp phù hợp và có nhu cầu đưa vào thực tế, hai bên chuyển sang giai đoạn Paid Implementation.
 
 Đây là thời điểm dự án chuyển từ giai đoạn đề xuất sang giai đoạn triển khai chính thức có trả phí.
+
+Ở giai đoạn đánh giá của UniBridge, READY_FOR_IMPLEMENTATION chỉ đánh dấu hai bên sẵn sàng chuyển tiếp; chưa tạo thỏa thuận, giao dịch, thanh toán hoặc Milestone. Các bước đó thuộc Giai đoạn 7.
 
 ### Bước 8. Paid Implementation
 

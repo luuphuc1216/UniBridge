@@ -13,6 +13,10 @@ const statusLabels: Record<string, string> = {
   APPROVED: "Đã duyệt",
   PUBLISHED: "Đang nhận hồ sơ",
   TEAM_SELECTED: "Đã chọn nhóm",
+  PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
+  EVALUATING: "Doanh nghiệp đang đánh giá",
+  CLOSED: "Đã kết thúc – không triển khai",
+  READY_FOR_IMPLEMENTATION: "Sẵn sàng sang Paid Implementation",
 };
 
 const statusClasses: Record<string, string> = {
@@ -23,6 +27,10 @@ const statusClasses: Record<string, string> = {
   APPROVED: "bg-emerald-100 text-emerald-800",
   PUBLISHED: "bg-emerald-100 text-emerald-800",
   TEAM_SELECTED: "bg-blue-100 text-blue-800",
+  PROTOTYPING: "bg-violet-100 text-violet-800",
+  EVALUATING: "bg-amber-100 text-amber-800",
+  CLOSED: "bg-muted text-muted-foreground",
+  READY_FOR_IMPLEMENTATION: "bg-emerald-100 text-emerald-800",
 };
 
 export default async function BusinessProblemsPage() {

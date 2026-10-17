@@ -10,7 +10,11 @@ export default async function SavedProblemsPage() {
   const savedRows = await prisma.savedProblem.findMany({
     where: {
       userId,
-      problem: { status: { in: ["APPROVED", "PUBLISHED", "TEAM_SELECTED"] } },
+      problem: {
+        status: {
+          in: ["APPROVED", "PUBLISHED", "TEAM_SELECTED", "PROTOTYPING", "EVALUATING"],
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
     include: {
@@ -39,7 +43,8 @@ export default async function SavedProblemsPage() {
         <ProblemResults
           problems={savedRows.map(({ problem }) => ({
             ...problem,
-            saved: true,
+              status: problem.status,
+              saved: true,
           }))}
         />
       </section>

@@ -12,6 +12,10 @@ const statusLabels: Record<string, string> = {
   APPROVED: "Đã duyệt",
   PUBLISHED: "Đang nhận hồ sơ",
   TEAM_SELECTED: "Đã chọn nhóm",
+  PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
+  EVALUATING: "Doanh nghiệp đang đánh giá",
+  CLOSED: "Đã kết thúc – không triển khai",
+  READY_FOR_IMPLEMENTATION: "Sẵn sàng sang Paid Implementation",
   COMPLETED: "Đã hoàn thành",
 };
 
@@ -22,6 +26,10 @@ const statusOptions = [
   ["APPROVED", "Đã duyệt"],
   ["PUBLISHED", "Đang nhận hồ sơ"],
   ["TEAM_SELECTED", "Đã chọn nhóm"],
+  ["PROTOTYPING", "Đang xây dựng Prototype / Solution Proposal"],
+  ["EVALUATING", "Doanh nghiệp đang đánh giá"],
+  ["CLOSED", "Đã kết thúc – không triển khai"],
+  ["READY_FOR_IMPLEMENTATION", "Sẵn sàng sang Paid Implementation"],
   ["COMPLETED", "Đã hoàn thành"],
   ["DRAFT", "Bản nháp"],
 ] as const;

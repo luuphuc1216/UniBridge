@@ -4,6 +4,7 @@ import { SavedProblemButton } from "@/components/student/saved-problem-button";
 export type StudentProblemCard = {
   id: string;
   title: string;
+  status: string;
   field: string;
   description: string;
   expectedDuration: string;
@@ -25,6 +26,13 @@ function formatCurrency(amount: number | null): string {
 }
 
 export function ProblemResults({ problems }: { problems: StudentProblemCard[] }) {
+  const statusLabels: Record<string, string> = {
+    APPROVED: "Đã duyệt",
+    PUBLISHED: "Đang nhận hồ sơ",
+    TEAM_SELECTED: "Đã chọn nhóm",
+    PROTOTYPING: "Đang xây dựng giải pháp",
+    EVALUATING: "Đang được doanh nghiệp đánh giá",
+  };
   if (problems.length === 0) {
     return (
       <section className="rounded-2xl border border-dashed border-border bg-card p-8 text-center sm:p-12">
@@ -45,6 +53,9 @@ export function ProblemResults({ problems }: { problems: StudentProblemCard[] })
         >
           <p className="text-sm font-semibold text-primary">{problem.field}</p>
           <h2 className="mt-2 text-lg font-semibold">{problem.title}</h2>
+          <span className="mt-2 w-fit rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
+            {statusLabels[problem.status] ?? problem.status}
+          </span>
           <p className="mt-2 text-sm font-medium text-muted-foreground">
             {problem.businessProfile.companyName}
           </p>

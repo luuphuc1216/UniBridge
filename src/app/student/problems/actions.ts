@@ -60,7 +60,9 @@ export async function toggleSavedProblemAction(formData: FormData): Promise<void
     const problem = await prisma.problem.findFirst({
       where: {
         id: problemId,
-        status: { in: ["APPROVED", "PUBLISHED", "TEAM_SELECTED"] },
+        status: {
+          in: ["APPROVED", "PUBLISHED", "TEAM_SELECTED", "PROTOTYPING", "EVALUATING"],
+        },
       },
       select: { id: true },
     });

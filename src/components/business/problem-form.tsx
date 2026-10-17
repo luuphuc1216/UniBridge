@@ -2,17 +2,16 @@
 
 import Link from "next/link";
 import {
-  startTransition,
-  useActionState,
   useState,
+  useTransition,
   type FormEvent,
 } from "react";
 import {
   ALLOWED_ATTACHMENT_EXTENSIONS,
   MAX_ATTACHMENT_COUNT,
   MAX_ATTACHMENT_SIZE_BYTES,
-  MAX_ATTACHMENT_TOTAL_BYTES,
 } from "@/lib/business-attachments/config";
+import { validateSelectedAttachments } from "@/lib/business-attachments/client-validation";
 import type { ProblemActionState } from "@/app/business/problems/actions";
 
 type ProblemFormValues = {
@@ -57,9 +56,8 @@ export function ProblemForm({
   problem,
   attachments = [],
 }: ProblemFormProps) {
-  const [state, formAction, isPending] = useActionState(action, {
-    error: null,
-  });
+  const [state, setState] = useState<ProblemActionState>({ error: null });
+  const [isPending, startPendingTransition] = useTransition();
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [clientError, setClientError] = useState<string | null>(null);
   const visibleAttachments = attachments.filter(
@@ -68,7 +66,9 @@ export function ProblemForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isPending) return;
     setClientError(null);
+    setState({ error: null });
 
     const form = event.currentTarget;
     const fileInput = form.elements.namedItem("attachments");
@@ -77,42 +77,13 @@ export function ProblemForm({
         ? Array.from(fileInput.files)
         : [];
 
-    if (selectedFiles.length + visibleAttachments.length > MAX_ATTACHMENT_COUNT) {
-      setClientError(`Mỗi bài toán được đính kèm tối đa ${MAX_ATTACHMENT_COUNT} tệp.`);
-      return;
-    }
-
-    const oversizedFile = selectedFiles.find(
-      (file) => file.size > MAX_ATTACHMENT_SIZE_BYTES,
+    const validationError = validateSelectedAttachments(
+      selectedFiles,
+      visibleAttachments.length,
+      visibleAttachments.reduce((total, attachment) => total + attachment.sizeBytes, 0),
     );
-    if (oversizedFile) {
-      setClientError(
-        `Tệp "${oversizedFile.name}" vượt quá giới hạn ${MAX_ATTACHMENT_SIZE_BYTES / 1024 / 1024} MB.`,
-      );
-      return;
-    }
-
-    const invalidFile = selectedFiles.find((file) => {
-      const extension = `.${file.name.split(".").pop()?.toLowerCase()}`;
-      return !ALLOWED_ATTACHMENT_EXTENSIONS.includes(extension);
-    });
-    if (invalidFile) {
-      setClientError(
-        `Tệp "${invalidFile.name}" không đúng định dạng. Chỉ nhận PDF, DOCX, XLSX, PPTX, CSV, PNG và JPG.`,
-      );
-      return;
-    }
-
-    const totalAttachmentBytes =
-      selectedFiles.reduce((total, file) => total + file.size, 0) +
-      visibleAttachments.reduce(
-        (total, attachment) => total + attachment.sizeBytes,
-        0,
-      );
-    if (totalAttachmentBytes > MAX_ATTACHMENT_TOTAL_BYTES) {
-      setClientError(
-        `Tổng dung lượng tài liệu không được vượt quá ${MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024} MB.`,
-      );
+    if (validationError) {
+      setClientError(validationError);
       return;
     }
 
@@ -121,11 +92,22 @@ export function ProblemForm({
       submitter instanceof HTMLButtonElement && submitter.name
         ? new FormData(form, submitter)
         : new FormData(form);
-    startTransition(() => formAction(formData));
+    startPendingTransition(() => {
+      void action(state, formData)
+        .then(setState)
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : "";
+          setClientError(
+            /unexpected end of form/i.test(message)
+              ? "Tệp quá lớn hoặc quá nhiều tệp, vui lòng kiểm tra lại"
+              : "Không thể lưu bài toán lúc này. Vui lòng kiểm tra tài liệu và thử lại.",
+          );
+        });
+    });
   }
 
   return (
-    <form action={formAction} className="space-y-6" onSubmit={handleSubmit}>
+    <form className="space-y-6" onSubmit={handleSubmit}>
       {problem && <input name="problemId" type="hidden" value={problem.id} />}
       {deletedIds.map((id) => (
         <input key={id} name="deletedAttachmentIds" type="hidden" value={id} />
@@ -287,7 +269,10 @@ export function ProblemForm({
           className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:font-semibold file:text-primary hover:file:bg-primary/15"
           multiple
           name="attachments"
-          onChange={() => setClientError(null)}
+          onChange={() => {
+            setClientError(null);
+            setState({ error: null });
+          }}
           type="file"
         />
       </section>

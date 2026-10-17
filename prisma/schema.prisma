@@ -8,22 +8,23 @@ datasource db {
 }
 
 model User {
-  id               String           @id @default(cuid())
-  email            String           @unique
-  name             String
-  passwordHash     String
-  role             String           @default("STUDENT")
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  businessProfile  BusinessProfile?
-  studentProfile   StudentProfile?
-  ownedTeam        StudentTeam?     @relation("StudentTeamOwner")
-  reviewedProblems Problem[]        @relation("ProblemReviewer")
-  reviews          Review[]
-  notifications    Notification[]
-  savedProblems    SavedProblem[]
-  problemViews     ViewLog[]
-  problemSearches  SearchLog[]
+  id                String             @id @default(cuid())
+  email             String             @unique
+  name              String
+  passwordHash      String
+  role              String             @default("STUDENT")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  businessProfile   BusinessProfile?
+  studentProfile    StudentProfile?
+  ownedTeam         StudentTeam?       @relation("StudentTeamOwner")
+  reviewedProblems  Problem[]          @relation("ProblemReviewer")
+  reviews           Review[]
+  notifications     Notification[]
+  savedProblems     SavedProblem[]
+  problemViews      ViewLog[]
+  problemSearches   SearchLog[]
+  workspaceMessages WorkspaceMessage[]
 }
 
 model BusinessProfile {
@@ -128,6 +129,7 @@ model Problem {
   skills            ProblemSkill[]
   applications      Application[]
   attachments       ProblemAttachment[]
+  workspaceMessages WorkspaceMessage[]
   savedBy           SavedProblem[]
   viewLogs          ViewLog[]
 
@@ -176,6 +178,7 @@ model Application {
   problem              Problem           @relation(fields: [problemId], references: [id], onDelete: Cascade)
   team                 StudentTeam       @relation(fields: [teamId], references: [id], onDelete: Cascade)
   solutionProposal     SolutionProposal?
+  proposals            Proposal[]
   project              Project?
 
   @@unique([problemId, teamId])
@@ -228,6 +231,66 @@ model SolutionProposal {
   submittedAt   DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+}
+
+model Proposal {
+  id            String               @id @default(cuid())
+  applicationId String
+  version       Int
+  type          String
+  description   String
+  status        String               @default("SUBMITTED")
+  submittedAt   DateTime             @default(now())
+  createdAt     DateTime             @default(now())
+  application   Application          @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  files         ProposalFile[]
+  evaluations   ProposalEvaluation[]
+
+  @@unique([applicationId, version])
+  @@index([applicationId, submittedAt])
+}
+
+model ProposalFile {
+  id           String   @id @default(cuid())
+  proposalId   String
+  originalName String
+  contentType  String
+  sizeBytes    Int
+  storageKey   String   @unique
+  createdAt    DateTime @default(now())
+  proposal     Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId])
+}
+
+model WorkspaceMessage {
+  id        String   @id @default(cuid())
+  problemId String
+  senderId  String
+  content   String
+  createdAt DateTime @default(now())
+  problem   Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([problemId, createdAt])
+}
+
+model ProposalEvaluation {
+  id                      String   @id @default(cuid())
+  proposalId              String
+  problemResponse         Int
+  feasibility             Int
+  goalAlignment           Int
+  practicalImplementation Int
+  estimatedCost           Int
+  implementationTime      Int
+  valueDelivered          Int
+  comment                 String
+  decision                String
+  createdAt               DateTime @default(now())
+  proposal                Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId, createdAt])
 }
 
 model Project {

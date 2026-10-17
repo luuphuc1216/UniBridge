@@ -314,7 +314,17 @@ export async function selectTeamAction(
 
       const selected = await transaction.application.findFirst({
         where: { id: applicationId, problemId, status: "SUBMITTED" },
-        select: { id: true },
+        select: {
+          id: true,
+          team: {
+            select: {
+              ownerId: true,
+              memberships: {
+                select: { studentProfile: { select: { userId: true } } },
+              },
+            },
+          },
+        },
       });
       if (!selected) {
         throw new Error("Hồ sơ ứng tuyển không còn khả dụng.");
@@ -332,6 +342,18 @@ export async function selectTeamAction(
         where: { id: applicationId },
         data: { status: "SELECTED" },
       });
+      const studentUserIds = [
+        selected.team.ownerId,
+        ...selected.team.memberships.map(({ studentProfile }) => studentProfile?.userId),
+      ].filter((userId): userId is string => Boolean(userId));
+      await transaction.notification.createMany({
+        data: [...new Set(studentUserIds)].map((userId) => ({
+          userId,
+          title: "Nhóm của bạn đã được doanh nghiệp lựa chọn",
+          message: "Bắt đầu làm việc trong không gian chung để phát triển Prototype / Solution Proposal.",
+          href: `/student/workspace/${problemId}`,
+        })),
+      });
     });
   } catch (error) {
     if (error instanceof Error) {
@@ -345,5 +367,5 @@ export async function selectTeamAction(
   revalidatePath(`/business/problems/${problemId}/applications`);
   revalidatePath("/student/applications");
   revalidatePath(`/student/problems/${problemId}`);
-  redirect(`/business/problems/${problemId}`);
+  redirect(`/business/problems/${problemId}/workspace`);
 }
