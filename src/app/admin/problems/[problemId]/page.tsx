@@ -11,6 +11,7 @@ const statusLabels: Record<string, string> = {
   PENDING_REVIEW: "Chờ duyệt",
   NEEDS_REVISION: "Cần chỉnh sửa",
   CHANGES_REQUESTED: "Cần chỉnh sửa",
+  REJECTED: "Bị từ chối",
   APPROVED: "Đã duyệt",
   PUBLISHED: "Đang nhận hồ sơ",
   TEAM_SELECTED: "Đã chọn nhóm",
@@ -180,7 +181,9 @@ export default async function AdminProblemDetailPage({
 
         {problem.reviewNote && (
           <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-            <h2 className="font-semibold">Lý do chỉnh sửa trước đó</h2>
+            <h2 className="font-semibold">
+              {problem.status === "REJECTED" ? "Lý do từ chối" : "Lý do chỉnh sửa trước đó"}
+            </h2>
             <p className="mt-1 whitespace-pre-wrap">{problem.reviewNote}</p>
           </section>
         )}

@@ -11,6 +11,7 @@ const statusLabels: Record<string, string> = {
   PENDING_REVIEW: "Chờ duyệt",
   NEEDS_REVISION: "Cần chỉnh sửa",
   CHANGES_REQUESTED: "Cần chỉnh sửa",
+  REJECTED: "Bị từ chối",
   APPROVED: "Đã duyệt",
   PUBLISHED: "Đang nhận hồ sơ",
   TEAM_SELECTED: "Đã chọn nhóm",
@@ -113,7 +114,9 @@ export default async function BusinessProblemDetailPage({
 
       {problem.reviewNote && (
         <section className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-          <h2 className="font-semibold">Ghi chú kiểm duyệt</h2>
+          <h2 className="font-semibold">
+            {problem.status === "REJECTED" ? "Lý do từ chối" : "Ghi chú kiểm duyệt"}
+          </h2>
           <p className="mt-1">{problem.reviewNote}</p>
         </section>
       )}

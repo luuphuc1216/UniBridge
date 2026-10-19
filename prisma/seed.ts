@@ -862,6 +862,12 @@ async function main() {
       status: "PENDING_REVIEW",
       reviewNote: null,
     },
+    {
+      slug: "bai-toan-bi-tu-choi-thu-nghiem",
+      title: "Bài toán mẫu bị từ chối",
+      status: "REJECTED",
+      reviewNote: "Mô tả chưa đủ căn cứ và thiếu thông tin cần thiết để công khai.",
+    },
   ];
   for (const example of reviewExamples) {
     await prisma.problem.upsert({
@@ -878,7 +884,7 @@ async function main() {
         budgetMax: 10000000,
         status: example.status,
         reviewNote: example.reviewNote,
-        reviewedById: null,
+        reviewedById: example.status === "REJECTED" ? admin.id : null,
         approvedAt: null,
         submittedAt: example.status === "DRAFT" ? null : new Date(),
       },
@@ -895,7 +901,7 @@ async function main() {
         budgetMax: 10000000,
         status: example.status,
         reviewNote: example.reviewNote,
-        reviewedById: null,
+        reviewedById: example.status === "REJECTED" ? admin.id : null,
         approvedAt: null,
         submittedAt: example.status === "DRAFT" ? null : new Date(),
       },

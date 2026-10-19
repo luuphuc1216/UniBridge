@@ -7,6 +7,7 @@ import {
 } from "@/components/student/problem-search-form";
 import { requireStudent } from "@/lib/student-access";
 import { prisma } from "@/lib/prisma";
+import { STUDENT_DISCOVERABLE_PROBLEM_STATUSES } from "@/lib/problem-workflow";
 
 export const instant = false;
 
@@ -70,13 +71,7 @@ export default async function StudentProblemsPage({
     filters.push({ budgetMin: { lte: budgetMax } });
   }
 
-  const publicProblemStatuses = [
-    "APPROVED",
-    "PUBLISHED",
-    "TEAM_SELECTED",
-    "PROTOTYPING",
-    "EVALUATING",
-  ];
+  const publicProblemStatuses = [...STUDENT_DISCOVERABLE_PROBLEM_STATUSES];
   const [problems, fields, durations, skills, savedRows] = await Promise.all([
     prisma.problem.findMany({
       where: { status: { in: publicProblemStatuses }, AND: filters },

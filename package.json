@@ -12,7 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "test": "tsx --test src/lib/recommendation-scoring.test.ts src/lib/project-money.test.ts src/lib/milestone-submission-validation.test.ts src/lib/reputation.test.ts"
+    "test": "tsx --test src/lib/recommendation-scoring.test.ts src/lib/problem-workflow.test.ts src/lib/project-money.test.ts src/lib/milestone-submission-validation.test.ts src/lib/reputation.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

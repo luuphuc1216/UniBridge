@@ -92,10 +92,10 @@ export function ApplicationForm({
         {isPending
           ? "Đang gửi..."
           : isResubmission
-            ? "Gửi lại hồ sơ"
+            ? "Gửi lại Profile + Approach"
             : application
             ? "Lưu thay đổi hồ sơ"
-            : "Gửi hồ sơ cho doanh nghiệp"}
+            : "Gửi Profile + Approach"}
       </button>
     </form>
   );

@@ -6,10 +6,16 @@ import { SavedProblemButton } from "@/components/student/saved-problem-button";
 import { requireStudent } from "@/lib/student-access";
 import { getOwnedTeam } from "@/lib/student-team";
 import { prisma } from "@/lib/prisma";
+import {
+  getApplicationUnavailableReason,
+  isProblemAcceptingApplications,
+  STUDENT_DISCOVERABLE_PROBLEM_STATUSES,
+} from "@/lib/problem-workflow";
 
 export const instant = false;
 
 const workspaceStatusLabels: Record<string, string> = {
+  REJECTED: "Bị từ chối",
   TEAM_SELECTED: "Đã chọn nhóm",
   PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
   EVALUATING: "Đang được doanh nghiệp đánh giá",
@@ -39,9 +45,7 @@ export default async function StudentProblemDetailPage({
       id: problemId,
       OR: [
         {
-          status: {
-            in: ["APPROVED", "PUBLISHED", "TEAM_SELECTED", "PROTOTYPING", "EVALUATING"],
-          },
+          status: { in: [...STUDENT_DISCOVERABLE_PROBLEM_STATUSES, "REJECTED"] },
         },
         {
           status: { in: ["CLOSED", "READY_FOR_IMPLEMENTATION"] },
@@ -67,6 +71,7 @@ export default async function StudentProblemDetailPage({
   if (!problem) {
     notFound();
   }
+  const canAcceptApplications = isProblemAcceptingApplications(problem.status);
 
   const team = await getOwnedTeam(userId);
   const [savedProblem, application] = await Promise.all([
@@ -112,7 +117,7 @@ export default async function StudentProblemDetailPage({
           {workspaceStatusLabels[problem.status]}
         </span>
       )}
-      {!["CLOSED", "READY_FOR_IMPLEMENTATION"].includes(problem.status) && (
+      {!["REJECTED", "CLOSED", "READY_FOR_IMPLEMENTATION"].includes(problem.status) && (
         <div className="mt-4">
           <SavedProblemButton
             isSaved={Boolean(savedProblem)}
@@ -193,10 +198,23 @@ export default async function StudentProblemDetailPage({
 
       <section className="mt-7 rounded-2xl border border-border bg-card p-5 sm:p-7">
         <h2 className="text-xl font-semibold">Hồ sơ ứng tuyển</h2>
-        {problem.status !== "APPROVED" ? (
-          <p className="mt-3 rounded-xl bg-muted p-4 text-sm leading-6 text-muted-foreground">
-            Bài toán hiện không nhận hồ sơ mới. Bạn vẫn có thể xem thông tin và hồ sơ đã gửi.
-          </p>
+        {!canAcceptApplications ? (
+          <div className="mt-3 space-y-3">
+            <button
+              aria-describedby="application-unavailable-reason"
+              className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground opacity-60 sm:w-auto"
+              disabled
+              type="button"
+            >
+              Gửi Profile + Approach
+            </button>
+            <p
+              className="rounded-xl bg-muted p-4 text-sm leading-6 text-muted-foreground"
+              id="application-unavailable-reason"
+            >
+              {getApplicationUnavailableReason(problem.status, problem.reviewNote)}
+            </p>
+          </div>
         ) : !team ? (
           <div className="mt-3 rounded-xl bg-muted p-4 text-sm leading-6">
             Bạn cần hoàn thiện hồ sơ nhóm trước khi gửi hồ sơ ứng tuyển.{" "}

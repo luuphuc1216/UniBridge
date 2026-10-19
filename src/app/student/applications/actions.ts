@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireStudent } from "@/lib/student-access";
 import { requireOwnedTeam } from "@/lib/student-team";
+import { PROBLEM_ACCEPTING_APPLICATION_STATUSES } from "@/lib/problem-workflow";
 
 export type ApplicationActionState = { error: string | null };
 
@@ -76,7 +77,10 @@ export async function saveApplicationAction(
     const team = await requireOwnedTeam(userId);
     await prisma.$transaction(async (transaction) => {
       const problem = await transaction.problem.findFirst({
-        where: { id: problemId, status: "APPROVED" },
+        where: {
+          id: problemId,
+          status: { in: [...PROBLEM_ACCEPTING_APPLICATION_STATUSES] },
+        },
         select: {
           id: true,
           title: true,
@@ -158,7 +162,7 @@ export async function withdrawApplicationAction(
         problemId,
         teamId: team.id,
         status: "SUBMITTED",
-        problem: { status: "APPROVED" },
+        problem: { status: { in: [...PROBLEM_ACCEPTING_APPLICATION_STATUSES] } },
       },
       data: { status: "WITHDRAWN" },
     });

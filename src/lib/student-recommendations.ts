@@ -9,6 +9,7 @@ import {
 } from "@/lib/recommendation-scoring";
 import { prisma } from "@/lib/prisma";
 import { getTeamReputations } from "@/lib/reputation-data";
+import { PROBLEM_ACCEPTING_APPLICATION_STATUSES } from "@/lib/problem-workflow";
 
 function mapHistoryProblem(problem: {
   field: string;
@@ -67,7 +68,7 @@ export async function getStudentRecommendations(userId: string) {
   const [problems, viewLogs, savedProblems, searchLogs, applications] = await Promise.all([
     prisma.problem.findMany({
       where: {
-        status: "APPROVED",
+        status: { in: [...PROBLEM_ACCEPTING_APPLICATION_STATUSES] },
         applications: {
           none: { teamId: team.id, status: { not: "WITHDRAWN" } },
         },

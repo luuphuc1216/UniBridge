@@ -10,6 +10,7 @@ const statusLabels: Record<string, string> = {
   PENDING_REVIEW: "Chờ duyệt",
   NEEDS_REVISION: "Cần chỉnh sửa",
   CHANGES_REQUESTED: "Cần chỉnh sửa",
+  REJECTED: "Bị từ chối",
   APPROVED: "Đã duyệt",
   PUBLISHED: "Đang nhận hồ sơ",
   TEAM_SELECTED: "Đã chọn nhóm",
@@ -24,6 +25,7 @@ const statusClasses: Record<string, string> = {
   PENDING_REVIEW: "bg-amber-100 text-amber-800",
   NEEDS_REVISION: "bg-rose-100 text-rose-800",
   CHANGES_REQUESTED: "bg-rose-100 text-rose-800",
+  REJECTED: "bg-rose-100 text-rose-800",
   APPROVED: "bg-emerald-100 text-emerald-800",
   PUBLISHED: "bg-emerald-100 text-emerald-800",
   TEAM_SELECTED: "bg-blue-100 text-blue-800",
@@ -97,7 +99,9 @@ export default async function BusinessProblemsPage() {
                   </p>
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>{problem.field}</span>
-                    <span>{problem._count.applications} hồ sơ</span>
+                    <span>
+                      {problem.status === "REJECTED" ? 0 : problem._count.applications} hồ sơ
+                    </span>
                     <span>{problem._count.attachments} tài liệu</span>
                     <span>
                       Cập nhật{" "}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ProblemResults } from "@/components/student/problem-results";
 import { requireStudent } from "@/lib/student-access";
 import { prisma } from "@/lib/prisma";
+import { STUDENT_DISCOVERABLE_PROBLEM_STATUSES } from "@/lib/problem-workflow";
 
 export const instant = false;
 
@@ -12,7 +13,7 @@ export default async function SavedProblemsPage() {
       userId,
       problem: {
         status: {
-          in: ["APPROVED", "PUBLISHED", "TEAM_SELECTED", "PROTOTYPING", "EVALUATING"],
+          in: [...STUDENT_DISCOVERABLE_PROBLEM_STATUSES],
         },
       },
     },

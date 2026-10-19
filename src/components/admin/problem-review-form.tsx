@@ -46,14 +46,14 @@ export function ProblemReviewForm({ problemId }: { problemId: string }) {
       </fieldset>
       <div>
         <label className="text-sm font-semibold" htmlFor="reviewNote">
-          Lý do yêu cầu chỉnh sửa
+          Lý do xử lý (bắt buộc khi yêu cầu chỉnh sửa hoặc từ chối)
         </label>
         <textarea
           className="mt-2 min-h-28 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
           id="reviewNote"
           maxLength={2000}
           name="reviewNote"
-          placeholder="Nêu rõ nội dung doanh nghiệp cần bổ sung hoặc chỉnh sửa..."
+          placeholder="Nêu rõ nội dung cần bổ sung, chỉnh sửa hoặc lý do từ chối..."
         />
       </div>
       {state.error && (
@@ -70,6 +70,15 @@ export function ProblemReviewForm({ problemId }: { problemId: string }) {
           value="requestRevision"
         >
           {isPending ? "Đang xử lý..." : "Yêu cầu chỉnh sửa"}
+        </button>
+        <button
+          className="rounded-xl border border-destructive/40 px-5 py-3 text-sm font-semibold text-destructive hover:bg-destructive/5 disabled:opacity-60"
+          disabled={isPending}
+          name="decision"
+          type="submit"
+          value="reject"
+        >
+          {isPending ? "Đang xử lý..." : "Từ chối"}
         </button>
         <button
           className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
