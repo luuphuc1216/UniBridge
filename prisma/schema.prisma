@@ -358,6 +358,9 @@ model ProjectTransaction {
   amount                 Int
   platformFee            Int
   platformFeeBasisPoints Int        @default(0)
+  businessFeeBasisPoints Int?
+  studentFeeBasisPoints  Int?
+  businessFee            Int?
   status                 String     @default("PENDING")
   paidAt                 DateTime?
   createdAt              DateTime   @default(now())

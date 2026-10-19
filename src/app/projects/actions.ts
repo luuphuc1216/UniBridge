@@ -2,9 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
-import { PLATFORM_FEE_BASIS_POINTS } from "@/lib/project-config";
+import {
+  businessFeeRate,
+  legacyPlatformFeeRate,
+  studentFeeRate,
+} from "@/lib/project-config";
 import { findAccessibleProject, getProjectTeamUserIds } from "@/lib/project-access";
-import { calculateProjectFinancialBreakdown } from "@/lib/project-money";
+import {
+  calculateLegacyProjectFinancialBreakdown,
+  calculateProjectFinancialBreakdown,
+  getMilestoneReleaseIdempotencyKey,
+  shouldRecordMilestoneRelease,
+} from "@/lib/project-money";
 import { prisma } from "@/lib/prisma";
 import { findAuthorizedWorkspace } from "@/lib/workspace-access";
 
@@ -117,7 +126,8 @@ function parseAgreement(formData: FormData): AgreementInput {
   calculateProjectFinancialBreakdown(
     input.totalAmount,
     input.milestones.map((milestone) => milestone.paymentPercent),
-    PLATFORM_FEE_BASIS_POINTS,
+    businessFeeRate,
+    studentFeeRate,
   );
   return input;
 }
@@ -204,7 +214,8 @@ export async function saveAgreementAction(
     const breakdown = calculateProjectFinancialBreakdown(
       input.totalAmount,
       input.milestones.map(({ paymentPercent }) => paymentPercent),
-      PLATFORM_FEE_BASIS_POINTS,
+      businessFeeRate,
+      studentFeeRate,
     );
 
     const savedProject = await prisma.$transaction(async (transaction) => {
@@ -376,7 +387,8 @@ export async function respondAgreementAction(
         calculateProjectFinancialBreakdown(
           freshProject.totalAmount,
           freshProject.milestones.map(({ paymentPercent }) => paymentPercent),
-          PLATFORM_FEE_BASIS_POINTS,
+          businessFeeRate,
+          studentFeeRate,
         );
         const currentAcceptance =
           session.user.role === "BUSINESS"
@@ -542,7 +554,8 @@ export async function depositProjectAction(
       const breakdown = calculateProjectFinancialBreakdown(
         current.totalAmount,
         current.milestones.map(({ paymentPercent }) => paymentPercent),
-        PLATFORM_FEE_BASIS_POINTS,
+        businessFeeRate,
+        studentFeeRate,
       );
       const changed = await transaction.project.updateMany({
         where: {
@@ -573,9 +586,12 @@ export async function depositProjectAction(
           projectId,
           idempotencyKey: key,
           type: "DEPOSIT",
-          amount: current.totalAmount,
+          amount: breakdown.totalDeposit,
           platformFee: breakdown.totalPlatformFee,
-          platformFeeBasisPoints: PLATFORM_FEE_BASIS_POINTS,
+          platformFeeBasisPoints: breakdown.platformFeeBasisPoints,
+          businessFeeBasisPoints: businessFeeRate,
+          studentFeeBasisPoints: studentFeeRate,
+          businessFee: breakdown.totalBusinessFee,
           status: "ESCROW",
           paidAt: new Date(),
         },
@@ -586,7 +602,7 @@ export async function depositProjectAction(
           {
             userId: recipients.businessUserId,
             title: "Đã nạp tiền vào escrow giả lập",
-            message: `Khoản nạp ${current.totalAmount.toLocaleString("vi-VN")} ₫ cho dự án “${current.title}” đã được ghi nhận giả lập.`,
+            message: `Khoản nạp ${breakdown.totalDeposit.toLocaleString("vi-VN")} ₫ cho dự án “${current.title}” đã được ghi nhận giả lập.`,
             href: `/business/projects/${projectId}`,
           },
           ...recipients.teamUserIds.map((userId) => ({
@@ -722,12 +738,12 @@ export async function acceptMilestoneAction(
     authorizedBusiness = true;
     const milestone = project.milestones.find(({ id }) => id === milestoneId);
     if (!milestone) throw new Error("Không tìm thấy Milestone.");
-    const releaseKey = `release:${milestoneId}`;
+    const releaseKey = getMilestoneReleaseIdempotencyKey(milestoneId);
     await prisma.$transaction(async (transaction) => {
       const existingRelease = await transaction.projectTransaction.findUnique({
         where: { idempotencyKey: releaseKey },
       });
-      if (existingRelease) return;
+      if (!shouldRecordMilestoneRelease(existingRelease)) return;
 
       const current = await transaction.project.findUnique({
         where: { id: projectId },
@@ -752,11 +768,23 @@ export async function acceptMilestoneAction(
       }
       const deposit = current.transactions[0];
       if (!deposit) throw new Error("Không tìm thấy khoản nạp escrow.");
-      const breakdown = calculateProjectFinancialBreakdown(
-        current.totalAmount,
-        current.milestones.map(({ paymentPercent }) => paymentPercent),
-        deposit.platformFeeBasisPoints,
-      );
+      const usesLegacyFees =
+        deposit.businessFeeBasisPoints === null ||
+        deposit.studentFeeBasisPoints === null;
+      const breakdown =
+        deposit.businessFeeBasisPoints === null ||
+        deposit.studentFeeBasisPoints === null
+          ? calculateLegacyProjectFinancialBreakdown(
+            current.totalAmount,
+            current.milestones.map(({ paymentPercent }) => paymentPercent),
+            legacyPlatformFeeRate,
+            )
+          : calculateProjectFinancialBreakdown(
+            current.totalAmount,
+            current.milestones.map(({ paymentPercent }) => paymentPercent),
+            deposit.businessFeeBasisPoints,
+            deposit.studentFeeBasisPoints,
+            );
       const allocation = breakdown.milestones[currentMilestone.sortOrder];
       if (!allocation) throw new Error("Không tính được phần tiền của Milestone.");
 
@@ -773,8 +801,17 @@ export async function acceptMilestoneAction(
           idempotencyKey: releaseKey,
           type: "MILESTONE_RELEASE",
           amount: allocation.teamAmount,
-          platformFee: allocation.platformFee,
-          platformFeeBasisPoints: deposit.platformFeeBasisPoints,
+          platformFee: usesLegacyFees ? allocation.platformFee : allocation.studentFee,
+          platformFeeBasisPoints: usesLegacyFees
+            ? breakdown.platformFeeBasisPoints
+            : deposit.studentFeeBasisPoints ?? studentFeeRate,
+          businessFeeBasisPoints: usesLegacyFees
+            ? null
+            : deposit.businessFeeBasisPoints,
+          studentFeeBasisPoints: usesLegacyFees
+            ? null
+            : deposit.studentFeeBasisPoints,
+          businessFee: usesLegacyFees ? null : allocation.businessFee,
           status: "RELEASED",
           paidAt: new Date(),
         },
@@ -856,10 +893,10 @@ export async function acceptMilestoneAction(
   } catch (error) {
     if (authorizedBusiness) {
       const existingRelease = await prisma.projectTransaction.findUnique({
-        where: { idempotencyKey: `release:${milestoneId}` },
+        where: { idempotencyKey: getMilestoneReleaseIdempotencyKey(milestoneId) },
         select: { id: true },
       });
-      if (existingRelease) {
+      if (!shouldRecordMilestoneRelease(existingRelease)) {
         revalidateProject(projectId);
         return { error: null, success: "Milestone này đã được nghiệm thu và giải ngân trước đó." };
       }

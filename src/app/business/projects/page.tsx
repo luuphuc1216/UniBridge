@@ -13,7 +13,16 @@ export default async function BusinessProjectsPage() {
     orderBy: { updatedAt: "desc" },
     include: {
       application: { include: { problem: { select: { title: true } } } },
-      transactions: { select: { type: true, amount: true, platformFee: true } },
+      transactions: {
+        select: {
+          type: true,
+          amount: true,
+          platformFee: true,
+          businessFee: true,
+          businessFeeBasisPoints: true,
+          studentFeeBasisPoints: true,
+        },
+      },
     },
   });
   return <ProjectListView projects={projects} role="BUSINESS" />;

@@ -145,7 +145,7 @@ export function AgreementForm({
           value={values.title}
         />
         <TextField
-          label="Tổng chi phí (VND)"
+          label="Giá trị dự án (VND)"
           name="totalAmount"
           onChange={(value) =>
             updateField("totalAmount", value === "" ? "" : Number(value))

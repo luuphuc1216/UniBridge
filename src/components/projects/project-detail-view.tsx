@@ -11,8 +11,15 @@ import { AgreementForm, type AgreementFormValues } from "@/components/projects/a
 import { MilestoneSubmissionForm } from "@/components/projects/milestone-submission-form";
 import { ProjectActionForm } from "@/components/projects/project-action-form";
 import { ProjectReviewSection } from "@/components/projects/project-review-section";
-import { PLATFORM_FEE_BASIS_POINTS } from "@/lib/project-config";
-import { calculateProjectFinancialBreakdown } from "@/lib/project-money";
+import {
+  businessFeeRate,
+  legacyPlatformFeeRate,
+  studentFeeRate,
+} from "@/lib/project-config";
+import {
+  calculateLegacyProjectFinancialBreakdown,
+  calculateProjectFinancialBreakdown,
+} from "@/lib/project-money";
 import { getStoredMilestoneSubmissionLinks } from "@/lib/milestone-submission-validation";
 import type { findAccessibleProject } from "@/lib/project-access";
 import type { ProjectReviewState } from "@/lib/reputation-data";
@@ -83,7 +90,17 @@ function getPaymentSummary(project: ProjectDetailData) {
   );
   const deposited = deposits.reduce((sum, transaction) => sum + transaction.amount, 0);
   const paidOut = releases.reduce((sum, transaction) => sum + transaction.amount, 0);
-  const fees = releases.reduce((sum, transaction) => sum + transaction.platformFee, 0);
+  const collectedBusinessFees = deposits.reduce(
+    (sum, transaction) =>
+      transaction.businessFeeBasisPoints !== null &&
+      transaction.studentFeeBasisPoints !== null
+        ? sum + (transaction.businessFee ?? 0)
+        : sum,
+    0,
+  );
+  const fees =
+    collectedBusinessFees +
+    releases.reduce((sum, transaction) => sum + transaction.platformFee, 0);
   return {
     deposited,
     paidOut,
@@ -111,14 +128,29 @@ export function ProjectDetailView({
     ["AGREEING", "AWAITING_PAYMENT"].includes(project.status) &&
     project.transactions.every((transaction) => transaction.type !== "DEPOSIT");
   const canCancel = ["AGREEING", "AWAITING_PAYMENT"].includes(project.status);
-  const feeRate = summary.deposit?.platformFeeBasisPoints ?? PLATFORM_FEE_BASIS_POINTS;
-  const feePreview =
-    summary.deposit?.platformFee ??
-    calculateProjectFinancialBreakdown(
-      project.totalAmount,
-      project.milestones.map(({ paymentPercent }) => paymentPercent),
-      PLATFORM_FEE_BASIS_POINTS,
-    ).totalPlatformFee;
+  const isLegacyDeposit =
+    summary.deposit !== undefined &&
+    (summary.deposit.businessFeeBasisPoints === null ||
+      summary.deposit.studentFeeBasisPoints === null);
+  const paymentBreakdown = summary.deposit
+    ? isLegacyDeposit
+      ? calculateLegacyProjectFinancialBreakdown(
+          project.totalAmount,
+          project.milestones.map(({ paymentPercent }) => paymentPercent),
+          legacyPlatformFeeRate,
+        )
+      : calculateProjectFinancialBreakdown(
+          project.totalAmount,
+          project.milestones.map(({ paymentPercent }) => paymentPercent),
+          summary.deposit.businessFeeBasisPoints ?? businessFeeRate,
+          summary.deposit.studentFeeBasisPoints ?? studentFeeRate,
+        )
+    : calculateProjectFinancialBreakdown(
+        project.totalAmount,
+        project.milestones.map(({ paymentPercent }) => paymentPercent),
+        businessFeeRate,
+        studentFeeRate,
+      );
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-10">
@@ -157,12 +189,55 @@ export function ProjectDetailView({
         Thanh toán giả lập, không phát sinh giao dịch thật.
       </aside>
 
+      {(project.status === "AGREEING" || project.status === "AWAITING_PAYMENT") && (
+        <section className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <h3 className="font-semibold">Tóm tắt tài chính thỏa thuận</h3>
+          {isBusiness ? (
+            <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+              {[
+                ["Giá trị dự án", paymentBreakdown.totalAmount],
+                [
+                  `Phụ phí nền tảng ${(businessFeeRate / 100).toFixed(2)}%`,
+                  paymentBreakdown.totalBusinessFee,
+                ],
+                ["Tổng cần nạp", paymentBreakdown.totalDeposit],
+              ].map(([label, amount]) => (
+                <div key={String(label)}>
+                  <dt className="text-muted-foreground">{label}</dt>
+                  <dd className="mt-1 font-semibold">
+                    {formatCurrency(Number(amount))}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+              {[
+                ["Giá trị dự án", paymentBreakdown.totalAmount],
+                [
+                  `Phí nền tảng ${(studentFeeRate / 100).toFixed(2)}%`,
+                  paymentBreakdown.totalStudentFee,
+                ],
+                ["Nhóm nhận ròng", paymentBreakdown.totalTeamAmount],
+              ].map(([label, amount]) => (
+                <div key={String(label)}>
+                  <dt className="text-muted-foreground">{label}</dt>
+                  <dd className="mt-1 font-semibold">
+                    {formatCurrency(Number(amount))}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </section>
+      )}
+
       <section className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Tổng chi phí", formatCurrency(project.totalAmount)],
+          ["Giá trị dự án", formatCurrency(project.totalAmount)],
           ["Đã nạp vào escrow", formatCurrency(summary.deposited)],
           ["Đã giải ngân cho nhóm", formatCurrency(summary.paidOut)],
-          ["Phí đã ghi nhận", formatCurrency(summary.fees)],
+          ["Tổng phí nền tảng đã ghi nhận", formatCurrency(summary.fees)],
         ].map(([label, value]) => (
           <article className="rounded-xl border border-border bg-card p-4" key={label}>
             <p className="text-sm text-muted-foreground">{label}</p>
@@ -174,7 +249,9 @@ export function ProjectDetailView({
         <div>
           <h2 className="font-semibold">Tiền còn trong escrow</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Phí áp dụng: {(feeRate / 100).toFixed(2)}% · Tỷ lệ được chụp tại thời điểm nạp.
+            {isLegacyDeposit
+              ? "Áp dụng phí cũ 15% · Giữ nguyên đến khi dự án hoàn tất."
+              : `Phụ phí doanh nghiệp ${(paymentBreakdown.businessFeeBasisPoints ?? 0) / 100}% · Phí nhóm ${(paymentBreakdown.studentFeeBasisPoints ?? 0) / 100}% · Tỷ lệ được chụp tại thời điểm nạp.`}
           </p>
         </div>
         <p className="text-xl font-bold">{formatCurrency(summary.escrow)}</p>
@@ -276,6 +353,7 @@ export function ProjectDetailView({
             <h2 className="text-lg font-semibold">Milestone và nghiệm thu</h2>
             <ol className="mt-4 space-y-4">
               {project.milestones.map((milestone, index) => {
+                const allocation = paymentBreakdown.milestones[index];
                 const isCurrent =
                   project.status === "IN_PROGRESS" &&
                   ["IN_PROGRESS", "SUBMITTED", "REVISION_REQUESTED"].includes(milestone.status);
@@ -297,7 +375,16 @@ export function ProjectDetailView({
                     <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
                       <span>Hạn: {formatDate(milestone.dueAt)}</span>
                       <span>Thanh toán: {milestone.paymentPercent}%</span>
-                      <span>Giá trị: {formatCurrency(milestone.amount ?? 0)}</span>
+                      <span>Giá trị Milestone: {formatCurrency(allocation?.grossAmount ?? milestone.amount ?? 0)}</span>
+                      {isLegacyDeposit ? (
+                        <span>Áp dụng phí cũ 15%: {formatCurrency(allocation?.platformFee ?? 0)}</span>
+                      ) : (
+                        <>
+                          <span>Phụ phí doanh nghiệp: {formatCurrency(allocation?.businessFee ?? 0)}</span>
+                          <span>Phí sinh viên: {formatCurrency(allocation?.studentFee ?? 0)}</span>
+                        </>
+                      )}
+                      <span>Nhóm nhận ròng: {formatCurrency(allocation?.teamAmount ?? 0)}</span>
                     </div>
                     {milestone.progressNote && (
                       <p className="mt-3 rounded-lg bg-muted/60 p-3 text-sm">
@@ -410,17 +497,23 @@ export function ProjectDetailView({
             <section className="rounded-2xl border border-primary/30 bg-card p-5">
               <h2 className="font-semibold">Nạp tiền vào escrow</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Nạp một lần toàn bộ {formatCurrency(project.totalAmount)}. Sau khi nạp, tổng chi phí,
-                số Milestone và tỷ lệ chia không thể chỉnh sửa.
+                Giá trị dự án: {formatCurrency(paymentBreakdown.totalAmount)}
               </p>
-              <p className="mt-2 text-sm">
-                Phí nền tảng hiện tại: {(PLATFORM_FEE_BASIS_POINTS / 100).toFixed(2)}% (
-                {formatCurrency(feePreview)})
+              <p className="mt-1 text-sm">
+                Phụ phí nền tảng doanh nghiệp ({(businessFeeRate / 100).toFixed(2)}%):{" "}
+                {formatCurrency(paymentBreakdown.totalBusinessFee)}
+              </p>
+              <p className="mt-1 text-sm font-semibold">
+                Tổng cần nạp: {formatCurrency(paymentBreakdown.totalDeposit)}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Phí sinh viên ({(studentFeeRate / 100).toFixed(2)}%) sẽ được khấu trừ khỏi từng
+                Milestone khi giải ngân. Sau khi nạp, điều khoản và tỷ lệ chia không thể chỉnh sửa.
               </p>
               <div className="mt-4">
                 <ProjectActionForm
                   action={depositProjectAction}
-                  buttonLabel="Nạp đủ tổng chi phí"
+                  buttonLabel={`Nạp ${formatCurrency(paymentBreakdown.totalDeposit)}`}
                   hiddenFields={{ projectId: project.id }}
                 />
               </div>
@@ -450,22 +543,75 @@ export function ProjectDetailView({
               <ul className="mt-3 space-y-3">
                 {project.transactions.map((transaction) => (
                   <li className="border-t border-border pt-3 first:border-0 first:pt-0" key={transaction.id}>
-                    <p className="text-sm font-semibold">
-                      {transaction.type === "DEPOSIT" ? "Nạp vào escrow" : "Giải ngân Milestone"}
-                    </p>
-                    <p className="mt-1 text-sm">
-                      {transaction.type === "DEPOSIT" ? "Tổng nạp" : "Phần nhóm nhận"}:{" "}
-                      {formatCurrency(transaction.amount)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {transaction.type === "DEPOSIT" ? "Phí dự kiến" : "Phí đã ghi nhận"}:{" "}
-                      {formatCurrency(transaction.platformFee)} · Tỷ lệ chụp lúc nạp:{" "}
-                      {(transaction.platformFeeBasisPoints / 100).toFixed(2)}%
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {transaction.status === "ESCROW" ? "Đang giữ trong escrow giả lập" : "Đã ghi nhận"}
-                      {transaction.paidAt ? ` · ${formatDateTime(transaction.paidAt)}` : ""}
-                    </p>
+                    {(() => {
+                      const transactionUsesLegacyFees =
+                        transaction.businessFeeBasisPoints === null ||
+                        transaction.studentFeeBasisPoints === null;
+                      const releasedMilestone = project.milestones.find(
+                        ({ id }) => id === transaction.milestoneId,
+                      );
+                      return (
+                        <>
+                          <p className="text-sm font-semibold">
+                            {transaction.type === "DEPOSIT"
+                              ? "Nạp vào escrow"
+                              : `Giải ngân Milestone${releasedMilestone ? `: ${releasedMilestone.title}` : ""}`}
+                          </p>
+                          {transactionUsesLegacyFees ? (
+                            <>
+                              <p className="mt-1 text-sm">
+                                {transaction.type === "DEPOSIT" ? "Tổng nạp" : "Phần nhóm nhận"}:{" "}
+                                {formatCurrency(transaction.amount)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Áp dụng phí cũ 15%: {formatCurrency(transaction.platformFee)}
+                              </p>
+                            </>
+                          ) : transaction.type === "DEPOSIT" ? (
+                            <>
+                              <p className="mt-1 text-sm">
+                                Giá trị dự án: {formatCurrency(project.totalAmount)}
+                              </p>
+                              <p className="text-sm">
+                                Phụ phí doanh nghiệp ({((transaction.businessFeeBasisPoints ?? 0) / 100).toFixed(2)}%):{" "}
+                                {formatCurrency(transaction.businessFee ?? 0)}
+                              </p>
+                              <p className="text-sm font-semibold">
+                                Tổng nạp: {formatCurrency(transaction.amount)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Phí sinh viên ({((transaction.studentFeeBasisPoints ?? 0) / 100).toFixed(2)}%):{" "}
+                                {formatCurrency(transaction.platformFee - (transaction.businessFee ?? 0))} ·
+                                Tổng phí nền tảng: {formatCurrency(transaction.platformFee)}
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="mt-1 text-sm">
+                                Giá trị Milestone: {formatCurrency(releasedMilestone?.amount ?? transaction.amount + transaction.platformFee)}
+                              </p>
+                              <p className="text-sm">
+                                Phụ phí doanh nghiệp (đã tính trong khoản nạp):{" "}
+                                {formatCurrency(transaction.businessFee ?? 0)} ·
+                                Phí sinh viên: {formatCurrency(transaction.platformFee)}
+                              </p>
+                              <p className="text-sm font-semibold">
+                                Nhóm nhận ròng: {formatCurrency(transaction.amount)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Tổng phí nền tảng Milestone: {formatCurrency(transaction.platformFee + (transaction.businessFee ?? 0))} ·
+                                Tỷ lệ chụp lúc nạp: {((transaction.businessFeeBasisPoints ?? 0) / 100).toFixed(2)}% +
+                                {((transaction.studentFeeBasisPoints ?? 0) / 100).toFixed(2)}%
+                              </p>
+                            </>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {transaction.status === "ESCROW" ? "Đang giữ trong escrow giả lập" : "Đã ghi nhận"}
+                            {transaction.paidAt ? ` · ${formatDateTime(transaction.paidAt)}` : ""}
+                          </p>
+                        </>
+                      );
+                    })()}
                   </li>
                 ))}
               </ul>

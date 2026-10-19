@@ -1,1 +1,3 @@
-export const PLATFORM_FEE_BASIS_POINTS = 1500;
+export const businessFeeRate = 1000;
+export const studentFeeRate = 500;
+export const legacyPlatformFeeRate = 1500;

@@ -6,7 +6,14 @@ export type ProjectListItem = {
   status: string;
   totalAmount: number;
   application: { problem: { title: string } };
-  transactions: { type: string; amount: number; platformFee: number }[];
+  transactions: {
+    type: string;
+    amount: number;
+    platformFee: number;
+    businessFee: number | null;
+    businessFeeBasisPoints: number | null;
+    studentFeeBasisPoints: number | null;
+  }[];
 };
 
 const labels: Record<string, string> = {
@@ -55,11 +62,32 @@ export function ProjectListView({
             const releases = project.transactions.filter(
               (transaction) => transaction.type === "MILESTONE_RELEASE",
             );
-            const deposited = project.transactions
-              .filter((transaction) => transaction.type === "DEPOSIT")
-              .reduce((sum, transaction) => sum + transaction.amount, 0);
+            const deposits = project.transactions.filter(
+              (transaction) => transaction.type === "DEPOSIT",
+            );
+            const deposited = deposits.reduce((sum, transaction) => sum + transaction.amount, 0);
+            const businessFee = deposits.reduce(
+              (sum, transaction) =>
+                transaction.businessFeeBasisPoints !== null &&
+                transaction.studentFeeBasisPoints !== null
+                  ? sum + (transaction.businessFee ?? 0)
+                  : sum,
+              0,
+            );
             const paidOut = releases.reduce((sum, transaction) => sum + transaction.amount, 0);
-            const fee = releases.reduce((sum, transaction) => sum + transaction.platformFee, 0);
+            const fee =
+              businessFee +
+              releases.reduce((sum, transaction) => sum + transaction.platformFee, 0);
+            const hasLegacyDeposit = deposits.some(
+              (transaction) =>
+                transaction.businessFeeBasisPoints === null ||
+                transaction.studentFeeBasisPoints === null,
+            );
+            const hasNewDeposit = deposits.some(
+              (transaction) =>
+                transaction.businessFeeBasisPoints !== null &&
+                transaction.studentFeeBasisPoints !== null,
+            );
             return (
               <article className="rounded-2xl border border-border bg-card p-5 sm:p-6" key={project.id}>
                 <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -72,22 +100,32 @@ export function ProjectListView({
                   </span>
                 </div>
                 <p className="mt-3 text-sm">
-                  Tổng chi phí: <strong>{formatCurrency(project.totalAmount)}</strong>
+                  Giá trị dự án: <strong>{formatCurrency(project.totalAmount)}</strong>
                 </p>
                 {transactionDashboard && (
-                  <dl className="mt-4 grid gap-3 border-t border-border pt-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                    {[
-                      ["Đã nạp", deposited],
-                      ["Đã giải ngân cho nhóm", paidOut],
-                      ["Phí đã ghi nhận", fee],
-                      ["Còn trong escrow", Math.max(0, deposited - paidOut - fee)],
-                    ].map(([label, amount]) => (
-                      <div key={String(label)}>
-                        <dt className="text-muted-foreground">{label}</dt>
-                        <dd className="mt-1 font-semibold">{formatCurrency(Number(amount))}</dd>
-                      </div>
-                    ))}
-                  </dl>
+                  <>
+                    {hasLegacyDeposit && (
+                      <p className="mt-2 text-xs font-semibold text-amber-800">
+                        Áp dụng phí cũ 15%
+                      </p>
+                    )}
+                    <dl className="mt-4 grid gap-3 border-t border-border pt-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                      {[
+                        ["Tổng đã nạp", deposited],
+                        ...(hasNewDeposit
+                          ? [["Trong đó phụ phí doanh nghiệp", businessFee] as const]
+                          : []),
+                        ["Đã giải ngân cho nhóm", paidOut],
+                        ["Tổng phí nền tảng đã ghi nhận", fee],
+                        ["Còn trong escrow", Math.max(0, deposited - paidOut - fee)],
+                      ].map(([label, amount]) => (
+                        <div key={String(label)}>
+                          <dt className="text-muted-foreground">{label}</dt>
+                          <dd className="mt-1 font-semibold">{formatCurrency(Number(amount))}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </>
                 )}
                 <Link
                   className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"

@@ -473,3 +473,11 @@ Nguồn thu định kỳ trong giai đoạn phát triển: Gói thành viên doa
 Nguồn thu mở rộng: Business Challenge, tuyển dụng và Expert Review.
 
 Cách tiếp cận này giúp nền tảng ưu tiên xây dựng cộng đồng và kiểm chứng nhu cầu thị trường trước, sau đó mới từng bước mở rộng các hình thức thu phí khi đã chứng minh được giá trị mang lại cho doanh nghiệp và sinh viên.
+
+### Ghi chú cập nhật cơ chế phí Paid Implementation
+
+Giá trị dự án trong thỏa thuận là giá thỏa thuận giữa doanh nghiệp và nhóm sinh viên. Khi doanh nghiệp nạp tiền, phụ phí doanh nghiệp 10% được cộng thêm vào giá trị dự án; tổng số tiền cần nạp bằng giá trị dự án cộng phụ phí này. Khi nghiệm thu từng Milestone, nhóm nhận giá trị Milestone sau khi khấu trừ phí nền tảng 5%. Tổng phí nền tảng vẫn bằng 15% giá trị dự án.
+
+Hai tỷ lệ mới được cấu hình tập trung bằng basis points: phụ phí doanh nghiệp 1.000 basis points và phí sinh viên 500 basis points. Tổng phí 15% được làm tròn theo đơn vị đồng Việt Nam rồi chia theo tỷ lệ 10:5; các khoản được phân bổ theo từng Milestone và phần dư dồn vào Milestone cuối để tổng nạp luôn bằng tổng tiền nhóm nhận cộng tổng phí nền tảng.
+
+Các giao dịch được nạp trước khi thay đổi tiếp tục áp dụng cách tính cũ 15% cho đến khi dự án hoàn tất. Giao dịch mới lưu tỷ lệ áp dụng và phụ phí tại thời điểm nạp để các thay đổi cấu hình sau này không làm thay đổi khoản đã cam kết. Mọi màn hình giao dịch mang tính mô phỏng, không phát sinh thanh toán thật.
