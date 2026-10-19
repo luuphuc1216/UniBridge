@@ -10,10 +10,12 @@ import {
 import { AgreementForm, type AgreementFormValues } from "@/components/projects/agreement-form";
 import { MilestoneSubmissionForm } from "@/components/projects/milestone-submission-form";
 import { ProjectActionForm } from "@/components/projects/project-action-form";
+import { ProjectReviewSection } from "@/components/projects/project-review-section";
 import { PLATFORM_FEE_BASIS_POINTS } from "@/lib/project-config";
 import { calculateProjectFinancialBreakdown } from "@/lib/project-money";
 import { getStoredMilestoneSubmissionLinks } from "@/lib/milestone-submission-validation";
 import type { findAccessibleProject } from "@/lib/project-access";
+import type { ProjectReviewState } from "@/lib/reputation-data";
 
 export type ProjectDetailData = NonNullable<
   Awaited<ReturnType<typeof findAccessibleProject>>
@@ -95,10 +97,12 @@ export function ProjectDetailView({
   project,
   role,
   applicationId,
+  reviewState,
 }: {
   project: ProjectDetailData;
   role: "BUSINESS" | "STUDENT";
   applicationId?: string;
+  reviewState: ProjectReviewState | null;
 }) {
   const isBusiness = role === "BUSINESS";
   const summary = getPaymentSummary(project);
@@ -127,7 +131,14 @@ export function ProjectDetailView({
       <div className="mt-4 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div>
           <p className="text-sm font-semibold text-primary">
-            {project.application.problem.businessProfile.companyName} · Nhóm {project.team.name}
+            <Link
+              className="hover:underline"
+              href={`/businesses/${project.application.problem.businessProfile.id}`}
+            >
+              {project.application.problem.businessProfile.companyName}
+            </Link>
+            {" · Nhóm "}
+            {project.team.name}
           </p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{project.title}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -461,9 +472,18 @@ export function ProjectDetailView({
             )}
           </section>
           {project.status === "COMPLETED" && (
-            <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900">
-              Tất cả Milestone đã được nghiệm thu. Dự án và bài toán đã hoàn thành.
-            </p>
+            <>
+              <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900">
+                Tất cả Milestone đã được nghiệm thu. Dự án và bài toán đã hoàn thành.
+              </p>
+              {reviewState && (
+                <ProjectReviewSection
+                  direction={isBusiness ? "BUSINESS_TO_TEAM" : "TEAM_TO_BUSINESS"}
+                  projectId={project.id}
+                  reviewState={reviewState}
+                />
+              )}
+            </>
           )}
         </aside>
       </div>

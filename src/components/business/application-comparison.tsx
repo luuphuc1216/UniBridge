@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { selectTeamAction, type ProblemActionState } from "@/app/business/problems/actions";
+import type { TeamReputation } from "@/lib/reputation";
 
 type ApplicationCardData = {
   id: string;
@@ -16,6 +18,7 @@ type ApplicationCardData = {
   proposedBudget: number | null;
   status: string;
   team: {
+    id: string;
     name: string;
     university: string;
     description: string;
@@ -23,8 +26,7 @@ type ApplicationCardData = {
     relevantProducts: string;
     achievements: string;
     interests: string;
-    ratingAverage: number;
-    ratingCount: number;
+    reputation: TeamReputation | undefined;
     skills: string[];
     members: { name: string; major: string }[];
     projects: { title: string }[];
@@ -121,7 +123,11 @@ export function ApplicationComparison({
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-xl font-bold">{application.team.name}</h2>
+                <h2 className="text-xl font-bold">
+                  <Link className="hover:underline" href={`/teams/${application.team.id}`}>
+                    {application.team.name}
+                  </Link>
+                </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {application.team.university}
                 </p>
@@ -137,10 +143,32 @@ export function ApplicationComparison({
                   </span>
                 )}
               </div>
-              <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
-                {application.team.ratingAverage.toFixed(1)} / 5 ·{" "}
-                {application.team.ratingCount} đánh giá
-              </span>
+              {application.team.reputation && (
+                <div className="rounded-xl bg-primary/10 px-3 py-2 text-right text-sm font-semibold text-primary">
+                  <p>
+                    Reputation:{" "}
+                    {application.team.reputation.score === null
+                      ? "Chưa có dữ liệu"
+                      : `${application.team.reputation.score} / 100`}
+                  </p>
+                  <p className="mt-1 text-xs">
+                    {application.team.reputation.ratingAverage === null
+                      ? "Chưa có đánh giá"
+                      : `${application.team.reputation.ratingAverage.toFixed(1)} / 5`}
+                    {" · "}
+                    {application.team.reputation.ratingCount} lượt ·{" "}
+                    {application.team.reputation.completedProjectCount} dự án hoàn tất
+                  </p>
+                  <p className="mt-1 text-xs">
+                    Hoàn thành: {application.team.reputation.completionRate === null
+                      ? "chưa có dữ liệu"
+                      : `${application.team.reputation.completionRate}%`}
+                    {" · "}Đúng hạn: {application.team.reputation.onTimeRate === null
+                      ? "chưa có dữ liệu"
+                      : `${application.team.reputation.onTimeRate}%`}
+                  </p>
+                </div>
+              )}
             </div>
             <p className="mt-4 text-sm leading-6">{application.team.description}</p>
 

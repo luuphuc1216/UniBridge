@@ -3,9 +3,21 @@ import { prisma } from "@/lib/prisma";
 export function getOwnedTeam(userId: string) {
   return prisma.studentTeam.findUnique({
     where: { ownerId: userId },
-    include: {
-      memberships: { orderBy: [{ isLead: "desc" }, { joinedAt: "asc" }] },
-      skills: { include: { skill: { select: { name: true } } } },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      university: true,
+      description: true,
+      experience: true,
+      relevantProducts: true,
+      achievements: true,
+      interests: true,
+      memberships: {
+        orderBy: [{ isLead: "desc" }, { joinedAt: "asc" }],
+        select: { name: true, major: true, title: true, isLead: true },
+      },
+      skills: { select: { skill: { select: { name: true } } } },
     },
   });
 }

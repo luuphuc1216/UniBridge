@@ -173,6 +173,327 @@ const teams = [
   },
 ];
 
+async function createCompletedReviewSample({
+  slug,
+  title,
+  teamSlug,
+  businessProfile,
+  businessUserId,
+  businessScores,
+  teamScores,
+  daysAgo,
+  late,
+}: {
+  slug: string;
+  title: string;
+  teamSlug: string;
+  businessProfile: { id: string };
+  businessUserId: string;
+  businessScores: number[];
+  teamScores: number[];
+  daysAgo: number;
+  late: boolean;
+}) {
+  const team = await prisma.studentTeam.findUniqueOrThrow({ where: { slug: teamSlug } });
+  const problem = await prisma.problem.upsert({
+    where: { slug },
+    update: {
+      businessProfileId: businessProfile.id,
+      title,
+      description: "Bài toán mẫu đã triển khai và nghiệm thu trên UniBridge.",
+      goal: "Minh họa lịch sử dự án và đánh giá Reputation.",
+      field: "Công nghệ thông tin",
+      requirements: "Hoàn tất phạm vi, bàn giao kết quả và nghiệm thu Milestone.",
+      expectedDuration: "4 tuần",
+      budgetMin: 5000000,
+      budgetMax: 5000000,
+      status: "COMPLETED",
+      approvedAt: new Date(),
+    },
+    create: {
+      businessProfileId: businessProfile.id,
+      reviewedById: null,
+      title,
+      slug,
+      description: "Bài toán mẫu đã triển khai và nghiệm thu trên UniBridge.",
+      goal: "Minh họa lịch sử dự án và đánh giá Reputation.",
+      field: "Công nghệ thông tin",
+      requirements: "Hoàn tất phạm vi, bàn giao kết quả và nghiệm thu Milestone.",
+      expectedDuration: "4 tuần",
+      budgetMin: 5000000,
+      budgetMax: 5000000,
+      status: "COMPLETED",
+      approvedAt: new Date(),
+    },
+  });
+  const application = await prisma.application.upsert({
+    where: {
+      problemId_teamId: { problemId: problem.id, teamId: team.id },
+    },
+    update: { status: "SELECTED" },
+    create: {
+      problemId: problem.id,
+      teamId: team.id,
+      approach: "Hoàn thành dự án mẫu để minh họa năng lực thực hiện.",
+      estimatedDuration: "4 tuần",
+      proposedBudget: 5000000,
+      status: "SELECTED",
+    },
+  });
+  const daysInMs = 86_400_000;
+  const completedAt = new Date(Date.now() - daysAgo * daysInMs);
+  const dueAt = new Date(completedAt.getTime() + (late ? -daysInMs : daysInMs));
+  const milestoneId = `seed-review-milestone-${slug}`;
+  const project = await prisma.project.upsert({
+    where: { applicationId: application.id },
+    update: {
+      teamId: team.id,
+      title,
+      agreedScope: "Thực hiện và bàn giao theo các yêu cầu đã thống nhất.",
+      deliverables: "Sản phẩm mẫu đã nghiệm thu.",
+      duration: "4 tuần",
+      totalAmount: 5000000,
+      generalAcceptanceCriteria: "Bàn giao đầy đủ kết quả.",
+      businessResponsibilities: "Cung cấp thông tin và phản hồi theo thỏa thuận.",
+      teamResponsibilities: "Thực hiện và bàn giao đúng phạm vi.",
+      paymentMethod: "Nạp giả lập một lần; giải ngân theo nghiệm thu Milestone.",
+      status: "COMPLETED",
+      startedAt: new Date(completedAt.getTime() - 28 * daysInMs),
+      completedAt,
+      cancelledAt: null,
+    },
+    create: {
+      applicationId: application.id,
+      teamId: team.id,
+      title,
+      agreedScope: "Thực hiện và bàn giao theo các yêu cầu đã thống nhất.",
+      deliverables: "Sản phẩm mẫu đã nghiệm thu.",
+      duration: "4 tuần",
+      totalAmount: 5000000,
+      generalAcceptanceCriteria: "Bàn giao đầy đủ kết quả.",
+      businessResponsibilities: "Cung cấp thông tin và phản hồi theo thỏa thuận.",
+      teamResponsibilities: "Thực hiện và bàn giao đúng phạm vi.",
+      paymentMethod: "Nạp giả lập một lần; giải ngân theo nghiệm thu Milestone.",
+      status: "COMPLETED",
+      startedAt: new Date(completedAt.getTime() - 28 * daysInMs),
+      completedAt,
+    },
+  });
+  await prisma.milestone.upsert({
+    where: { id: milestoneId },
+    update: {
+      projectId: project.id,
+      title: "Bàn giao dự án mẫu",
+      description: "Hoàn thành và bàn giao sản phẩm.",
+      acceptanceCriteria: "Doanh nghiệp nghiệm thu sản phẩm.",
+      paymentPercent: 100,
+      amount: 5000000,
+      dueAt,
+      sortOrder: 0,
+      status: "ACCEPTED",
+      submittedAt: new Date(completedAt.getTime() - 60 * 60 * 1000),
+      acceptedAt: completedAt,
+    },
+    create: {
+      id: milestoneId,
+      projectId: project.id,
+      title: "Bàn giao dự án mẫu",
+      description: "Hoàn thành và bàn giao sản phẩm.",
+      acceptanceCriteria: "Doanh nghiệp nghiệm thu sản phẩm.",
+      paymentPercent: 100,
+      amount: 5000000,
+      dueAt,
+      sortOrder: 0,
+      status: "ACCEPTED",
+      submittedAt: new Date(completedAt.getTime() - 60 * 60 * 1000),
+      acceptedAt: completedAt,
+    },
+  });
+  await prisma.projectTransaction.upsert({
+    where: { idempotencyKey: `deposit:${project.id}` },
+    update: {
+      projectId: project.id,
+      type: "DEPOSIT",
+      amount: 5000000,
+      platformFee: 750000,
+      platformFeeBasisPoints: PLATFORM_FEE_BASIS_POINTS,
+      status: "RELEASED",
+      paidAt: completedAt,
+    },
+    create: {
+      projectId: project.id,
+      idempotencyKey: `deposit:${project.id}`,
+      type: "DEPOSIT",
+      amount: 5000000,
+      platformFee: 750000,
+      platformFeeBasisPoints: PLATFORM_FEE_BASIS_POINTS,
+      status: "RELEASED",
+      paidAt: completedAt,
+    },
+  });
+  await prisma.projectTransaction.upsert({
+    where: { idempotencyKey: `release:${milestoneId}` },
+    update: {
+      projectId: project.id,
+      milestoneId,
+      type: "MILESTONE_RELEASE",
+      amount: 4250000,
+      platformFee: 750000,
+      platformFeeBasisPoints: PLATFORM_FEE_BASIS_POINTS,
+      status: "RELEASED",
+      paidAt: completedAt,
+    },
+    create: {
+      projectId: project.id,
+      milestoneId,
+      idempotencyKey: `release:${milestoneId}`,
+      type: "MILESTONE_RELEASE",
+      amount: 4250000,
+      platformFee: 750000,
+      platformFeeBasisPoints: PLATFORM_FEE_BASIS_POINTS,
+      status: "RELEASED",
+      paidAt: completedAt,
+    },
+  });
+
+  const businessCriteria = [
+    "resultQuality",
+    "timeliness",
+    "requirementFit",
+    "collaboration",
+    "professionalism",
+  ];
+  const teamCriteria = [
+    "requirementClarity",
+    "responseTime",
+    "fairAcceptance",
+    "cooperation",
+  ];
+  const createReview = async (
+    direction: "BUSINESS_TO_TEAM" | "TEAM_TO_BUSINESS",
+    reviewerId: string,
+    scores: number[],
+    criteria: string[],
+  ) => {
+    const criteriaScores = Object.fromEntries(
+      criteria.map((key, index) => [key, scores[index] ?? 3]),
+    );
+    const rating =
+      scores.reduce((sum, score) => sum + score, 0) / scores.length;
+    await prisma.review.upsert({
+      where: { projectId_direction: { projectId: project.id, direction } },
+      update: {
+        reviewerId,
+        reviewedTeamId: direction === "BUSINESS_TO_TEAM" ? team.id : null,
+        reviewedBusinessProfileId:
+          direction === "TEAM_TO_BUSINESS" ? businessProfile.id : null,
+        rating,
+        criteriaScores: JSON.stringify(criteriaScores),
+        content:
+          direction === "BUSINESS_TO_TEAM"
+            ? "Nhóm phối hợp tốt và bàn giao theo phạm vi đã thống nhất."
+            : "Doanh nghiệp trao đổi rõ ràng và phản hồi trong thời gian phù hợp.",
+        createdAt: new Date(completedAt.getTime() + 2 * 60 * 60 * 1000),
+      },
+      create: {
+        projectId: project.id,
+        reviewerId,
+        direction,
+        reviewedTeamId: direction === "BUSINESS_TO_TEAM" ? team.id : null,
+        reviewedBusinessProfileId:
+          direction === "TEAM_TO_BUSINESS" ? businessProfile.id : null,
+        rating,
+        criteriaScores: JSON.stringify(criteriaScores),
+        content:
+          direction === "BUSINESS_TO_TEAM"
+            ? "Nhóm phối hợp tốt và bàn giao theo phạm vi đã thống nhất."
+            : "Doanh nghiệp trao đổi rõ ràng và phản hồi trong thời gian phù hợp.",
+        createdAt: new Date(completedAt.getTime() + 2 * 60 * 60 * 1000),
+      },
+    });
+  };
+  await createReview("BUSINESS_TO_TEAM", businessUserId, businessScores, businessCriteria);
+  if (team.ownerId && teamScores.length > 0) {
+    await createReview("TEAM_TO_BUSINESS", team.ownerId, teamScores, teamCriteria);
+  }
+
+  return { teamId: team.id, projectId: project.id };
+}
+
+async function ensureNotImplementedHistory({
+  slug,
+  teamSlug,
+  businessProfileId,
+}: {
+  slug: string;
+  teamSlug: string;
+  businessProfileId: string;
+}) {
+  const team = await prisma.studentTeam.findUniqueOrThrow({ where: { slug: teamSlug } });
+  const problem = await prisma.problem.upsert({
+    where: { slug },
+    update: { businessProfileId, status: "CLOSED" },
+    create: {
+      businessProfileId,
+      title: "Bài toán mẫu không triển khai",
+      slug,
+      description: "Lưu lịch sử Proposal đã kết thúc mà không triển khai Paid Implementation.",
+      goal: "Minh họa trường hợp không triển khai.",
+      field: "Công nghệ thông tin",
+      requirements: "Đánh giá phương án trước khi quyết định triển khai.",
+      expectedDuration: "3 tuần",
+      status: "CLOSED",
+    },
+  });
+  const application = await prisma.application.upsert({
+    where: { problemId_teamId: { problemId: problem.id, teamId: team.id } },
+    update: { status: "SELECTED" },
+    create: {
+      problemId: problem.id,
+      teamId: team.id,
+      approach: "Nhóm đã gửi Proposal được doanh nghiệp đánh giá.",
+      estimatedDuration: "3 tuần",
+      status: "SELECTED",
+    },
+  });
+  const proposal = await prisma.proposal.upsert({
+    where: { applicationId_version: { applicationId: application.id, version: 1 } },
+    update: { status: "NOT_IMPLEMENTED" },
+    create: {
+      applicationId: application.id,
+      version: 1,
+      type: "SOLUTION_PROPOSAL",
+      description: "Proposal mẫu kết thúc với quyết định không triển khai.",
+      status: "NOT_IMPLEMENTED",
+    },
+  });
+  const evaluation = await prisma.proposalEvaluation.findFirst({
+    where: { proposalId: proposal.id },
+    select: { id: true },
+  });
+  const evaluationData = {
+    problemResponse: 3,
+    feasibility: 3,
+    goalAlignment: 3,
+    practicalImplementation: 3,
+    estimatedCost: 3,
+    implementationTime: 3,
+    valueDelivered: 3,
+    comment: "Phương án được lưu trong lịch sử; doanh nghiệp quyết định chưa triển khai.",
+    decision: "CLOSED",
+  };
+  if (evaluation) {
+    await prisma.proposalEvaluation.update({
+      where: { id: evaluation.id },
+      data: evaluationData,
+    });
+  } else {
+    await prisma.proposalEvaluation.create({
+      data: { proposalId: proposal.id, ...evaluationData },
+    });
+  }
+}
+
 const problems = [
   {
     slug: "website-ban-hang-thuc-pham-dia-phuong",
@@ -1037,6 +1358,89 @@ async function main() {
       paidAt: new Date(),
     },
   });
+
+  const reputationSamples = [
+    {
+      slug: "seed-reputation-nextgen-1",
+      title: "Phân tích trải nghiệm mua hàng mẫu",
+      teamSlug: "nextgen-digital",
+      businessIndex: 1,
+      businessScores: [5, 5, 5, 5, 4],
+      teamScores: [5, 4, 4, 5],
+      daysAgo: 60,
+      late: false,
+    },
+    {
+      slug: "seed-reputation-nextgen-2",
+      title: "Tối ưu quy trình đặt hàng mẫu",
+      teamSlug: "nextgen-digital",
+      businessIndex: 0,
+      businessScores: [4, 5, 4, 5, 4],
+      teamScores: [4, 4, 5, 4],
+      daysAgo: 30,
+      late: false,
+    },
+    {
+      slug: "seed-reputation-market-minds",
+      title: "Nghiên cứu khách hàng mẫu",
+      teamSlug: "market-minds",
+      businessIndex: 2,
+      businessScores: [3, 4, 3, 4, 3],
+      teamScores: [4, 3, 4, 4],
+      daysAgo: 45,
+      late: true,
+    },
+    {
+      slug: "seed-reputation-data-spark",
+      title: "Báo cáo dữ liệu kinh doanh mẫu",
+      teamSlug: "data-spark",
+      businessIndex: 1,
+      businessScores: [4, 4, 5, 4, 4],
+      teamScores: [3, 4, 4, 3],
+      daysAgo: 20,
+      late: false,
+    },
+    {
+      slug: "seed-reputation-creative-lab",
+      title: "Thiết kế nhận diện số mẫu",
+      teamSlug: "creative-lab",
+      businessIndex: 0,
+      businessScores: [5, 5, 5, 5, 5],
+      teamScores: [5, 5, 4, 5],
+      daysAgo: 15,
+      late: false,
+    },
+  ];
+  for (const sample of reputationSamples) {
+    const businessProfile = businessProfiles[sample.businessIndex];
+    if (!businessProfile) throw new Error("Thiếu doanh nghiệp cho đánh giá seed.");
+    await createCompletedReviewSample({
+      ...sample,
+      businessProfile,
+      businessUserId: businessProfile.userId,
+    });
+  }
+  const notImplementedBusiness = businessProfiles[2];
+  if (!notImplementedBusiness) throw new Error("Thiếu doanh nghiệp cho lịch sử không triển khai.");
+  await ensureNotImplementedHistory({
+    slug: "seed-khong-trien-khai-reputation-history",
+    teamSlug: "market-minds",
+    businessProfileId: notImplementedBusiness.id,
+  });
+  for (const team of await prisma.studentTeam.findMany({ select: { id: true } })) {
+    const aggregate = await prisma.review.aggregate({
+      where: { reviewedTeamId: team.id, direction: "BUSINESS_TO_TEAM" },
+      _avg: { rating: true },
+      _count: { _all: true },
+    });
+    await prisma.studentTeam.update({
+      where: { id: team.id },
+      data: {
+        ratingAverage: aggregate._avg.rating ?? 0,
+        ratingCount: aggregate._count._all,
+      },
+    });
+  }
 
   const agreementTestProblem = await prisma.problem.upsert({
     where: { slug: "kiem-thu-thoa-thuan-paid-implementation" },

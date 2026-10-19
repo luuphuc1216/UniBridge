@@ -811,14 +811,14 @@ export async function acceptMilestoneAction(
           data: [
             {
               userId: recipients.businessUserId,
-              title: "Dự án đã hoàn tất",
-              message: `Tất cả Milestone của dự án “${project.title}” đã được nghiệm thu.`,
+              title: "Dự án hoàn tất — hãy đánh giá đối tác",
+              message: `Tất cả Milestone của dự án “${project.title}” đã được nghiệm thu. Hãy gửi đánh giá hợp tác trên UniBridge.`,
               href: `/business/projects/${projectId}`,
             },
             ...recipients.teamUserIds.map((userId) => ({
               userId,
-              title: "Dự án đã hoàn tất",
-              message: `Tất cả Milestone của dự án “${project.title}” đã được nghiệm thu.`,
+              title: "Dự án hoàn tất — hãy đánh giá đối tác",
+              message: `Tất cả Milestone của dự án “${project.title}” đã được nghiệm thu. Hãy gửi đánh giá hợp tác trên UniBridge.`,
               href: `/student/projects/${projectId}`,
             })),
           ],

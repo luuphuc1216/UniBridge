@@ -32,7 +32,7 @@ export async function findAccessibleProject(
               title: true,
               status: true,
               businessProfile: {
-                select: { userId: true, companyName: true },
+                select: { id: true, userId: true, companyName: true },
               },
             },
           },

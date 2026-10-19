@@ -8,6 +8,7 @@ import {
   type RecommendationProblem,
 } from "@/lib/recommendation-scoring";
 import { prisma } from "@/lib/prisma";
+import { getTeamReputations } from "@/lib/reputation-data";
 
 function mapHistoryProblem(problem: {
   field: string;
@@ -25,8 +26,6 @@ export async function getStudentRecommendations(userId: string) {
       where: { ownerId: userId },
       select: {
         id: true,
-        ratingAverage: true,
-        ratingCount: true,
         interests: true,
         skills: { select: { skill: { select: { name: true } } } },
         memberships: {
@@ -46,6 +45,7 @@ export async function getStudentRecommendations(userId: string) {
   if (!team) {
     return { hasTeam: false, recommendations: [] };
   }
+  const reputation = (await getTeamReputations([team.id])).get(team.id);
 
   const memberUserIds = [
     ...new Set([
@@ -146,8 +146,8 @@ export async function getStudentRecommendations(userId: string) {
     searchedSkills: searchLogs.flatMap(({ skill }) => (skill ? [skill] : [])),
     searchQueries: searchLogs.map(({ query }) => query).filter(Boolean),
     appliedProblems: applications.map(({ problem }) => mapHistoryProblem(problem)),
-    ratingAverage: team.ratingAverage,
-    ratingCount: team.ratingCount,
+    ratingAverage: reputation?.ratingAverage ?? 0,
+    ratingCount: reputation?.ratingCount ?? 0,
   };
 
   const scored = problems.map((problem) => {

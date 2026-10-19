@@ -4,6 +4,7 @@ import { ApplicationComparison } from "@/components/business/application-compari
 import { activeApplicationsWhere } from "@/lib/applications";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
+import { getTeamReputations } from "@/lib/reputation-data";
 
 export const instant = false;
 
@@ -42,6 +43,9 @@ export default async function BusinessProblemApplicationsPage({
     notFound();
   }
 
+  const reputations = await getTeamReputations(
+    problem.applications.map(({ team }) => team.id),
+  );
   const applications = problem.applications.map((application) => ({
     id: application.id,
     approach: application.approach,
@@ -55,6 +59,7 @@ export default async function BusinessProblemApplicationsPage({
     proposedBudget: application.proposedBudget,
     status: application.status,
     team: {
+      id: application.team.id,
       name: application.team.name,
       university: application.team.university,
       description: application.team.description,
@@ -62,8 +67,7 @@ export default async function BusinessProblemApplicationsPage({
       relevantProducts: application.team.relevantProducts,
       achievements: application.team.achievements,
       interests: application.team.interests,
-      ratingAverage: application.team.ratingAverage,
-      ratingCount: application.team.ratingCount,
+      reputation: reputations.get(application.team.id),
       skills: application.team.skills.map(({ skill }) => skill.name),
       members: application.team.memberships.map(({ name, major }) => ({ name, major })),
       projects: application.team.projects,

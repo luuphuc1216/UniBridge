@@ -344,14 +344,20 @@ Doanh nghiệp đánh giá nhóm sinh viên dựa trên các tiêu chí:
 
 Kết quả đánh giá được sử dụng để hình thành Reputation của nhóm sinh viên trên nền tảng.
 
-Reputation có thể được xây dựng dựa trên:
+Hai bên đánh giá theo từng tiêu chí trên thang 1–5 và kèm nhận xét. Mỗi Project chỉ nhận tối đa một đánh giá từ mỗi phía; chỉ doanh nghiệp sở hữu Problem và thành viên của nhóm trong Project được gửi đánh giá, sau khi Project chuyển sang `COMPLETED`. Máy chủ kiểm tra quyền và trạng thái; cơ sở dữ liệu ngăn gửi trùng.
 
-- Điểm đánh giá trung bình.
-- Số lượng dự án đã hoàn thành.
-- Tỷ lệ hoàn thành dự án.
-- Tỷ lệ hoàn thành đúng hạn.
-- Số lượng đánh giá tích cực.
-- Lịch sử giao dịch.
+Để hạn chế đánh giá trả đũa, nội dung và điểm của cả hai phía chỉ được công khai khi cả hai đã gửi, hoặc cùng công khai sau 14 ngày kể từ `completedAt`. Thời hạn này được cấu hình tập trung. Thông báo chỉ báo có đánh giá mới, không chứa điểm, tiêu chí hay nhận xét.
+
+Reputation của nhóm hiển thị điểm đánh giá trung bình, số dự án hoàn tất, tỷ lệ hoàn thành, tỷ lệ Milestone đúng hạn, số đánh giá tích cực và lịch sử dự án/giao dịch. Điểm tổng hợp (0–100) được tính theo công thức:
+
+- Điểm sao được làm mượt theo Bayesian: `(tổng điểm đánh giá + 3 × 5) / (số đánh giá + 5)`. Mức prior trung tính là 3 sao với trọng số tương đương 5 đánh giá.
+- Reputation tổng hợp = 55% điểm sao làm mượt (quy về thang 100) + 15% tỷ lệ hoàn thành + 15% tỷ lệ Milestone đúng hạn + 10% tỷ lệ đánh giá có điểm trung bình từ 4 trở lên + 5% lịch sử dự án có nạp tiền (chuẩn hóa tối đa ở 5 dự án).
+- Tỷ lệ hoàn thành = số Project `COMPLETED` / (số Project `COMPLETED` + số Project `CANCELLED` có khoản nạp tiền đã ghi nhận). Project bị hủy trước khi nạp tiền không nằm trong mẫu số. Hiện luồng hủy chỉ cho phép hủy trước khi nạp tiền; nếu sau này có hủy sau khi nạp tiền, Project đó sẽ được tính là chưa hoàn thành.
+- `CLOSED` do doanh nghiệp quyết định “Không triển khai” sau Proposal được lưu trong lịch sử nhóm nhưng không được tính là thất bại, không làm giảm tỷ lệ hoàn thành và không tạo đánh giá Project.
+- Tỷ lệ đúng hạn lấy các Milestone có hạn (`dueAt`) của Project `COMPLETED`; dùng `acceptedAt`, hoặc `submittedAt` nếu chưa có thời điểm nghiệm thu, so với `dueAt`. Milestone không có hạn bị loại khỏi mẫu số.
+- Chưa có dự án/đánh giá đủ điều kiện thì điểm tổng hợp hiển thị “Chưa có dữ liệu”; lịch sử công khai chỉ hiển thị trạng thái và thời điểm, không tiết lộ số tiền hay dữ liệu thanh toán riêng của dự án.
+
+Nhóm cũng đánh giá doanh nghiệp theo bốn tiêu chí: sự rõ ràng của yêu cầu, phản hồi kịp thời, nghiệm thu công bằng và tinh thần hợp tác. Đánh giá được hiển thị trên hồ sơ doanh nghiệp theo cùng quy tắc công khai hai chiều.
 
 Reputation giúp doanh nghiệp có thêm cơ sở để lựa chọn nhóm sinh viên trong những Problem tiếp theo. Đồng thời, dữ liệu này có thể được sử dụng làm một trong các yếu tố đầu vào cho hệ thống Recommendation, từ đó ưu tiên đề xuất những nhóm vừa phù hợp về năng lực vừa có lịch sử thực hiện đáng tin cậy.
 
