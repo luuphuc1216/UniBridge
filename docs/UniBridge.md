@@ -1,5 +1,15 @@
 ## 1. Tổng quan ý tưởng
 
+Ghi chú triển khai Đợt 1 — ứng tuyển và mời nhóm:
+- Trạng thái của Application là nguồn sự thật duy nhất; model lời mời chỉ lưu lịch sử mời, thời hạn, nhắc nhở, thời điểm phản hồi và lý do phản hồi.
+- Một Problem chỉ có tối đa một lời mời đang chờ; kiểm tra được thực hiện trong transaction và ưu tiên ở cấp DB khi có thể.
+- Problem giữ APPROVED trong khi còn lời mời chờ; chỉ chuyển sang TEAM_SELECTED khi nhóm đồng ý.
+- Hết hạn lời mời phải có script `npm run jobs:expire` và kiểm tra lazy khi truy cập; không dựng cron trong đợt này.
+- Chat chỉ mở cho nhóm đang có lời mời chờ hoặc đã được chọn; nhóm DECLINED/EXPIRED/NOT_SELECTED chỉ đọc.
+- Application lưu snapshot Profile JSON có version khi gửi; snapshot không đổi nếu nhóm chỉnh sửa hồ sơ sau đó.
+- Approach hỗ trợ tối đa 3 liên kết tham khảo HTTP/HTTPS; doanh nghiệp có thể đánh dấu hồ sơ cần xem xét và lưu ghi chú nội bộ.
+- Job hết hạn cũng gửi nhắc sắp hết hạn một lần theo mốc cấu hình tập trung, cùng thông báo khi lời mời được đồng ý, từ chối hoặc hết hạn.
+
 Ý tưởng đề xuất xây dựng một nền tảng trực tuyến kết nối doanh nghiệp có nhu cầu giải quyết các vấn đề thực tế với các nhóm sinh viên có năng lực và mong muốn tham gia giải quyết những vấn đề đó.
 
 Trong quá trình hoạt động, doanh nghiệp thường phát sinh nhiều vấn đề cần nghiên cứu, thiết kế hoặc triển khai. Tuy nhiên, đối với một số vấn đề, việc thuê các chuyên gia hoặc đơn vị tư vấn bên ngoài có thể phát sinh chi phí tương đối cao. Trong khi đó, sinh viên tại các trường đại học có kiến thức chuyên môn, khả năng nghiên cứu và thực hiện các dự án nhưng thường thiếu cơ hội tiếp cận các bài toán thực tế từ doanh nghiệp.

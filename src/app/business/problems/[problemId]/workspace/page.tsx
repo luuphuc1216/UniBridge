@@ -7,18 +7,22 @@ export const instant = false;
 
 export default async function BusinessWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ problemId: string }>;
+  searchParams: Promise<{ applicationId?: string }>;
 }) {
   const session = await auth();
   if (!session?.user || session.user.role !== "BUSINESS") {
     notFound();
   }
   const { problemId } = await params;
+  const { applicationId } = await searchParams;
   const problem = await findAuthorizedWorkspace(
     problemId,
     session.user.id,
     session.user.role,
+    applicationId,
   );
   const application = problem?.applications[0];
   if (!problem || !application) {
@@ -36,6 +40,7 @@ export default async function BusinessWorkspacePage({
           goal: problem.goal,
           companyName: problem.businessProfile.companyName,
           teamName: application.team.name,
+          applicationId: application.id,
         },
         messages: problem.workspaceMessages,
         proposals: application.proposals,

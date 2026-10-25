@@ -1,4 +1,13 @@
-export const PROBLEM_ACCEPTING_APPLICATION_STATUSES = ["APPROVED"] as const;
+export const PROBLEM_ACCEPTING_APPLICATION_STATUSES = ["APPROVED", "PUBLISHED"] as const;
+
+export const APPLICATION_EFFECTIVE_STATUSES = ["SUBMITTED", "PENDING_CONFIRMATION", "SELECTED"] as const;
+export const APPLICATION_NON_EFFECTIVE_STATUSES = [
+  "WITHDRAWN",
+  "REJECTED",
+  "DECLINED",
+  "EXPIRED",
+  "NOT_SELECTED",
+] as const;
 
 export const STUDENT_DISCOVERABLE_PROBLEM_STATUSES = [
   "APPROVED",
@@ -8,6 +17,48 @@ export const STUDENT_DISCOVERABLE_PROBLEM_STATUSES = [
   "EVALUATING",
 ] as const;
 export const PROBLEM_REVIEWABLE_STATUS = "PENDING_REVIEW";
+
+export function getEffectiveApplicationStatuses(): string[] {
+  return [...APPLICATION_EFFECTIVE_STATUSES];
+}
+
+export function isEffectiveApplicationStatus(status: string): boolean {
+  return APPLICATION_EFFECTIVE_STATUSES.some((effectiveStatus) => effectiveStatus === status);
+}
+
+export function canEditApplication(status: string | null): boolean {
+  return status === null || status === "SUBMITTED";
+}
+
+export function canCreatePendingInvitation(activeInvitationCount: number): boolean {
+  return activeInvitationCount === 0;
+}
+
+export function isWorkspaceMessageWritableApplicationStatus(status: string): boolean {
+  return status === "PENDING_CONFIRMATION" || status === "SELECTED";
+}
+
+export function shouldExpireInvitation(
+  status: string,
+  expiresAt: Date,
+  now: Date,
+): boolean {
+  return status === "PENDING_CONFIRMATION" && expiresAt <= now;
+}
+
+export function shouldSendInvitationReminder(
+  status: string,
+  reminderAt: Date | null,
+  reminderSentAt: Date | null,
+  now: Date,
+): boolean {
+  return (
+    status === "PENDING_CONFIRMATION" &&
+    reminderAt !== null &&
+    reminderSentAt === null &&
+    reminderAt <= now
+  );
+}
 
 export function isProblemAcceptingApplications(status: string): boolean {
   return PROBLEM_ACCEPTING_APPLICATION_STATUSES.some(
@@ -51,6 +102,14 @@ export function getApplicationUnavailableReason(
       return reviewNote
         ? `Bài toán đã bị từ chối kiểm duyệt và không nhận hồ sơ mới. Lý do: ${reviewNote}`
         : "Bài toán đã bị từ chối kiểm duyệt và không nhận hồ sơ mới.";
+    case "PENDING_CONFIRMATION":
+      return "Nhóm đã nhận lời mời hợp tác và đang chờ phản hồi trong thời hạn quy định.";
+    case "DECLINED":
+      return "Nhóm đã từ chối lời mời hợp tác với bài toán này.";
+    case "EXPIRED":
+      return "Lời mời hợp tác đã hết hạn mà không có phản hồi.";
+    case "NOT_SELECTED":
+      return "Hồ sơ của nhóm không được chọn cho bài toán này.";
     case "CLOSED":
       return "Bài toán đã kết thúc sau giai đoạn Prototype và không nhận hồ sơ mới.";
     case "TEAM_SELECTED":

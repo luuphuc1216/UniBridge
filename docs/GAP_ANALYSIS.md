@@ -2,6 +2,8 @@
 
 > Phạm vi: đọc [UniBridge.md](./UniBridge.md), [ModuleKetNoi.md](./ModuleKetNoi.md), [ChiTietGiaoDienModuleKetNoi.md](./ChiTietGiaoDienModuleKetNoi.md), [ModuleGiaiPhapGiaoDich.md](./ModuleGiaiPhapGiaoDich.md) và đối chiếu với code/schema/seed/test đang có. Báo cáo chỉ ghi nhận, **không sửa code**. “Đã có” có thể là có một phần, không đồng nghĩa đã đáp ứng đầy đủ đặc tả.
 
+> Ghi chú phạm vi Đợt 1: tệp minh họa cho Approach qua file-picker được hoãn sang đợt sau; không triển khai dở dang trong đợt này.
+
 ## Bảng đối chiếu
 
 | Mục đặc tả | Đã có (file nào) | Thiếu hoặc khác | Ảnh hưởng (schema, trạng thái, test) | Độ khó S/M/L |

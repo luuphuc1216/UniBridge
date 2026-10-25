@@ -1,12 +1,28 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApplicationComparison } from "@/components/business/application-comparison";
-import { activeApplicationsWhere } from "@/lib/applications";
+import { displayApplicationsWhere } from "@/lib/application-visibility";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 import { getTeamReputations } from "@/lib/reputation-data";
+import { expireInvitations } from "@/jobs/expire-invitations";
 
 export const instant = false;
+
+function getProfileSnapshot(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as {
+    name?: string;
+    university?: string;
+    description?: string;
+    experience?: string;
+    relevantProducts?: string;
+    achievements?: string;
+    interests?: string;
+    skills?: string[];
+    members?: { name: string; major: string; title?: string; isLead?: boolean }[];
+  };
+}
 
 export default async function BusinessProblemApplicationsPage({
   params,
@@ -15,14 +31,24 @@ export default async function BusinessProblemApplicationsPage({
 }) {
   const { problemId } = await params;
   const { businessProfileId } = await requireBusinessProfile();
+  await expireInvitations();
   const problem = await prisma.problem.findFirst({
     where: { id: problemId, businessProfileId },
     include: {
       skills: { include: { skill: { select: { name: true } } } },
       applications: {
-        where: activeApplicationsWhere,
+        where: displayApplicationsWhere,
         orderBy: { submittedAt: "asc" },
         include: {
+          invitations: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: {
+              expiresAt: true,
+              status: true,
+              responseReason: true,
+            },
+          },
           team: {
             include: {
               skills: { include: { skill: { select: { name: true } } } },
@@ -46,7 +72,12 @@ export default async function BusinessProblemApplicationsPage({
   const reputations = await getTeamReputations(
     problem.applications.map(({ team }) => team.id),
   );
-  const applications = problem.applications.map((application) => ({
+  const hasPendingInvitation = problem.applications.some((application) =>
+    application.invitations.some(({ status }) => status === "PENDING_CONFIRMATION"),
+  );
+  const applications = problem.applications.map((application) => {
+    const snapshot = getProfileSnapshot(application.profileSnapshot);
+    return {
     id: application.id,
     approach: application.approach,
     problemUnderstanding: application.problemUnderstanding,
@@ -58,21 +89,27 @@ export default async function BusinessProblemApplicationsPage({
     estimatedDuration: application.estimatedDuration,
     proposedBudget: application.proposedBudget,
     status: application.status,
+    needsReview: application.needsReview,
+    businessReviewNote: application.businessReviewNote,
+    invitation: application.invitations[0] ?? null,
+    approachLinks: application.approachLinks,
     team: {
       id: application.team.id,
-      name: application.team.name,
-      university: application.team.university,
-      description: application.team.description,
-      experience: application.team.experience,
-      relevantProducts: application.team.relevantProducts,
-      achievements: application.team.achievements,
-      interests: application.team.interests,
+      name: snapshot?.name ?? application.team.name,
+      university: snapshot?.university ?? application.team.university,
+      description: snapshot?.description ?? application.team.description,
+      experience: snapshot?.experience ?? application.team.experience,
+      relevantProducts: snapshot?.relevantProducts ?? application.team.relevantProducts,
+      achievements: snapshot?.achievements ?? application.team.achievements,
+      interests: snapshot?.interests ?? application.team.interests,
       reputation: reputations.get(application.team.id),
-      skills: application.team.skills.map(({ skill }) => skill.name),
-      members: application.team.memberships.map(({ name, major }) => ({ name, major })),
+      skills: snapshot?.skills ?? application.team.skills.map(({ skill }) => skill.name),
+      members: snapshot?.members?.map(({ name, major }) => ({ name, major })) ??
+        application.team.memberships.map(({ name, major }) => ({ name, major })),
       projects: application.team.projects,
     },
-  }));
+  };
+  });
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
@@ -95,6 +132,7 @@ export default async function BusinessProblemApplicationsPage({
           problemId={problem.id}
           problemSkills={problem.skills.map(({ skill }) => skill.name)}
           problemStatus={problem.status}
+          hasPendingInvitation={hasPendingInvitation}
         />
       </section>
     </main>

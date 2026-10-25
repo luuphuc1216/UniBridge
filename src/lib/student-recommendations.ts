@@ -9,7 +9,10 @@ import {
 } from "@/lib/recommendation-scoring";
 import { prisma } from "@/lib/prisma";
 import { getTeamReputations } from "@/lib/reputation-data";
-import { PROBLEM_ACCEPTING_APPLICATION_STATUSES } from "@/lib/problem-workflow";
+import {
+  getEffectiveApplicationStatuses,
+  PROBLEM_ACCEPTING_APPLICATION_STATUSES,
+} from "@/lib/problem-workflow";
 
 function mapHistoryProblem(problem: {
   field: string;
@@ -70,7 +73,7 @@ export async function getStudentRecommendations(userId: string) {
       where: {
         status: { in: [...PROBLEM_ACCEPTING_APPLICATION_STATUSES] },
         applications: {
-          none: { teamId: team.id, status: { not: "WITHDRAWN" } },
+          none: { teamId: team.id, status: { in: getEffectiveApplicationStatuses() } },
         },
       },
       select: {

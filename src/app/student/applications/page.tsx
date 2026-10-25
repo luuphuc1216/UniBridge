@@ -2,15 +2,9 @@ import Link from "next/link";
 import { requireStudent } from "@/lib/student-access";
 import { getOwnedTeam } from "@/lib/student-team";
 import { prisma } from "@/lib/prisma";
+import { getApplicationStatusDisplay } from "@/lib/application-status";
 
 export const instant = false;
-
-const statusLabels: Record<string, string> = {
-  SUBMITTED: "Đã gửi",
-  REJECTED: "Chưa được chọn",
-  WITHDRAWN: "Đã rút",
-  SELECTED: "Đã được chọn",
-};
 
 export default async function StudentApplicationsPage() {
   const { userId } = await requireStudent();
@@ -93,7 +87,7 @@ export default async function StudentApplicationsPage() {
                         : "bg-primary/10 text-primary"
                   }`}
                 >
-                  {statusLabels[application.status] ?? application.status}
+                  {getApplicationStatusDisplay(application.status).label}
                 </span>
               </div>
               <p className="mt-3 text-sm text-muted-foreground">

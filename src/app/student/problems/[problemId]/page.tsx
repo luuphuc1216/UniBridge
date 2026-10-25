@@ -2,10 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApplicationForm } from "@/components/student/application-form";
 import { ApplicationWithdrawButton } from "@/components/student/application-withdraw-button";
+import { InvitationResponse } from "@/components/student/invitation-response";
 import { SavedProblemButton } from "@/components/student/saved-problem-button";
 import { requireStudent } from "@/lib/student-access";
-import { getOwnedTeam } from "@/lib/student-team";
+import { getOwnedTeam, getTeamForUser } from "@/lib/student-team";
 import { prisma } from "@/lib/prisma";
+import { expireInvitations } from "@/jobs/expire-invitations";
+import { canRespondToInvitation } from "@/lib/application-status";
 import {
   getApplicationUnavailableReason,
   isProblemAcceptingApplications,
@@ -16,6 +19,10 @@ export const instant = false;
 
 const workspaceStatusLabels: Record<string, string> = {
   REJECTED: "Bị từ chối",
+  PENDING_CONFIRMATION: "Đang chờ xác nhận hợp tác",
+  DECLINED: "Đã từ chối lời mời",
+  EXPIRED: "Lời mời đã hết hạn",
+  NOT_SELECTED: "Không được chọn",
   TEAM_SELECTED: "Đã chọn nhóm",
   PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
   EVALUATING: "Đang được doanh nghiệp đánh giá",
@@ -40,6 +47,7 @@ export default async function StudentProblemDetailPage({
 }) {
   const { userId } = await requireStudent();
   const { problemId } = await params;
+  await expireInvitations();
   const problem = await prisma.problem.findFirst({
     where: {
       id: problemId,
@@ -73,7 +81,10 @@ export default async function StudentProblemDetailPage({
   }
   const canAcceptApplications = isProblemAcceptingApplications(problem.status);
 
-  const team = await getOwnedTeam(userId);
+  const [ownedTeam, team] = await Promise.all([
+    getOwnedTeam(userId),
+    getTeamForUser(userId),
+  ]);
   const [savedProblem, application] = await Promise.all([
     prisma.savedProblem.findUnique({
       where: { userId_problemId: { userId, problemId } },
@@ -93,6 +104,12 @@ export default async function StudentProblemDetailPage({
             resources: true,
             estimatedDuration: true,
             proposedBudget: true,
+            invitations: {
+              where: { status: "PENDING_CONFIRMATION" },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: { expiresAt: true, status: true },
+            },
           },
         })
       : Promise.resolve(null),
@@ -131,7 +148,7 @@ export default async function StudentProblemDetailPage({
         ) && (
           <Link
             className="mt-4 inline-flex rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
-            href={`/student/workspace/${problem.id}`}
+            href={`/student/workspace/${problem.id}?applicationId=${application.id}`}
           >
             Mở không gian làm việc của nhóm
           </Link>
@@ -197,7 +214,7 @@ export default async function StudentProblemDetailPage({
       </div>
 
       <section className="mt-7 rounded-2xl border border-border bg-card p-5 sm:p-7">
-        <h2 className="text-xl font-semibold">Hồ sơ ứng tuyển</h2>
+        <h2 className="text-xl font-semibold" id="application-response">Hồ sơ ứng tuyển</h2>
         {!canAcceptApplications ? (
           <div className="mt-3 space-y-3">
             <button
@@ -222,11 +239,32 @@ export default async function StudentProblemDetailPage({
               Tạo hồ sơ nhóm
             </Link>
           </div>
-        ) : application && !["SUBMITTED", "WITHDRAWN"].includes(application.status) ? (
+        ) : application?.status === "PENDING_CONFIRMATION" && application.invitations[0] ? (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <h3 className="font-semibold text-amber-900">Doanh nghiệp mời hợp tác</h3>
+            <p className="mt-2 text-sm text-amber-800">
+              {problem.businessProfile.companyName} đã mời nhóm tham gia bài toán này.
+            </p>
+            <InvitationResponse
+              applicationId={application.id}
+              canRespond={canRespondToInvitation(application.status, Boolean(ownedTeam))}
+              expiresAt={application.invitations[0].expiresAt}
+              problemId={problem.id}
+            />
+          </div>
+        ) : application && (!ownedTeam || !["SUBMITTED", "WITHDRAWN"].includes(application.status)) ? (
           <p className="mt-3 rounded-xl bg-muted p-4 text-sm leading-6">
-            {application.status === "SELECTED"
+            {!ownedTeam
+              ? "Chỉ trưởng nhóm mới có thể chỉnh sửa hoặc phản hồi hồ sơ này."
+              : application.status === "SELECTED"
               ? "Doanh nghiệp đã chọn nhóm cho bài toán này."
-              : "Doanh nghiệp đã xử lý hồ sơ này; bạn không thể chỉnh sửa hoặc rút."}
+              : application.status === "DECLINED"
+                ? "Bạn đã từ chối lời mời hợp tác."
+                : application.status === "EXPIRED"
+                  ? "Lời mời hợp tác đã hết hạn."
+                  : application.status === "NOT_SELECTED" || application.status === "REJECTED"
+                    ? "Hồ sơ không được chọn."
+                    : "Hồ sơ này hiện không có thao tác khả dụng."}
           </p>
         ) : (
           <>

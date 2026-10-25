@@ -1,15 +1,21 @@
 import { prisma } from "@/lib/prisma";
+import {
+  isWorkspaceMessageWritableApplicationStatus,
+} from "@/lib/problem-workflow";
 
 export async function findAuthorizedWorkspace(
   problemId: string,
   userId: string,
   role: string,
+  applicationId?: string,
 ) {
   const problem = await prisma.problem.findFirst({
     where: {
       id: problemId,
       status: {
         in: [
+          "APPROVED",
+          "PUBLISHED",
           "TEAM_SELECTED",
           "PROTOTYPING",
           "EVALUATING",
@@ -20,7 +26,8 @@ export async function findAuthorizedWorkspace(
       },
       applications: {
         some: {
-          status: "SELECTED",
+          ...(applicationId ? { id: applicationId } : {}),
+          status: { in: ["PENDING_CONFIRMATION", "SELECTED"] },
           ...(role === "STUDENT"
             ? {
                 team: {
@@ -42,7 +49,11 @@ export async function findAuthorizedWorkspace(
         select: { userId: true, companyName: true },
       },
       applications: {
-        where: { status: "SELECTED" },
+        where: {
+          ...(applicationId
+            ? { id: applicationId }
+            : { status: { in: ["PENDING_CONFIRMATION", "SELECTED"] } }),
+        },
         take: 1,
         include: {
           team: {
@@ -66,6 +77,9 @@ export async function findAuthorizedWorkspace(
         },
       },
       workspaceMessages: {
+        where: applicationId
+          ? { applicationId }
+          : { applicationId: null },
         orderBy: { createdAt: "asc" },
         include: { sender: { select: { id: true, name: true, role: true } } },
       },
@@ -78,3 +92,5 @@ export async function findAuthorizedWorkspace(
 export function isFinalWorkspaceStatus(status: string): boolean {
   return ["CLOSED", "READY_FOR_IMPLEMENTATION", "COMPLETED"].includes(status);
 }
+
+export { isWorkspaceMessageWritableApplicationStatus };

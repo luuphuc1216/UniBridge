@@ -1035,6 +1035,49 @@ async function main() {
     });
   }
 
+  const invitationStates = [
+    { teamSlug: "nextgen-digital", status: "PENDING_CONFIRMATION", days: 5 },
+    { teamSlug: "market-minds", status: "DECLINED", days: -1 },
+    { teamSlug: "data-spark", status: "EXPIRED", days: -1 },
+  ] as const;
+  for (const state of invitationStates) {
+    const team = await prisma.studentTeam.findUniqueOrThrow({
+      where: { slug: state.teamSlug },
+    });
+    const application = await prisma.application.findUniqueOrThrow({
+      where: { problemId_teamId: { problemId: applicationProblem.id, teamId: team.id } },
+    });
+    const existingInvitation = await prisma.applicationInvitation.findFirst({
+      where: { applicationId: application.id, status: state.status },
+    });
+    if (!existingInvitation) {
+      const invitedAt = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000);
+      await prisma.applicationInvitation.create({
+        data: {
+          applicationId: application.id,
+          problemId: applicationProblem.id,
+          teamId: team.id,
+          invitedByBusinessProfileId: applicationProblem.businessProfileId,
+          status: state.status,
+          invitedAt,
+          expiresAt: new Date(Date.now() + state.days * 24 * 60 * 60 * 1000),
+          respondedAt: state.status === "PENDING_CONFIRMATION" ? null : new Date(),
+          responseStatus: state.status,
+          responseReason:
+            state.status === "DECLINED"
+              ? "Nhóm không sắp xếp được thời gian."
+              : state.status === "EXPIRED"
+                ? "Hết hạn phản hồi"
+                : null,
+        },
+      });
+    }
+    await prisma.application.update({
+      where: { id: application.id },
+      data: { status: state.status },
+    });
+  }
+
   const prototypingProblem = await prisma.problem.findUniqueOrThrow({
     where: { slug: problems[0].slug },
   });

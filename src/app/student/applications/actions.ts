@@ -4,9 +4,12 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireStudent } from "@/lib/student-access";
 import { requireOwnedTeam } from "@/lib/student-team";
-import { PROBLEM_ACCEPTING_APPLICATION_STATUSES } from "@/lib/problem-workflow";
+import {
+  canEditApplication,
+  PROBLEM_ACCEPTING_APPLICATION_STATUSES,
+} from "@/lib/problem-workflow";
 
-export type ApplicationActionState = { error: string | null };
+export type ApplicationActionState = { error: string | null; success?: boolean };
 
 const approachFields = [
   ["problemUnderstanding", "Cách nhóm hiểu vấn đề"],
@@ -26,11 +29,24 @@ function parseBudget(value: string): number | null {
   if (!value) {
     return null;
   }
+
   const amount = Number(value);
   if (!Number.isSafeInteger(amount) || amount < 0 || amount > 2_147_483_647) {
     throw new Error("Chi phí đề xuất phải là số tiền hợp lệ.");
   }
   return amount;
+}
+
+function parseApproachLinks(formData: FormData): string[] {
+  const links = readText(formData, "approachLinks")
+    .split(/\r?\n/)
+    .map((link) => link.trim())
+    .filter(Boolean);
+  if (links.length > 3) throw new Error("Chỉ được thêm tối đa 3 liên kết tham khảo.");
+  if (links.some((link) => !/^https?:\/\/\S+$/i.test(link))) {
+    throw new Error("Liên kết tham khảo phải bắt đầu bằng http:// hoặc https://.");
+  }
+  return links;
 }
 
 function revalidateApplicationPaths(problemId: string) {
@@ -55,8 +71,10 @@ export async function saveApplicationAction(
   );
   const estimatedDuration = readText(formData, "estimatedDuration");
   let proposedBudget: number | null;
+  let approachLinks: string[];
   try {
     proposedBudget = parseBudget(readText(formData, "proposedBudget"));
+    approachLinks = parseApproachLinks(formData);
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Chi phí đề xuất không hợp lệ." };
   }
@@ -93,20 +111,41 @@ export async function saveApplicationAction(
 
       const existing = await transaction.application.findUnique({
         where: { problemId_teamId: { problemId, teamId: team.id } },
-        select: { id: true, status: true },
+        select: { id: true, status: true, profileSnapshotVersion: true },
       });
-      if (existing && !["SUBMITTED", "WITHDRAWN"].includes(existing.status)) {
+      if (existing && !canEditApplication(existing.status) && existing.status !== "WITHDRAWN") {
         throw new Error("Hồ sơ này đã được doanh nghiệp xử lý và không thể sửa.");
       }
 
       const approach = approachFields
         .map(([field, label]) => `${label}:\n${values[field]}`)
         .join("\n\n");
+      const profileSnapshotVersion = (existing?.profileSnapshotVersion ?? 0) + 1;
+      const profileSnapshot = {
+        version: profileSnapshotVersion,
+        name: team.name,
+        university: team.university,
+        description: team.description,
+        experience: team.experience,
+        relevantProducts: team.relevantProducts,
+        achievements: team.achievements,
+        interests: team.interests,
+        skills: team.skills.map(({ skill }) => skill.name),
+        members: team.memberships.map(({ name, major, title, isLead }) => ({
+          name,
+          major,
+          title,
+          isLead,
+        })),
+      };
       const applicationData = {
         ...values,
         approach,
         estimatedDuration,
         proposedBudget,
+        profileSnapshot,
+        profileSnapshotVersion,
+        approachLinks,
         ...(existing?.status === "WITHDRAWN"
           ? { status: "SUBMITTED", submittedAt: new Date() }
           : {}),
@@ -146,7 +185,7 @@ export async function saveApplicationAction(
   }
 
   revalidateApplicationPaths(problemId);
-  return { error: null };
+  return { error: null, success: true };
 }
 
 export async function withdrawApplicationAction(
@@ -178,5 +217,180 @@ export async function withdrawApplicationAction(
   }
 
   revalidateApplicationPaths(problemId);
-  return { error: null };
+  return { error: null, success: true };
+}
+
+export async function acceptInvitationAction(
+  _previousState: ApplicationActionState,
+  formData: FormData,
+): Promise<ApplicationActionState> {
+  const { userId } = await requireStudent();
+  const applicationId = readText(formData, "applicationId");
+  const problemId = readText(formData, "problemId");
+  try {
+    const team = await requireOwnedTeam(userId);
+    await prisma.$transaction(async (transaction) => {
+      const invitation = await transaction.applicationInvitation.findFirst({
+        where: {
+          applicationId,
+          problemId,
+          teamId: team.id,
+          status: "PENDING_CONFIRMATION",
+        },
+        select: {
+          id: true,
+          expiresAt: true,
+          applicationId: true,
+          application: { select: { status: true } },
+          problem: { select: { title: true, businessProfile: { select: { userId: true } } } },
+        },
+      });
+      if (!invitation) {
+        throw new Error("Lời mời hợp tác không còn hiệu lực hoặc không thuộc về nhóm của bạn.");
+      }
+      if (invitation.application.status !== "PENDING_CONFIRMATION") {
+        throw new Error("Hồ sơ không còn ở trạng thái chờ xác nhận.");
+      }
+      if (new Date(invitation.expiresAt) <= new Date()) {
+        await transaction.application.update({
+          where: { id: invitation.applicationId },
+          data: { status: "EXPIRED" },
+        });
+        await transaction.applicationInvitation.update({
+          where: { id: invitation.id },
+          data: {
+            status: "EXPIRED",
+            respondedAt: new Date(),
+            responseStatus: "EXPIRED",
+            responseReason: "Hết hạn phản hồi",
+          },
+        });
+        throw new Error("Lời mời hợp tác đã hết hạn trước khi bạn phản hồi.");
+      }
+
+      await transaction.application.updateMany({
+        where: {
+          problemId,
+          id: { not: applicationId },
+          status: { in: ["SUBMITTED", "PENDING_CONFIRMATION"] },
+        },
+        data: { status: "NOT_SELECTED" },
+      });
+      await transaction.application.update({
+        where: { id: invitation.applicationId },
+        data: { status: "SELECTED" },
+      });
+      await transaction.applicationInvitation.update({
+        where: { id: invitation.id },
+        data: {
+          status: "ACCEPTED",
+          respondedAt: new Date(),
+          responseStatus: "ACCEPTED",
+        },
+      });
+      await transaction.problem.update({
+        where: { id: problemId },
+        data: { status: "TEAM_SELECTED" },
+      });
+      await transaction.notification.create({
+        data: {
+          userId: invitation.problem.businessProfile.userId,
+          title: "Nhóm đã đồng ý lời mời hợp tác",
+          message: `Nhóm đã đồng ý tham gia bài toán “${invitation.problem.title}”.`,
+          href: `/business/problems/${problemId}/workspace`,
+        },
+      });
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message };
+    }
+    console.error("Chấp nhận lời mời thất bại:", error);
+    return { error: "Không thể chấp nhận lời mời hợp tác. Vui lòng thử lại." };
+  }
+
+  revalidateApplicationPaths(problemId);
+  return { error: null, success: true };
+}
+
+export async function declineInvitationAction(
+  _previousState: ApplicationActionState,
+  formData: FormData,
+): Promise<ApplicationActionState> {
+  const { userId } = await requireStudent();
+  const applicationId = readText(formData, "applicationId");
+  const problemId = readText(formData, "problemId");
+  const reason = readText(formData, "declineReason") || "Nhóm không đồng ý với lời mời hợp tác.";
+  try {
+    const team = await requireOwnedTeam(userId);
+    await prisma.$transaction(async (transaction) => {
+      const invitation = await transaction.applicationInvitation.findFirst({
+        where: {
+          applicationId,
+          problemId,
+          teamId: team.id,
+          status: "PENDING_CONFIRMATION",
+        },
+        select: {
+          id: true,
+          applicationId: true,
+          expiresAt: true,
+          application: { select: { status: true } },
+          problem: { select: { title: true, businessProfile: { select: { userId: true } } } },
+        },
+      });
+      if (!invitation) {
+        throw new Error("Lời mời hợp tác không còn hiệu lực hoặc không thuộc về nhóm của bạn.");
+      }
+      if (invitation.application.status !== "PENDING_CONFIRMATION") {
+        throw new Error("Hồ sơ không còn ở trạng thái chờ xác nhận.");
+      }
+      if (invitation.expiresAt <= new Date()) {
+        await transaction.application.update({
+          where: { id: invitation.applicationId },
+          data: { status: "EXPIRED" },
+        });
+        await transaction.applicationInvitation.update({
+          where: { id: invitation.id },
+          data: {
+            status: "EXPIRED",
+            respondedAt: new Date(),
+            responseStatus: "EXPIRED",
+            responseReason: "Hết hạn phản hồi",
+          },
+        });
+        throw new Error("Lời mời hợp tác đã hết hạn trước khi bạn phản hồi.");
+      }
+      await transaction.application.update({
+        where: { id: invitation.applicationId },
+        data: { status: "DECLINED" },
+      });
+      await transaction.applicationInvitation.update({
+        where: { id: invitation.id },
+        data: {
+          status: "DECLINED",
+          respondedAt: new Date(),
+          responseStatus: "DECLINED",
+          responseReason: reason,
+        },
+      });
+      await transaction.notification.create({
+        data: {
+          userId: invitation.problem.businessProfile.userId,
+          title: "Nhóm đã từ chối lời mời hợp tác",
+          message: `Nhóm đã từ chối lời mời cho bài toán “${invitation.problem.title}”.`,
+          href: `/business/problems/${problemId}/applications`,
+        },
+      });
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message };
+    }
+    console.error("Từ chối lời mời thất bại:", error);
+    return { error: "Không thể từ chối lời mời hợp tác. Vui lòng thử lại." };
+  }
+
+  revalidateApplicationPaths(problemId);
+  return { error: null, success: true };
 }

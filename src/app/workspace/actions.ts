@@ -7,7 +7,11 @@ import { MAX_PROPOSAL_FILE_COUNT, MAX_PROPOSAL_FILE_TOTAL_BYTES } from "@/lib/bu
 import { validateAttachment } from "@/lib/business-attachments/validation";
 import { prisma } from "@/lib/prisma";
 import { attachmentStorage } from "@/lib/storage";
-import { findAuthorizedWorkspace, isFinalWorkspaceStatus } from "@/lib/workspace-access";
+import {
+  findAuthorizedWorkspace,
+  isFinalWorkspaceStatus,
+  isWorkspaceMessageWritableApplicationStatus,
+} from "@/lib/workspace-access";
 import {
   proposalEvaluationFields,
   proposalTypes,
@@ -20,7 +24,7 @@ function readText(formData: FormData, key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-async function requireWorkspace(problemId: string) {
+async function requireWorkspace(problemId: string, applicationId?: string) {
   const session = await auth();
   if (!session?.user || !["BUSINESS", "STUDENT"].includes(session.user.role)) {
     throw new Error("Vui lòng đăng nhập bằng tài khoản được cấp quyền.");
@@ -29,6 +33,7 @@ async function requireWorkspace(problemId: string) {
     problemId,
     session.user.id,
     session.user.role,
+    applicationId,
   );
   if (!workspace) {
     throw new Error("Không tìm thấy không gian làm việc.");
@@ -74,7 +79,10 @@ export async function startWorkspaceAction(
 ): Promise<WorkspaceActionState> {
   const problemId = readText(formData, "problemId");
   try {
-    const { session, workspace } = await requireWorkspace(problemId);
+    const { session, workspace } = await requireWorkspace(
+      problemId,
+      readText(formData, "applicationId"),
+    );
     if (session.user.role !== "STUDENT") {
       throw new Error("Chỉ nhóm được chọn mới có thể bắt đầu.");
     }
@@ -109,7 +117,10 @@ export async function sendWorkspaceMessageAction(
     return { error: "Tin nhắn phải có nội dung và không vượt quá 4.000 ký tự." };
   }
   try {
-    const { session, workspace, application } = await requireWorkspace(problemId);
+    const { session, workspace, application } = await requireWorkspace(
+      problemId,
+      readText(formData, "applicationId"),
+    );
     if (isFinalWorkspaceStatus(workspace.status)) {
       throw new Error("Không thể gửi tin nhắn sau khi doanh nghiệp đã quyết định.");
     }
@@ -117,16 +128,29 @@ export async function sendWorkspaceMessageAction(
       const currentProblem = await transaction.problem.findFirst({
         where: {
           id: problemId,
-          status: { in: ["TEAM_SELECTED", "PROTOTYPING", "EVALUATING"] },
-          applications: { some: { id: application.id, status: "SELECTED" } },
+          status: { in: ["APPROVED", "PUBLISHED", "TEAM_SELECTED", "PROTOTYPING", "EVALUATING"] },
+          applications: {
+            some: {
+              id: application.id,
+              status: { in: ["PENDING_CONFIRMATION", "SELECTED"] },
+            },
+          },
         },
         select: { id: true },
       });
       if (!currentProblem) {
         throw new Error("Không thể gửi tin nhắn sau khi doanh nghiệp đã quyết định.");
       }
+      if (!isWorkspaceMessageWritableApplicationStatus(application.status)) {
+        throw new Error("Nhóm chỉ có thể gửi tin nhắn khi lời mời đang chờ hoặc đã được chọn.");
+      }
       await transaction.workspaceMessage.create({
-        data: { problemId, senderId: session.user.id, content },
+        data: {
+          problemId,
+          applicationId: application.id,
+          senderId: session.user.id,
+          content,
+        },
       });
       const isBusiness = session.user.role === "BUSINESS";
       const recipients = isBusiness
@@ -138,8 +162,8 @@ export async function sendWorkspaceMessageAction(
           title: "Có tin nhắn mới trong không gian làm việc",
           message: `Có tin nhắn mới về bài toán “${workspace.title}”.`,
           href: isBusiness
-            ? `/student/workspace/${problemId}`
-            : `/business/problems/${problemId}/workspace`,
+            ? `/student/workspace/${problemId}?applicationId=${application.id}`
+            : `/business/problems/${problemId}/workspace?applicationId=${application.id}`,
         })),
       });
     });
@@ -173,7 +197,10 @@ export async function submitProposalAction(
 
   const storedKeys: string[] = [];
   try {
-    const { session, workspace, application } = await requireWorkspace(problemId);
+    const { session, workspace, application } = await requireWorkspace(
+      problemId,
+      readText(formData, "applicationId"),
+    );
     if (session.user.role !== "STUDENT") {
       throw new Error("Chỉ nhóm được chọn mới có thể nộp Proposal.");
     }
@@ -286,7 +313,10 @@ export async function evaluateProposalAction(
   }
 
   try {
-    const { session, workspace, application } = await requireWorkspace(problemId);
+    const { session, workspace, application } = await requireWorkspace(
+      problemId,
+      readText(formData, "applicationId"),
+    );
     if (session.user.role !== "BUSINESS") {
       throw new Error("Chỉ doanh nghiệp sở hữu bài toán mới có thể đánh giá.");
     }

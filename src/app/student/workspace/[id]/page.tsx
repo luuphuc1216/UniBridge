@@ -7,15 +7,23 @@ export const instant = false;
 
 export default async function StudentWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ applicationId?: string }>;
 }) {
   const session = await auth();
   if (!session?.user || session.user.role !== "STUDENT") {
     notFound();
   }
   const { id } = await params;
-  const problem = await findAuthorizedWorkspace(id, session.user.id, session.user.role);
+  const { applicationId } = await searchParams;
+  const problem = await findAuthorizedWorkspace(
+    id,
+    session.user.id,
+    session.user.role,
+    applicationId,
+  );
   const application = problem?.applications[0];
   if (!problem || !application) {
     notFound();
@@ -32,6 +40,7 @@ export default async function StudentWorkspacePage({
           goal: problem.goal,
           companyName: problem.businessProfile.companyName,
           teamName: application.team.name,
+          applicationId: application.id,
         },
         messages: problem.workspaceMessages,
         proposals: application.proposals,

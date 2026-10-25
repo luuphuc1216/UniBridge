@@ -8,6 +8,11 @@ import { MAX_ATTACHMENT_COUNT } from "@/lib/business-attachments/config";
 import { validateAttachment } from "@/lib/business-attachments/validation";
 import { prisma } from "@/lib/prisma";
 import { attachmentStorage } from "@/lib/storage";
+import {
+  getInvitationDeadline,
+  getInvitationReminderAt,
+} from "@/lib/invitation-config";
+import { canCreatePendingInvitation } from "@/lib/problem-workflow";
 
 export type ProblemActionState = {
   error: string | null;
@@ -291,6 +296,102 @@ export async function updateProblemAction(
   redirect(`/business/problems/${problemId}`);
 }
 
+export async function sendInvitationAction(
+  _previousState: ProblemActionState,
+  formData: FormData,
+): Promise<ProblemActionState> {
+  const problemId = getText(formData, "problemId");
+  const applicationId = getText(formData, "applicationId");
+  try {
+    const { businessProfileId } = await getBusinessContext();
+    await prisma.$transaction(async (transaction) => {
+      const problem = await transaction.problem.findFirst({
+        where: {
+          id: problemId,
+          businessProfileId,
+          status: { in: ["APPROVED", "PUBLISHED"] },
+        },
+        select: { id: true, title: true },
+      });
+      if (!problem) {
+        throw new Error("Chỉ có thể mời nhóm cho bài toán đã được duyệt.");
+      }
+
+      const activeInvitation = await transaction.applicationInvitation.findFirst({
+        where: { problemId, status: "PENDING_CONFIRMATION" },
+        select: { id: true },
+      });
+      if (!canCreatePendingInvitation(activeInvitation ? 1 : 0)) {
+        throw new Error("Bài toán này đã có lời mời hợp tác đang chờ phản hồi.");
+      }
+
+      const application = await transaction.application.findFirst({
+        where: { id: applicationId, problemId, status: { in: ["SUBMITTED", "PENDING_CONFIRMATION"] } },
+        select: {
+          id: true,
+          status: true,
+          team: {
+            select: {
+              id: true,
+              ownerId: true,
+              memberships: {
+                select: { studentProfile: { select: { userId: true } } },
+              },
+            },
+          },
+        },
+      });
+      if (!application) {
+        throw new Error("Hồ sơ ứng tuyển không còn khả dụng để mời hợp tác.");
+      }
+
+      const now = new Date();
+      const expiresAt = getInvitationDeadline(now);
+      const reminderAt = getInvitationReminderAt(now);
+      await transaction.application.update({
+        where: { id: application.id },
+        data: { status: "PENDING_CONFIRMATION" },
+      });
+      await transaction.applicationInvitation.create({
+        data: {
+          applicationId: application.id,
+          problemId: problem.id,
+          teamId: application.team.id,
+          invitedByBusinessProfileId: businessProfileId,
+          status: "PENDING_CONFIRMATION",
+          expiresAt,
+          reminderAt,
+          responseStatus: "PENDING_CONFIRMATION",
+        },
+      });
+      const studentUserIds = [
+        application.team.ownerId,
+        ...application.team.memberships.map(({ studentProfile }) => studentProfile?.userId),
+      ].filter((userId): userId is string => Boolean(userId));
+      await transaction.notification.createMany({
+        data: [...new Set(studentUserIds)].map((userId) => ({
+          userId,
+          title: "Bạn nhận được lời mời hợp tác mới",
+          message: `Doanh nghiệp đã gửi lời mời hợp tác cho bài toán “${problem.title}”.`,
+          href: `/student/problems/${problem.id}#application-response`,
+        })),
+      });
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      return { error: error.message };
+    }
+    console.error("Gửi lời mời thất bại:", error);
+    return { error: "Không thể gửi lời mời hợp tác. Vui lòng thử lại." };
+  }
+
+  revalidatePath(`/business/problems/${problemId}`);
+  revalidatePath(`/business/problems/${problemId}/applications`);
+  revalidatePath("/student/applications");
+  revalidatePath(`/student/problems/${problemId}`);
+  return { error: null };
+}
+
 export async function selectTeamAction(
   _previousState: ProblemActionState,
   formData: FormData,
@@ -313,7 +414,7 @@ export async function selectTeamAction(
       }
 
       const selected = await transaction.application.findFirst({
-        where: { id: applicationId, problemId, status: "SUBMITTED" },
+        where: { id: applicationId, problemId, status: "PENDING_CONFIRMATION" },
         select: {
           id: true,
           team: {
@@ -327,7 +428,7 @@ export async function selectTeamAction(
         },
       });
       if (!selected) {
-        throw new Error("Hồ sơ ứng tuyển không còn khả dụng.");
+        throw new Error("Chỉ có thể chọn nhóm sau khi nhóm đã đồng ý lời mời.");
       }
 
       await transaction.problem.update({
@@ -335,8 +436,8 @@ export async function selectTeamAction(
         data: { status: "TEAM_SELECTED" },
       });
       await transaction.application.updateMany({
-        where: { problemId, id: { not: applicationId }, status: "SUBMITTED" },
-        data: { status: "REJECTED" },
+        where: { problemId, id: { not: applicationId }, status: { in: ["SUBMITTED", "PENDING_CONFIRMATION"] } },
+        data: { status: "NOT_SELECTED" },
       });
       await transaction.application.update({
         where: { id: applicationId },
@@ -368,4 +469,34 @@ export async function selectTeamAction(
   revalidatePath("/student/applications");
   revalidatePath(`/student/problems/${problemId}`);
   redirect(`/business/problems/${problemId}/workspace`);
+}
+
+export async function updateApplicationReviewAction(
+  _previousState: ProblemActionState,
+  formData: FormData,
+): Promise<ProblemActionState> {
+  const applicationId = getText(formData, "applicationId");
+  const problemId = getText(formData, "problemId");
+  const note = getText(formData, "businessReviewNote");
+  try {
+    const { businessProfileId } = await getBusinessContext();
+    await prisma.application.updateMany({
+      where: {
+        id: applicationId,
+        problemId,
+        problem: { businessProfileId },
+        status: { notIn: ["WITHDRAWN"] },
+      },
+      data: {
+        needsReview: formData.get("needsReview") === "on",
+        businessReviewNote: note || null,
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error) return { error: error.message };
+    console.error("Cập nhật ghi chú hồ sơ thất bại:", error);
+    return { error: "Không thể cập nhật ghi chú hồ sơ. Vui lòng thử lại." };
+  }
+  revalidatePath(`/business/problems/${problemId}/applications`);
+  return { error: null };
 }

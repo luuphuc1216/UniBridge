@@ -84,6 +84,14 @@ export function ApplicationForm({
           />
         </label>
       </div>
+      <label className="grid gap-2 text-sm font-medium">
+        Liên kết tham khảo (tối đa 3, mỗi liên kết một dòng)
+        <textarea
+          className="min-h-20 rounded-xl border border-border bg-background px-3 py-2.5 font-normal"
+          name="approachLinks"
+          placeholder="https://..."
+        />
+      </label>
       <button
         className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60 sm:w-auto"
         disabled={isPending}

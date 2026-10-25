@@ -66,6 +66,7 @@ export type WorkspaceViewData = {
     goal: string;
     companyName: string;
     teamName: string;
+    applicationId: string;
   };
   messages: {
     id: string;
@@ -148,7 +149,13 @@ function StartWorkspaceForm({ problemId }: { problemId: string }) {
   );
 }
 
-function MessageForm({ problemId }: { problemId: string }) {
+function MessageForm({
+  problemId,
+  applicationId,
+}: {
+  problemId: string;
+  applicationId: string;
+}) {
   const [state, action, pending] = useActionState<WorkspaceActionState, FormData>(
     sendWorkspaceMessageAction,
     { error: null },
@@ -156,6 +163,7 @@ function MessageForm({ problemId }: { problemId: string }) {
   return (
     <form action={action} className="mt-4">
       <input name="problemId" type="hidden" value={problemId} />
+      <input name="applicationId" type="hidden" value={applicationId} />
       <label className="sr-only" htmlFor="workspace-message">Tin nhắn mới</label>
       <textarea
         className="min-h-24 w-full rounded-xl border border-border bg-background p-3 text-sm"
@@ -444,7 +452,12 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
               </li>
             )}
           </ol>
-          {!readonly && <MessageForm problemId={problem.id} />}
+          {!readonly && (
+            <MessageForm
+              applicationId={problem.applicationId}
+              problemId={problem.id}
+            />
+          )}
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">

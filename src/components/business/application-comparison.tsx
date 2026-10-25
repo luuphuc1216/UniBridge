@@ -2,8 +2,16 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { selectTeamAction, type ProblemActionState } from "@/app/business/problems/actions";
+import {
+  sendInvitationAction,
+  updateApplicationReviewAction,
+  type ProblemActionState,
+} from "@/app/business/problems/actions";
 import type { TeamReputation } from "@/lib/reputation";
+import {
+  formatInvitationExpiry,
+  getApplicationStatusDisplay,
+} from "@/lib/application-status";
 
 type ApplicationCardData = {
   id: string;
@@ -17,6 +25,14 @@ type ApplicationCardData = {
   estimatedDuration: string;
   proposedBudget: number | null;
   status: string;
+  needsReview: boolean;
+  businessReviewNote: string | null;
+  invitation: {
+    expiresAt: Date;
+    status: string;
+    responseReason: string | null;
+  } | null;
+  approachLinks: unknown;
   team: {
     id: string;
     name: string;
@@ -38,6 +54,7 @@ type ApplicationComparisonProps = {
   applications: ApplicationCardData[];
   problemSkills: string[];
   problemStatus: string;
+  hasPendingInvitation: boolean;
 };
 
 function formatCurrency(amount: number | null): string {
@@ -53,14 +70,16 @@ function formatCurrency(amount: number | null): string {
 function SelectTeamForm({
   problemId,
   applicationId,
+  disabled = false,
 }: {
   problemId: string;
   applicationId: string;
+  disabled?: boolean;
 }) {
   const [state, formAction, isPending] = useActionState<
     ProblemActionState,
     FormData
-  >(selectTeamAction, { error: null });
+  >(sendInvitationAction, { error: null });
 
   return (
     <form action={formAction} className="mt-5 border-t border-border pt-4">
@@ -73,10 +92,38 @@ function SelectTeamForm({
       )}
       <button
         className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
-        disabled={isPending}
+        disabled={isPending || disabled}
         type="submit"
       >
-        {isPending ? "Đang chọn..." : "Chọn nhóm"}
+        {isPending ? "Đang gửi..." : "Gửi lời mời hợp tác"}
+      </button>
+    </form>
+  );
+}
+
+function ReviewForm({ problemId, application }: { problemId: string; application: ApplicationCardData }) {
+  const [state, formAction, isPending] = useActionState<
+    ProblemActionState,
+    FormData
+  >(updateApplicationReviewAction, { error: null });
+  return (
+    <form action={formAction} className="mt-4 border-t border-border pt-4">
+      <input name="problemId" type="hidden" value={problemId} />
+      <input name="applicationId" type="hidden" value={application.id} />
+      <label className="flex items-center gap-2 text-sm">
+        <input defaultChecked={application.needsReview} name="needsReview" type="checkbox" />
+        Đánh dấu cần xem xét
+      </label>
+      <textarea
+        className="mt-3 min-h-20 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+        defaultValue={application.businessReviewNote ?? ""}
+        maxLength={2000}
+        name="businessReviewNote"
+        placeholder="Ghi chú nội bộ về hồ sơ"
+      />
+      {state.error && <p className="mt-2 text-sm text-destructive">{state.error}</p>}
+      <button className="mt-3 rounded-lg border border-border px-3 py-2 text-sm font-semibold" disabled={isPending} type="submit">
+        Lưu ghi chú
       </button>
     </form>
   );
@@ -87,6 +134,7 @@ export function ApplicationComparison({
   applications,
   problemSkills,
   problemStatus,
+  hasPendingInvitation,
 }: ApplicationComparisonProps) {
   const canSelect = ["APPROVED", "PUBLISHED"].includes(problemStatus);
 
@@ -116,6 +164,17 @@ export function ApplicationComparison({
           ["Nguồn lực cần thiết", application.resources],
         ];
         const hasStructuredApproach = approachDetails.some(([, value]) => value);
+        const statusDisplay = getApplicationStatusDisplay(application.status);
+        const hasPendingApplicationInvitation =
+          application.status === "PENDING_CONFIRMATION" &&
+          application.invitation?.status === "PENDING_CONFIRMATION";
+        const canInvite =
+          canSelect &&
+          application.status === "SUBMITTED" &&
+          !hasPendingInvitation;
+        const canOpenChat = ["PENDING_CONFIRMATION", "SELECTED"].includes(
+          application.status,
+        );
         return (
           <article
             className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6"
@@ -131,17 +190,30 @@ export function ApplicationComparison({
                 <p className="mt-1 text-sm text-muted-foreground">
                   {application.team.university}
                 </p>
-                {application.status !== "SUBMITTED" && (
-                  <span
-                    className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                      application.status === "SELECTED"
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-rose-100 text-rose-800"
-                    }`}
-                  >
-                    {application.status === "SELECTED" ? "Đã được chọn" : "Đã từ chối"}
-                  </span>
+                <span
+                  className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                    statusDisplay.tone === "success"
+                      ? "bg-emerald-100 text-emerald-800"
+                      : statusDisplay.tone === "danger"
+                        ? "bg-rose-100 text-rose-800"
+                        : statusDisplay.tone === "pending"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {statusDisplay.label}
+                </span>
+                {hasPendingApplicationInvitation && application.invitation && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    {formatInvitationExpiry(application.invitation.expiresAt)}
+                  </p>
                 )}
+                {["DECLINED", "EXPIRED", "NOT_SELECTED"].includes(application.status) &&
+                  application.invitation?.responseReason && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Lý do: {application.invitation.responseReason}
+                    </p>
+                  )}
               </div>
               {application.team.reputation && (
                 <div className="rounded-xl bg-primary/10 px-3 py-2 text-right text-sm font-semibold text-primary">
@@ -278,15 +350,44 @@ export function ApplicationComparison({
                 </p>
               )}
             </section>
-            {canSelect && application.status === "SUBMITTED" ? (
+            {Array.isArray(application.approachLinks) && application.approachLinks.length > 0 && (
+              <section className="mt-5 rounded-xl border border-border p-4">
+                <h3 className="text-sm font-semibold">Liên kết tham khảo</h3>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                  {application.approachLinks.map((link) =>
+                    typeof link === "string" ? (
+                      <li key={link}><a className="text-primary hover:underline" href={link} rel="noreferrer" target="_blank">{link}</a></li>
+                    ) : null,
+                  )}
+                </ul>
+              </section>
+            )}
+            {canInvite ? (
               <SelectTeamForm
                 applicationId={application.id}
                 problemId={problemId}
               />
+            ) : hasPendingApplicationInvitation ? (
+              <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Đang chờ nhóm xác nhận hợp tác trước hạn trên.
+              </p>
+            ) : canSelect && application.status === "SUBMITTED" && hasPendingInvitation ? (
+              <p className="mt-4 rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+                Bài toán đang có một lời mời chờ xác nhận. Bạn chỉ có thể mời nhóm khác sau khi lời mời này được từ chối hoặc hết hạn.
+              </p>
             ) : (
               <p className="mt-4 rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
                 Bài toán đã chọn nhóm hoặc không còn nhận lựa chọn.
               </p>
+            )}
+            <ReviewForm problemId={problemId} application={application} />
+            {canOpenChat && (
+              <Link
+                className="mt-3 inline-flex rounded-lg border border-primary px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/5"
+                href={`/business/problems/${problemId}/workspace?applicationId=${application.id}`}
+              >
+                Mở chat
+              </Link>
             )}
           </article>
         );
