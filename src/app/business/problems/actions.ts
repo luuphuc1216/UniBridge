@@ -13,9 +13,11 @@ import {
   getInvitationReminderAt,
 } from "@/lib/invitation-config";
 import { canCreatePendingInvitation } from "@/lib/problem-workflow";
+import { submitProblemForReview } from "@/lib/post-credits";
 
 export type ProblemActionState = {
   error: string | null;
+  actionHref?: string;
 };
 
 function getText(formData: FormData, key: string): string {
@@ -154,16 +156,12 @@ export async function createProblemAction(
     const fields = validateProblemFields(formData);
     const files = getUploadedFiles(formData);
     stored = await validateAndStoreFiles(files, 0);
-    const intent = getText(formData, "intent");
-    const status = intent === "submit" ? "PENDING_REVIEW" : "DRAFT";
-
     const problem = await prisma.problem.create({
       data: {
         ...fields,
         businessProfileId,
         slug: makeSlug(fields.title),
-        status,
-        submittedAt: status === "PENDING_REVIEW" ? new Date() : null,
+        status: "DRAFT",
         attachments: {
           create: stored,
         },
@@ -171,6 +169,18 @@ export async function createProblemAction(
       select: { id: true },
     });
     problemId = problem.id;
+    if (getText(formData, "intent") === "submit") {
+      const result = await prisma.$transaction((transaction) =>
+        submitProblemForReview(transaction, { businessProfileId, problemId }),
+      );
+      if (result.status === "no_credits") {
+        return {
+          error:
+            "Bài toán đã được lưu thành bản nháp nhưng bạn đã hết lượt đăng. Hãy mua thêm lượt rồi gửi lại.",
+          actionHref: `/business/problems/${problemId}/edit`,
+        };
+      }
+    }
   } catch (error) {
     await Promise.all(
       stored.map(async ({ storageKey }) => {
@@ -202,9 +212,11 @@ export async function updateProblemAction(
     .getAll("deletedAttachmentIds")
     .filter((value): value is string => typeof value === "string");
   let removedStorageKeys: string[] = [];
+  let businessProfileId = "";
+  const shouldSubmit = getText(formData, "intent") === "submit";
 
   try {
-    const { businessProfileId } = await getBusinessContext();
+    ({ businessProfileId } = await getBusinessContext());
     const problem = await prisma.problem.findFirst({
       where: {
         id: problemId,
@@ -233,22 +245,11 @@ export async function updateProblemAction(
     });
     stored = await validateAndStoreFiles(getUploadedFiles(formData), currentCount);
 
-    const shouldSubmit = getText(formData, "intent") === "submit";
-    const nextStatus = shouldSubmit ? "PENDING_REVIEW" : problem.status;
     await prisma.$transaction(async (transaction) => {
       await transaction.problem.update({
         where: { id: problemId },
         data: {
           ...fields,
-          status: nextStatus,
-          ...(shouldSubmit
-            ? {
-                reviewNote: null,
-                reviewedById: null,
-                approvedAt: null,
-                submittedAt: new Date(),
-              }
-            : {}),
           attachments: { create: stored },
         },
       });
@@ -267,6 +268,7 @@ export async function updateProblemAction(
         } catch (cleanupError) {
           console.error("Không thể dọn tệp upload sau lỗi cập nhật Problem:", cleanupError);
         }
+
       }),
     );
     if (error instanceof Error) {
@@ -274,6 +276,19 @@ export async function updateProblemAction(
     }
     console.error("Cập nhật Problem thất bại:", error);
     return { error: "Không thể cập nhật bài toán. Vui lòng thử lại." };
+  }
+
+  if (shouldSubmit) {
+    const result = await prisma.$transaction((transaction) =>
+      submitProblemForReview(transaction, { businessProfileId, problemId }),
+    );
+    if (result.status === "no_credits") {
+      return {
+        error:
+          "Bài toán đã được lưu thành bản nháp nhưng bạn đã hết lượt đăng. Hãy mua thêm lượt rồi gửi lại.",
+        actionHref: `/business/problems/${problemId}/edit`,
+      };
+    }
   }
 
   const cleanupErrors: unknown[] = [];

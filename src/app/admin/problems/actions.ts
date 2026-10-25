@@ -9,6 +9,7 @@ import {
   isValidProblemReviewNote,
   PROBLEM_REVIEWABLE_STATUS,
 } from "@/lib/problem-workflow";
+import { refundProblemCredit } from "@/lib/post-credits";
 
 export type ReviewActionState = {
   error: string | null;
@@ -65,6 +66,8 @@ export async function reviewProblemAction(
         select: {
           id: true,
           title: true,
+          firstApprovedAt: true,
+          consumedCreditId: true,
           businessProfile: { select: { userId: true } },
         },
       });
@@ -80,10 +83,15 @@ export async function reviewProblemAction(
           reviewedById: session.user.id,
           reviewNote: approved ? null : reviewNote,
           approvedAt: approved ? now : null,
+          ...(approved && !problem.firstApprovedAt ? { firstApprovedAt: now } : {}),
         },
       });
       if (result.count !== 1) {
         return false;
+      }
+
+      if (rejected && !problem.firstApprovedAt && problem.consumedCreditId) {
+        await refundProblemCredit(transaction, { problemId: problem.id });
       }
 
       await transaction.notification.create({

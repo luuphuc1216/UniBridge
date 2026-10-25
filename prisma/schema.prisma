@@ -26,21 +26,25 @@ model User {
   problemSearches      SearchLog[]
   workspaceMessages    WorkspaceMessage[]
   milestoneSubmissions MilestoneSubmission[]
+  platformCharges      PlatformCharge[]      @relation("PlatformChargeBuyer")
 }
 
 model BusinessProfile {
-  id          String               @id @default(cuid())
-  userId      String               @unique
-  companyName String
-  industry    String
-  website     String?
-  description String
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
-  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  problems    Problem[]
-  invitations ApplicationInvitation[] @relation("BusinessInvitations")
-  reviews     Review[]             @relation("ReviewedBusiness")
+  id              String                  @id @default(cuid())
+  userId          String                  @unique
+  companyName     String
+  industry        String
+  website         String?
+  description     String
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problems        Problem[]
+  invitations     ApplicationInvitation[] @relation("BusinessInvitations")
+  reviews         Review[]                @relation("ReviewedBusiness")
+  postCredits     PostCredit[]
+  subscriptions   Subscription[]
+  platformCharges PlatformCharge[]
 }
 
 model StudentProfile {
@@ -55,27 +59,27 @@ model StudentProfile {
 }
 
 model StudentTeam {
-  id               String           @id @default(cuid())
-  ownerId          String?          @unique
+  id               String                  @id @default(cuid())
+  ownerId          String?                 @unique
   name             String
-  slug             String           @unique
+  slug             String                  @unique
   university       String
   description      String
-  experience       String           @default("")
-  relevantProducts String           @default("")
-  achievements     String           @default("")
-  interests        String           @default("")
-  ratingAverage    Float            @default(0)
-  ratingCount      Int              @default(0)
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  owner            User?            @relation("StudentTeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  experience       String                  @default("")
+  relevantProducts String                  @default("")
+  achievements     String                  @default("")
+  interests        String                  @default("")
+  ratingAverage    Float                   @default(0)
+  ratingCount      Int                     @default(0)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  owner            User?                   @relation("StudentTeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   memberships      TeamMembership[]
   skills           TeamSkill[]
   applications     Application[]
-  invitations     ApplicationInvitation[]
+  invitations      ApplicationInvitation[]
   projects         Project[]
-  reviews          Review[]         @relation("ReviewedTeam")
+  reviews          Review[]                @relation("ReviewedTeam")
 }
 
 model TeamMembership {
@@ -110,11 +114,11 @@ model TeamSkill {
 }
 
 model Problem {
-  id                String              @id @default(cuid())
+  id                String                  @id @default(cuid())
   businessProfileId String
   reviewedById      String?
   title             String
-  slug              String              @unique
+  slug              String                  @unique
   description       String
   goal              String
   field             String
@@ -122,24 +126,73 @@ model Problem {
   expectedDuration  String
   budgetMin         Int?
   budgetMax         Int?
-  status            String              @default("PENDING_REVIEW")
+  status            String                  @default("PENDING_REVIEW")
   reviewNote        String?
   submittedAt       DateTime?
   approvedAt        DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  businessProfile   BusinessProfile     @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
-  reviewer          User?               @relation("ProblemReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  firstApprovedAt   DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  businessProfile   BusinessProfile         @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+  reviewer          User?                   @relation("ProblemReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   skills            ProblemSkill[]
   applications      Application[]
   attachments       ProblemAttachment[]
   workspaceMessages WorkspaceMessage[]
   savedBy           SavedProblem[]
   viewLogs          ViewLog[]
-  invitations      ApplicationInvitation[]
+  invitations       ApplicationInvitation[]
+  consumedCreditId  String?                 @unique
+  creditRefundedAt  DateTime?
+  consumedCredit    PostCredit?             @relation(fields: [consumedCreditId], references: [id])
 
   @@index([status, field])
   @@index([businessProfileId])
+}
+
+model PostCredit {
+  id                String          @id @default(cuid())
+  businessProfileId String
+  source            String
+  remaining         Int
+  expiresAt         DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  businessProfile   BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+  consumedProblem   Problem?
+
+  @@index([businessProfileId, source, expiresAt])
+}
+
+model Subscription {
+  id                String          @id @default(cuid())
+  businessProfileId String
+  package           String
+  startsAt          DateTime
+  endsAt            DateTime
+  status            String          @default("ACTIVE")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  businessProfile   BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([businessProfileId, package])
+  @@index([businessProfileId, status, endsAt])
+}
+
+model PlatformCharge {
+  id                String          @id @default(cuid())
+  businessProfileId String
+  buyerId           String
+  type              String
+  amount            Int
+  units             Int
+  idempotencyKey    String          @unique
+  createdAt         DateTime        @default(now())
+  businessProfile   BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+  buyer             User            @relation("PlatformChargeBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+
+  @@index([businessProfileId, createdAt])
+  @@index([type, createdAt])
 }
 
 model ProblemAttachment {
@@ -165,58 +218,58 @@ model ProblemSkill {
 }
 
 model Application {
-  id                       String                 @id @default(cuid())
-  problemId                String
-  teamId                   String
-  approach                 String
-  problemUnderstanding     String                 @default("")
-  solutionDirection        String                 @default("")
-  methodology              String                 @default("")
-  keySteps                 String                 @default("")
-  tools                    String                 @default("")
-  resources                String                 @default("")
-  estimatedDuration        String
-  proposedBudget           Int?
-  status                   String                 @default("SUBMITTED")
-  submittedAt              DateTime               @default(now())
-  updatedAt                DateTime               @updatedAt
-  profileSnapshot          Json?
-  profileSnapshotVersion   Int                    @default(1)
-  approachLinks            Json?
-  needsReview              Boolean                @default(false)
-  businessReviewNote       String?
-  problem                  Problem                @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  team                     StudentTeam            @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  invitations             ApplicationInvitation[]
-  solutionProposal         SolutionProposal?
-  proposals                Proposal[]
-  project                  Project?
-  workspaceMessages        WorkspaceMessage[]
+  id                     String                  @id @default(cuid())
+  problemId              String
+  teamId                 String
+  approach               String
+  problemUnderstanding   String                  @default("")
+  solutionDirection      String                  @default("")
+  methodology            String                  @default("")
+  keySteps               String                  @default("")
+  tools                  String                  @default("")
+  resources              String                  @default("")
+  estimatedDuration      String
+  proposedBudget         Int?
+  status                 String                  @default("SUBMITTED")
+  submittedAt            DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  profileSnapshot        Json?
+  profileSnapshotVersion Int                     @default(1)
+  approachLinks          Json?
+  needsReview            Boolean                 @default(false)
+  businessReviewNote     String?
+  problem                Problem                 @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  team                   StudentTeam             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  invitations            ApplicationInvitation[]
+  solutionProposal       SolutionProposal?
+  proposals              Proposal[]
+  project                Project?
+  workspaceMessages      WorkspaceMessage[]
 
   @@unique([problemId, teamId])
   @@index([status])
 }
 
 model ApplicationInvitation {
-  id                        String        @id @default(cuid())
-  applicationId             String
-  problemId                 String
-  teamId                    String
+  id                         String          @id @default(cuid())
+  applicationId              String
+  problemId                  String
+  teamId                     String
   invitedByBusinessProfileId String
-  status                    String        @default("PENDING_CONFIRMATION")
-  expiresAt                 DateTime
-  reminderAt                DateTime?
-  reminderSentAt            DateTime?
-  invitedAt                 DateTime      @default(now())
-  respondedAt               DateTime?
-  responseStatus            String?
-  responseReason            String?
-  createdAt                 DateTime      @default(now())
-  updatedAt                 DateTime      @updatedAt
-  application               Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  problem                   Problem       @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  team                      StudentTeam   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  invitedByBusinessProfile  BusinessProfile @relation("BusinessInvitations", fields: [invitedByBusinessProfileId], references: [id], onDelete: Restrict)
+  status                     String          @default("PENDING_CONFIRMATION")
+  expiresAt                  DateTime
+  reminderAt                 DateTime?
+  reminderSentAt             DateTime?
+  invitedAt                  DateTime        @default(now())
+  respondedAt                DateTime?
+  responseStatus             String?
+  responseReason             String?
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+  application                Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  problem                    Problem         @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  team                       StudentTeam     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  invitedByBusinessProfile   BusinessProfile @relation("BusinessInvitations", fields: [invitedByBusinessProfileId], references: [id], onDelete: Restrict)
 
   @@index([problemId, status, expiresAt])
   @@index([applicationId, status])
@@ -301,15 +354,15 @@ model ProposalFile {
 }
 
 model WorkspaceMessage {
-  id        String   @id @default(cuid())
-  problemId String
+  id            String       @id @default(cuid())
+  problemId     String
   applicationId String?
-  senderId  String
-  content   String
-  createdAt DateTime @default(now())
-  problem   Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  application Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
-  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  senderId      String
+  content       String
+  createdAt     DateTime     @default(now())
+  problem       Problem      @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  sender        User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([problemId, createdAt])
   @@index([applicationId, createdAt])
@@ -465,6 +518,7 @@ model Notification {
   href      String
   readAt    DateTime?
   createdAt DateTime  @default(now())
+  dedupeKey String?          @unique
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])

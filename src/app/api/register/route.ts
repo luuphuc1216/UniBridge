@@ -2,6 +2,7 @@ import { hash } from "bcryptjs";
 import { NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { ensureFreePostCredits } from "@/lib/post-credits";
 import type { SelfRegistrationRole } from "@/lib/roles";
 
 type RegistrationInput = {
@@ -88,9 +89,10 @@ export async function POST(request: Request) {
       });
 
       if (registrationRole === "BUSINESS") {
-        await transaction.businessProfile.create({
+        const profile = await transaction.businessProfile.create({
           data: { userId: createdUser.id, companyName, industry, description },
         });
+        await ensureFreePostCredits(transaction, profile.id);
       } else {
         await transaction.studentProfile.create({
           data: { userId: createdUser.id, major, university },

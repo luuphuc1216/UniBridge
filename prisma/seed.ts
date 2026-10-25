@@ -9,6 +9,7 @@ import {
 } from "../src/lib/project-config";
 import { calculateProjectFinancialBreakdown } from "../src/lib/project-money";
 import { attachmentStorage } from "../src/lib/storage";
+import { BUSINESS_POST_CONFIG, POST_CREDIT_SOURCES, PLATFORM_CHARGE_TYPES } from "../src/lib/business-post-config";
 
 function getRequiredEnvironmentVariable(name: string): string {
   const value = process.env[name];
@@ -115,6 +116,38 @@ const businesses = [
     industry: "Du lịch và dịch vụ",
     website: "https://dulichmo.example",
     description: "Đơn vị du lịch cộng đồng kết nối du khách với trải nghiệm địa phương.",
+  },
+  {
+    email: "business-credit-empty@unibridge.local",
+    name: "Demo Hết lượt",
+    companyName: "Doanh nghiệp Demo Hết lượt",
+    industry: "Dịch vụ",
+    website: "https://empty.example",
+    description: "Tài khoản demo đã sử dụng hết hai lượt FREE.",
+  },
+  {
+    email: "business-premium@unibridge.local",
+    name: "Demo Premium",
+    companyName: "Doanh nghiệp Demo Premium",
+    industry: "Công nghệ",
+    website: "https://premium.example",
+    description: "Tài khoản demo có Premium còn hạn.",
+  },
+  {
+    email: "business-premium-expiring@unibridge.local",
+    name: "Demo Premium sắp hết hạn",
+    companyName: "Doanh nghiệp Demo Premium sắp hết hạn",
+    industry: "Bán lẻ",
+    website: "https://expiring.example",
+    description: "Tài khoản demo có Premium còn khoảng năm ngày.",
+  },
+  {
+    email: "business-one-credit@unibridge.local",
+    name: "Demo còn một lượt",
+    companyName: "Doanh nghiệp Demo còn một lượt",
+    industry: "Giáo dục",
+    website: "https://one-credit.example",
+    description: "Tài khoản demo còn đúng một lượt đăng.",
   },
 ];
 
@@ -687,6 +720,130 @@ async function main() {
       },
     });
     businessProfiles.push(profile);
+  }
+
+  for (const profile of businessProfiles.slice(0, 3)) {
+    const freeCredit = await prisma.postCredit.findFirst({
+      where: { businessProfileId: profile.id, source: POST_CREDIT_SOURCES.FREE },
+    });
+    if (!freeCredit) {
+      await prisma.postCredit.create({
+        data: {
+          businessProfileId: profile.id,
+          source: POST_CREDIT_SOURCES.FREE,
+          remaining: BUSINESS_POST_CONFIG.freePostCredits,
+        },
+      });
+    }
+  }
+
+  // Demo quota accounts: create missing records only, preserving manual changes on reruns.
+  const emptyProfile = businessProfiles[3];
+  const premiumProfile = businessProfiles[4];
+  const expiringProfile = businessProfiles[5];
+  const oneCreditProfile = businessProfiles[6];
+  if (!emptyProfile || !premiumProfile || !expiringProfile || !oneCreditProfile) {
+    throw new Error("Thiếu hồ sơ doanh nghiệp demo hạn mức.");
+  }
+  for (const index of [1, 2]) {
+    const creditKey = `seed-empty-free-${index}`;
+    const emptyCreditRecord =
+      (await prisma.postCredit.findUnique({ where: { id: creditKey } })) ??
+      (await prisma.postCredit.create({
+        data: {
+          id: creditKey,
+          businessProfileId: emptyProfile.id,
+          source: POST_CREDIT_SOURCES.FREE,
+          remaining: 0,
+        },
+      }));
+    await prisma.problem.upsert({
+      where: { slug: `demo-empty-credit-${index}` },
+      update: { consumedCreditId: emptyCreditRecord.id, status: "APPROVED" },
+      create: {
+        businessProfileId: emptyProfile.id,
+        title: `Bài toán demo đã dùng lượt ${index}`,
+        slug: `demo-empty-credit-${index}`,
+        description: "Bài toán demo để kiểm tra tài khoản đã hết lượt.",
+        goal: "Minh họa lịch sử sử dụng credit.",
+        field: "Dịch vụ",
+        requirements: "Không có yêu cầu đặc biệt.",
+        expectedDuration: "1 tuần",
+        status: "APPROVED",
+        consumedCreditId: emptyCreditRecord.id,
+        approvedAt: new Date(),
+        firstApprovedAt: new Date(),
+      },
+    });
+  }
+  const now = new Date();
+  const premiumEndsAt = new Date(now);
+  premiumEndsAt.setDate(premiumEndsAt.getDate() + 90);
+  const expiringEndsAt = new Date(now);
+  expiringEndsAt.setDate(expiringEndsAt.getDate() + 5);
+  for (const [profile, endsAt] of [
+    [premiumProfile, premiumEndsAt],
+    [expiringProfile, expiringEndsAt],
+  ] as const) {
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: profile.userId },
+      select: { id: true },
+    });
+    const subscription = await prisma.subscription.findUnique({
+      where: { businessProfileId_package: { businessProfileId: profile.id, package: "PREMIUM" } },
+    });
+    if (!subscription) {
+      await prisma.subscription.create({
+        data: {
+          businessProfileId: profile.id,
+          package: "PREMIUM",
+          startsAt: now,
+          endsAt,
+          status: "ACTIVE",
+        },
+      });
+    }
+    const premiumCredit = await prisma.postCredit.findFirst({
+      where: { businessProfileId: profile.id, source: POST_CREDIT_SOURCES.PREMIUM },
+    });
+    if (!premiumCredit) {
+      await prisma.postCredit.create({
+        data: {
+          businessProfileId: profile.id,
+          source: POST_CREDIT_SOURCES.PREMIUM,
+          remaining: BUSINESS_POST_CONFIG.premiumPostCredits,
+          expiresAt: endsAt,
+        },
+      });
+    }
+    const chargeKey = `seed-premium-${profile.id}`;
+    const charge = await prisma.platformCharge.findUnique({
+      where: { idempotencyKey: chargeKey },
+    });
+    if (!charge) {
+      await prisma.platformCharge.create({
+        data: {
+          businessProfileId: profile.id,
+          buyerId: user.id,
+          type: PLATFORM_CHARGE_TYPES.PREMIUM,
+          amount: BUSINESS_POST_CONFIG.premiumPriceVnd,
+          units: 1,
+          idempotencyKey: chargeKey,
+        },
+      });
+    }
+  }
+  const oneCredit = await prisma.postCredit.findFirst({
+    where: { businessProfileId: oneCreditProfile.id, source: POST_CREDIT_SOURCES.FREE },
+  });
+  if (!oneCredit) {
+    await prisma.postCredit.create({
+      data: {
+        businessProfileId: oneCreditProfile.id,
+        source: POST_CREDIT_SOURCES.FREE,
+        remaining: 1,
+      },
+    });
   }
 
   const skillIds = new Map<string, string>();

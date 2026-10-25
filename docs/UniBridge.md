@@ -383,6 +383,8 @@ Mô hình doanh thu của nền tảng được xây dựng theo hướng giảm
 
 Nguồn doanh thu của nền tảng được chia thành nguồn doanh thu cốt lõi, nguồn doanh thu bổ sung và nguồn doanh thu mở rộng trong tương lai. Trong đó, phí hoa hồng từ các dự án triển khai thực tế được xác định là nguồn doanh thu chính.
 
+**Ghi chú MVP:** Lượt đăng bài gồm 2 lượt miễn phí trọn đời và lượt mua lẻ 99.000 đ/lượt. Gói Premium có giá 699.000 đ/quý, tặng 10 lượt trong 3 tháng và thanh toán được mô phỏng, không phát sinh giao dịch thật. Với dự án 10.000.000 đ, doanh nghiệp trả 11.000.000 đ (cộng 10%), nhóm nhận 9.500.000 đ (trừ 5%), nền tảng thu 1.500.000 đ. Ví dụ cũ 8.500.000 đ chỉ là minh họa theo cách chia trước đây.
+
 ### 1. Phí hoa hồng từ dự án triển khai thực tế – Nguồn doanh thu cốt lõi
 
 Nguồn doanh thu chính của nền tảng đến từ các dự án được doanh nghiệp quyết định triển khai sau khi đã đánh giá giải pháp ban đầu của nhóm sinh viên.

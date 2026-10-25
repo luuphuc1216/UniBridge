@@ -286,6 +286,18 @@ export function ProblemForm({
           role="alert"
         >
           {clientError || state.error}
+          {!clientError && state.actionHref && (
+            <>
+              {" "}
+              <Link className="font-semibold underline" href="/business/credits">
+                Mua thêm lượt
+              </Link>
+              {" · "}
+              <Link className="font-semibold underline" href={state.actionHref}>
+                Mở bản nháp
+              </Link>
+            </>
+          )}
         </p>
       )}
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
