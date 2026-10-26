@@ -186,6 +186,9 @@ model PlatformCharge {
   type              String
   amount            Int
   units             Int
+  quantity          Int?
+  periodStartsAt    DateTime?
+  periodEndsAt      DateTime?
   idempotencyKey    String          @unique
   createdAt         DateTime        @default(now())
   businessProfile   BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)

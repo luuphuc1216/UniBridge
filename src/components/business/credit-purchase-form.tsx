@@ -6,16 +6,21 @@ import {
   purchasePremiumAction,
   type CreditPurchaseState,
 } from "@/app/business/credits/actions";
+import { formatVietnamDateTime } from "@/lib/date-format";
 
 const initialState: CreditPurchaseState = { error: null, success: null };
 
 export function CreditPurchaseForm({
   maxQuantity,
   postPrice,
+  activePremiumEndsAt,
+  premiumDurationMonths,
   premiumPrice,
 }: {
   maxQuantity: number;
   postPrice: number;
+  activePremiumEndsAt: string | null;
+  premiumDurationMonths: number;
   premiumPrice: number;
 }) {
   const [quantity, setQuantity] = useState(1);
@@ -37,6 +42,16 @@ export function CreditPurchaseForm({
   }
 
   function buyPremium() {
+    const now = new Date();
+    const startsAt = activePremiumEndsAt && new Date(activePremiumEndsAt) > now
+      ? new Date(activePremiumEndsAt)
+      : now;
+    const endsAt = new Date(startsAt);
+    endsAt.setMonth(endsAt.getMonth() + premiumDurationMonths);
+    const confirmation = activePremiumEndsAt && new Date(activePremiumEndsAt) > now
+      ? `Gói hiện tại hết hạn ngày ${formatVietnamDateTime(startsAt)}. Gia hạn sẽ kéo dài đến ngày ${formatVietnamDateTime(endsAt)}.`
+      : `Gói bắt đầu từ bây giờ và hết hạn ngày ${formatVietnamDateTime(endsAt)}.`;
+    if (!window.confirm(confirmation)) return;
     const data = new FormData();
     data.set("idempotencyKey", premiumKey);
     startTransition(async () => {

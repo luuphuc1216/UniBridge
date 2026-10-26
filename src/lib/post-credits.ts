@@ -328,6 +328,7 @@ export async function purchasePostCredits(
       type: PLATFORM_CHARGE_TYPES.POST_PURCHASE,
       amount,
       units: quantity,
+      quantity,
       idempotencyKey,
     },
   });
@@ -377,6 +378,9 @@ export async function purchasePremium(
       type: PLATFORM_CHARGE_TYPES.PREMIUM,
       amount: BUSINESS_POST_CONFIG.premiumPriceVnd,
       units: 1,
+      quantity: BUSINESS_POST_CONFIG.premiumPostCredits,
+      periodStartsAt: startsAt,
+      periodEndsAt: endsAt,
       idempotencyKey,
     },
   });

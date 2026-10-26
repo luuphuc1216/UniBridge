@@ -1,6 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { Prisma as PrismaNamespace } from "@/generated/prisma/client";
 import { POST_CREDIT_SOURCES } from "./business-post-config";
+import { formatVietnamDateTime } from "./date-format";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 type Transaction = Prisma.TransactionClient;
@@ -75,7 +76,7 @@ export async function ensureBusinessCreditNotifications(
           userId,
           dedupeKey: `premium-expiring-${subscription.id}-${subscription.endsAt.toISOString()}`,
           title: "Premium sắp hết hạn",
-          message: `Gói Premium của bạn sẽ hết hạn vào ${subscription.endsAt.toLocaleDateString("vi-VN")}.`,
+          message: `Gói Premium của bạn sẽ hết hạn lúc ${formatVietnamDateTime(subscription.endsAt, true)}. Gia hạn để tiếp tục nhận ưu đãi.`,
           href: "/business/credits",
         },
       });

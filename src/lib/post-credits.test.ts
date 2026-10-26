@@ -93,6 +93,9 @@ async function createTestDatabase() {
       "type" TEXT NOT NULL,
       "amount" INTEGER NOT NULL,
       "units" INTEGER NOT NULL,
+      "quantity" INTEGER,
+      "periodStartsAt" DATETIME,
+      "periodEndsAt" DATETIME,
       "idempotencyKey" TEXT NOT NULL UNIQUE,
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
@@ -383,6 +386,25 @@ describe("post credit transactions", () => {
         where: { businessProfileId_package: { businessProfileId: "business", package: "PREMIUM" } },
       });
       assert.equal(subscription.endsAt.toISOString(), "2026-05-01T00:00:00.000Z");
+      const premiumCharge = await database.prisma.platformCharge.findUniqueOrThrow({
+        where: { idempotencyKey: "premium-1" },
+      });
+      assert.equal(premiumCharge.periodStartsAt?.toISOString(), "2026-02-01T00:00:00.000Z");
+      assert.equal(premiumCharge.periodEndsAt?.toISOString(), "2026-05-01T00:00:00.000Z");
+      assert.equal(premiumCharge.quantity, BUSINESS_POST_CONFIG.premiumPostCredits);
+      const repeatedPremium = await database.prisma.$transaction((transaction) =>
+        purchasePremium(transaction, {
+          businessProfileId: "business",
+          buyerId: "buyer",
+          idempotencyKey: "premium-1",
+          clock,
+        }),
+      );
+      assert.equal(repeatedPremium.id, premiumCharge.id);
+      assert.equal(
+        await database.prisma.platformCharge.count({ where: { type: "PREMIUM" } }),
+        1,
+      );
 
       const first = await database.prisma.$transaction((transaction) =>
         purchasePostCredits(transaction, {
@@ -423,6 +445,25 @@ describe("post credit transactions", () => {
         await database.prisma.platformCharge.count({ where: { type: "POST_PURCHASE" } }),
         2,
       );
+    } finally {
+      await database.close();
+    }
+  });
+
+  it("starts a new PREMIUM period at the purchase time", async () => {
+    const database = await createTestDatabase();
+    const clock = fixedClock("2026-01-01T00:00:00.000Z");
+    try {
+      const charge = await database.prisma.$transaction((transaction) =>
+        purchasePremium(transaction, {
+          businessProfileId: "business",
+          buyerId: "buyer",
+          idempotencyKey: "premium-new",
+          clock,
+        }),
+      );
+      assert.equal(charge.periodStartsAt?.toISOString(), "2026-01-01T00:00:00.000Z");
+      assert.equal(charge.periodEndsAt?.toISOString(), "2026-04-01T00:00:00.000Z");
     } finally {
       await database.close();
     }

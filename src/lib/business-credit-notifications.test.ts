@@ -59,6 +59,9 @@ async function createTestDatabase() {
       "type" TEXT NOT NULL,
       "amount" INTEGER NOT NULL,
       "units" INTEGER NOT NULL,
+      "quantity" INTEGER,
+      "periodStartsAt" DATETIME,
+      "periodEndsAt" DATETIME,
       "idempotencyKey" TEXT NOT NULL UNIQUE,
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
@@ -250,7 +253,12 @@ describe("business credit notification rules", () => {
       await notify(database);
       await notify(database);
       const rows = await notificationRows(database);
-      assert.equal(rows.filter((row) => row.title === "Premium sắp hết hạn").length, 1);
+      const premiumRows = rows.filter((row) => row.title === "Premium sắp hết hạn");
+      assert.equal(premiumRows.length, 1);
+      assert.match(
+        premiumRows[0].message,
+        /sẽ hết hạn lúc 07:00 ngày 08\/01\/2026\. Gia hạn để tiếp tục nhận ưu đãi\./,
+      );
     } finally {
       await database.close();
     }

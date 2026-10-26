@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { BUSINESS_POST_CONFIG, POST_CREDIT_SOURCES } from "@/lib/business-post-config";
 import { CreditPurchaseForm } from "@/components/business/credit-purchase-form";
 import { ensureBusinessCreditNotifications } from "@/lib/business-credit-notifications";
+import { formatVietnamDateTime, remainingWholeDays } from "@/lib/date-format";
 
 export const instant = false;
 
@@ -38,6 +39,9 @@ export default async function BusinessCreditsPage() {
     purchased: credits.filter((credit) => credit.source === POST_CREDIT_SOURCES.PURCHASED).reduce((sum, credit) => sum + credit.remaining, 0),
   };
   const premiumActive = subscription?.endsAt && subscription.endsAt > now;
+  const premiumRemainingDays = premiumActive
+    ? remainingWholeDays(subscription.endsAt, now)
+    : null;
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <p className="text-sm font-semibold text-primary">Khu vực doanh nghiệp</p>
@@ -50,11 +54,11 @@ export default async function BusinessCreditsPage() {
           ["MUA LẺ", totals.purchased],
         ].map(([label, value]) => <div className="rounded-2xl border border-border bg-card p-5" key={label}><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p></div>)}
       </section>
-      <p className="mt-4 text-sm">{premiumActive ? `Premium đến ${subscription?.endsAt.toLocaleDateString("vi-VN")}` : "Bạn chưa có Premium đang hoạt động."}</p>
-      <div className="mt-6"><CreditPurchaseForm maxQuantity={BUSINESS_POST_CONFIG.maxPurchasedCreditsPerOrder} postPrice={BUSINESS_POST_CONFIG.purchasedPostCreditPriceVnd} premiumPrice={BUSINESS_POST_CONFIG.premiumPriceVnd} /></div>
+      <p className="mt-4 text-sm">{premiumActive ? `Premium đến ${formatVietnamDateTime(subscription.endsAt)} (${premiumRemainingDays === 0 ? "còn dưới 1 ngày" : `còn ${premiumRemainingDays} ngày`})` : "Bạn chưa có Premium đang hoạt động."}</p>
+      <div className="mt-6"><CreditPurchaseForm activePremiumEndsAt={premiumActive ? subscription.endsAt.toISOString() : null} maxQuantity={BUSINESS_POST_CONFIG.maxPurchasedCreditsPerOrder} postPrice={BUSINESS_POST_CONFIG.purchasedPostCreditPriceVnd} premiumDurationMonths={BUSINESS_POST_CONFIG.premiumDurationMonths} premiumPrice={BUSINESS_POST_CONFIG.premiumPriceVnd} /></div>
       <section className="mt-8 rounded-2xl border border-border bg-card p-5">
         <h2 className="font-semibold">Lịch sử mua</h2>
-        <div className="mt-4 divide-y divide-border">{charges.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có giao dịch.</p> : charges.map((charge) => <div className="flex justify-between py-3 text-sm" key={charge.id}><span>{charge.type === "PREMIUM" ? "Premium" : `Mua ${charge.units} lượt`}</span><span>{money(charge.amount)}</span></div>)}</div>
+        <div className="mt-4 divide-y divide-border">{charges.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có giao dịch.</p> : charges.map((charge) => <div className="flex flex-col gap-1 py-3 text-sm sm:flex-row sm:items-start sm:justify-between" key={charge.id}><div><p>{charge.type === "PREMIUM" ? `Premium 3 tháng (+${charge.quantity ?? "—"} lượt)` : `Lượt lẻ × ${charge.quantity ?? "—"}`}</p><p className="text-muted-foreground">Mua lúc: {formatVietnamDateTime(charge.createdAt)}</p><p className="text-muted-foreground">{charge.type === "PREMIUM" ? charge.periodStartsAt && charge.periodEndsAt ? `Hiệu lực: ${formatVietnamDateTime(charge.periodStartsAt)} – ${formatVietnamDateTime(charge.periodEndsAt)}` : "Hiệu lực: —" : "Không hết hạn"}</p></div><span>{money(charge.amount)}</span></div>)}</div>
       </section>
     </main>
   );
