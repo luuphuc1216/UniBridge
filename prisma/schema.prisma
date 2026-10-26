@@ -27,6 +27,12 @@ model User {
   workspaceMessages    WorkspaceMessage[]
   milestoneSubmissions MilestoneSubmission[]
   platformCharges      PlatformCharge[]      @relation("PlatformChargeBuyer")
+  createdTrialBriefVersions TrialBriefVersion[] @relation("TrialBriefVersionCreator")
+  trialBriefResponses      TrialBriefResponse[] @relation("TrialBriefResponseUser")
+  submittedProposalAttempts ProposalSubmissionAttempt[] @relation("ProposalSubmissionUser")
+  submittedProposals       Proposal[]             @relation("ProposalSubmitter")
+  reviewedProposalHandoffs ProposalHandoffReview[] @relation("ProposalHandoffReviewer")
+  prototypeClosures        PrototypeClosure[] @relation("PrototypeClosureActor")
 }
 
 model BusinessProfile {
@@ -144,7 +150,15 @@ model Problem {
   invitations       ApplicationInvitation[]
   consumedCreditId  String?                 @unique
   creditRefundedAt  DateTime?
-  consumedCredit    PostCredit?             @relation(fields: [consumedCreditId], references: [id])
+  prototypeLegacy     Boolean                 @default(false)
+  evaluationResult    String?
+  implementationDecision String?
+  prototypeRevisionRequestCount Int            @default(0)
+  trialBriefLockedAt  DateTime?
+  consumedCredit      PostCredit?             @relation(fields: [consumedCreditId], references: [id])
+  trialBriefVersions  TrialBriefVersion[]
+  proposalHandoffReviews ProposalHandoffReview[]
+  prototypeClosures   PrototypeClosure[]
 
   @@index([status, field])
   @@index([businessProfileId])
@@ -333,11 +347,18 @@ model Proposal {
   type          String
   description   String
   status        String               @default("SUBMITTED")
-  submittedAt   DateTime             @default(now())
+  submissionStatus     String               @default("NOT_SUBMITTED")
+  handoffStatus        String               @default("NOT_SUBMITTED")
+  submittedByUserId    String?
+  lastResubmittedAt    DateTime?
+  submittedAt          DateTime             @default(now())
   createdAt     DateTime             @default(now())
   application   Application          @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   files         ProposalFile[]
   evaluations   ProposalEvaluation[]
+  submissionAttempts   ProposalSubmissionAttempt[]
+  handoffReviews       ProposalHandoffReview[]
+  submittedBy          User?                @relation("ProposalSubmitter", fields: [submittedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([applicationId, version])
   @@index([applicationId, submittedAt])
@@ -346,12 +367,14 @@ model Proposal {
 model ProposalFile {
   id           String   @id @default(cuid())
   proposalId   String
+  attemptId    String?
   originalName String
   contentType  String
   sizeBytes    Int
   storageKey   String   @unique
   createdAt    DateTime @default(now())
   proposal     Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  attempt      ProposalSubmissionAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
 
   @@index([proposalId])
 }
@@ -383,10 +406,102 @@ model ProposalEvaluation {
   valueDelivered          Int
   comment                 String
   decision                String
-  createdAt               DateTime @default(now())
+  evaluationResult        String?
+  implementationDecision  String?
+  revisionRequestNumber   Int?
+  createdAt               DateTime   @default(now())
   proposal                Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
   @@index([proposalId, createdAt])
+}
+
+model TrialBriefVersion {
+  id                  String   @id @default(cuid())
+  problemId           String
+  version             Int
+  objective           String
+  scope               String
+  deliverables        String
+  deadline            DateTime
+  evaluationCriteria  String
+  maxRevisionRequests Int
+  businessProvidedData String?
+  confidentialityTerms String
+  ownershipTerms      String
+  compensationTerms   String?
+  createdByUserId     String
+  createdAt           DateTime @default(now())
+  lockedAt            DateTime?
+  problem             Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  createdBy           User     @relation("TrialBriefVersionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  responses           TrialBriefResponse[]
+
+  @@unique([problemId, version])
+}
+
+model TrialBriefResponse {
+  id                  String   @id @default(cuid())
+  trialBriefVersionId String
+  party               String
+  decision            String
+  note                String?
+  respondedByUserId   String
+  respondedAt         DateTime @default(now())
+  trialBriefVersion   TrialBriefVersion @relation(fields: [trialBriefVersionId], references: [id], onDelete: Cascade)
+  respondedBy         User @relation("TrialBriefResponseUser", fields: [respondedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([trialBriefVersionId, party])
+}
+
+model ProposalSubmissionAttempt {
+  id                String   @id @default(cuid())
+  proposalId        String
+  attempt           Int
+  submittedByUserId String
+  description       String
+  submittedAt       DateTime @default(now())
+  proposal           Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  submittedBy        User @relation("ProposalSubmissionUser", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  files             ProposalFile[]
+  handoffReviews     ProposalHandoffReview[]
+
+  @@unique([proposalId, attempt])
+  @@index([proposalId, submittedAt])
+}
+
+model ProposalHandoffReview {
+  id                    String   @id @default(cuid())
+  problemId             String
+  proposalId            String
+  attemptId             String?
+  reviewedByUserId      String
+  filesOrLinksComplete  Boolean
+  withinTrialBriefScope Boolean
+  compliesWithRules     Boolean
+  note                  String
+  missingItems          String?
+  result                String
+  createdAt             DateTime @default(now())
+  problem               Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  proposal              Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  attempt               ProposalSubmissionAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+  reviewedBy            User @relation("ProposalHandoffReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([problemId, createdAt])
+  @@index([proposalId, createdAt])
+}
+
+model PrototypeClosure {
+  id          String   @id @default(cuid())
+  problemId   String
+  actorId     String
+  reason      String
+  result      String
+  createdAt   DateTime @default(now())
+  problem      Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  actor       User     @relation("PrototypeClosureActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([problemId, createdAt])
 }
 
 model Project {

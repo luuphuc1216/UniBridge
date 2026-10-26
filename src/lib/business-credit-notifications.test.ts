@@ -1,15 +1,12 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { unlink } from "node:fs/promises";
 import { describe, it } from "node:test";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { PrismaClient } from "@/generated/prisma/client";
 import {
   ensureBusinessCreditNotifications,
   type NotificationClock,
 } from "@/lib/business-credit-notifications";
 import { POST_CREDIT_SOURCES } from "@/lib/business-post-config";
 import { consumePostCredit } from "@/lib/post-credits";
+import { createTestDatabase as createMigratedTestDatabase } from "@/lib/test-database";
 
 const NOW = new Date("2026-01-01T00:00:00.000Z");
 
@@ -18,89 +15,8 @@ function fixedClock(now = NOW): NotificationClock {
 }
 
 async function createTestDatabase() {
-  const databasePath = `/tmp/unibridge-credit-notifications-${randomUUID()}.db`;
-  const prisma = new PrismaClient({
-    adapter: new PrismaBetterSqlite3({ url: `file:${databasePath}` }),
-  });
-  const statements = [
-    `CREATE TABLE "User" (
-      "id" TEXT PRIMARY KEY NOT NULL,
-      "email" TEXT NOT NULL UNIQUE,
-      "name" TEXT NOT NULL,
-      "passwordHash" TEXT NOT NULL,
-      "role" TEXT NOT NULL DEFAULT 'BUSINESS',
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" DATETIME NOT NULL
-    )`,
-    `CREATE TABLE "PostCredit" (
-      "id" TEXT PRIMARY KEY NOT NULL,
-      "businessProfileId" TEXT NOT NULL,
-      "source" TEXT NOT NULL,
-      "remaining" INTEGER NOT NULL,
-      "expiresAt" DATETIME,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" DATETIME NOT NULL
-    )`,
-    `CREATE TABLE "Subscription" (
-      "id" TEXT PRIMARY KEY NOT NULL,
-      "businessProfileId" TEXT NOT NULL,
-      "package" TEXT NOT NULL,
-      "startsAt" DATETIME NOT NULL,
-      "endsAt" DATETIME NOT NULL,
-      "status" TEXT NOT NULL DEFAULT 'ACTIVE',
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" DATETIME NOT NULL,
-      UNIQUE ("businessProfileId", "package")
-    )`,
-    `CREATE TABLE "PlatformCharge" (
-      "id" TEXT PRIMARY KEY NOT NULL,
-      "businessProfileId" TEXT NOT NULL,
-      "buyerId" TEXT NOT NULL,
-      "type" TEXT NOT NULL,
-      "amount" INTEGER NOT NULL,
-      "units" INTEGER NOT NULL,
-      "quantity" INTEGER,
-      "periodStartsAt" DATETIME,
-      "periodEndsAt" DATETIME,
-      "idempotencyKey" TEXT NOT NULL UNIQUE,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE TABLE "Notification" (
-      "id" TEXT PRIMARY KEY NOT NULL,
-      "userId" TEXT NOT NULL,
-      "title" TEXT NOT NULL,
-      "message" TEXT NOT NULL,
-      "href" TEXT NOT NULL,
-      "readAt" DATETIME,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "dedupeKey" TEXT UNIQUE
-    )`,
-    `CREATE TABLE "Problem" (
-      "id" TEXT PRIMARY KEY NOT NULL,
-      "businessProfileId" TEXT NOT NULL,
-      "reviewedById" TEXT,
-      "title" TEXT NOT NULL,
-      "slug" TEXT NOT NULL UNIQUE,
-      "description" TEXT NOT NULL,
-      "goal" TEXT NOT NULL,
-      "field" TEXT NOT NULL,
-      "requirements" TEXT NOT NULL,
-      "expectedDuration" TEXT NOT NULL,
-      "budgetMin" INTEGER,
-      "budgetMax" INTEGER,
-      "status" TEXT NOT NULL,
-      "reviewNote" TEXT,
-      "submittedAt" DATETIME,
-      "approvedAt" DATETIME,
-      "firstApprovedAt" DATETIME,
-      "consumedCreditId" TEXT UNIQUE,
-      "creditRefundedAt" DATETIME,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )`,
-  ];
-  for (const statement of statements) await prisma.$executeRawUnsafe(statement);
-  await prisma.user.create({
+  const database = await createMigratedTestDatabase("unibridge-credit-notifications");
+  await database.prisma.user.create({
     data: {
       id: "user",
       email: "business@example.com",
@@ -109,13 +25,7 @@ async function createTestDatabase() {
       updatedAt: NOW,
     },
   });
-  return {
-    prisma,
-    async close() {
-      await prisma.$disconnect();
-      await unlink(databasePath);
-    },
-  };
+  return database;
 }
 
 async function createLowBalanceDatabase(remaining: number) {

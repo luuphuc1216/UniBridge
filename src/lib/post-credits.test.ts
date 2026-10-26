@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { unlink } from "node:fs/promises";
 import { describe, it } from "node:test";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { PrismaClient } from "@/generated/prisma/client";
 import {
   BUSINESS_POST_CONFIG,
   POST_CREDIT_SOURCES,
@@ -16,6 +12,7 @@ import {
   submitProblemForReview,
   type CreditClock,
 } from "@/lib/post-credits";
+import { createTestDatabase as createMigratedTestDatabase } from "@/lib/test-database";
 
 function fixedClock(value: string): CreditClock {
   return { now: () => new Date(value) };
@@ -38,78 +35,9 @@ function problemData(id: string, status: string, consumedCreditId?: string) {
 }
 
 async function createTestDatabase() {
-  const databasePath = `/tmp/unibridge-post-credits-${randomUUID()}.db`;
-  const prisma = new PrismaClient({
-    adapter: new PrismaBetterSqlite3({ url: `file:${databasePath}` }),
+  return createMigratedTestDatabase("unibridge-post-credits", {
+    seedBusinessContext: true,
   });
-  const statements = [
-    `CREATE TABLE "PostCredit" (
-      "id" TEXT PRIMARY KEY NOT NULL,
-      "businessProfileId" TEXT NOT NULL,
-      "source" TEXT NOT NULL,
-      "remaining" INTEGER NOT NULL,
-      "expiresAt" DATETIME,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" DATETIME NOT NULL
-    )`,
-    `CREATE TABLE "Problem" (
-      "id" TEXT PRIMARY KEY NOT NULL,
-      "businessProfileId" TEXT NOT NULL,
-      "reviewedById" TEXT,
-      "title" TEXT NOT NULL,
-      "slug" TEXT NOT NULL UNIQUE,
-      "description" TEXT NOT NULL,
-      "goal" TEXT NOT NULL,
-      "field" TEXT NOT NULL,
-      "requirements" TEXT NOT NULL,
-      "expectedDuration" TEXT NOT NULL,
-      "budgetMin" INTEGER,
-      "budgetMax" INTEGER,
-      "status" TEXT NOT NULL,
-      "reviewNote" TEXT,
-      "submittedAt" DATETIME,
-      "approvedAt" DATETIME,
-      "firstApprovedAt" DATETIME,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "consumedCreditId" TEXT UNIQUE,
-      "creditRefundedAt" DATETIME
-    )`,
-    `CREATE TABLE "Subscription" (
-      "id" TEXT PRIMARY KEY NOT NULL,
-      "businessProfileId" TEXT NOT NULL,
-      "package" TEXT NOT NULL,
-      "startsAt" DATETIME NOT NULL,
-      "endsAt" DATETIME NOT NULL,
-      "status" TEXT NOT NULL DEFAULT 'ACTIVE',
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" DATETIME NOT NULL,
-      UNIQUE ("businessProfileId", "package")
-    )`,
-    `CREATE TABLE "PlatformCharge" (
-      "id" TEXT PRIMARY KEY NOT NULL,
-      "businessProfileId" TEXT NOT NULL,
-      "buyerId" TEXT NOT NULL,
-      "type" TEXT NOT NULL,
-      "amount" INTEGER NOT NULL,
-      "units" INTEGER NOT NULL,
-      "quantity" INTEGER,
-      "periodStartsAt" DATETIME,
-      "periodEndsAt" DATETIME,
-      "idempotencyKey" TEXT NOT NULL UNIQUE,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )`,
-  ];
-  for (const statement of statements) {
-    await prisma.$executeRawUnsafe(statement);
-  }
-  return {
-    prisma,
-    async close() {
-      await prisma.$disconnect();
-      await unlink(databasePath);
-    },
-  };
 }
 
 describe("post credit transactions", () => {
