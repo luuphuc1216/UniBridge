@@ -16,6 +16,12 @@ import {
   proposalEvaluationFields,
   proposalTypes,
 } from "@/lib/workspace";
+import {
+  createTrialBriefVersion,
+  respondToTrialBrief,
+  type TrialBriefInput,
+} from "@/lib/trial-brief";
+import { assertLegacyEvaluationEnabled } from "@/lib/proposal-evaluation-access";
 
 export type WorkspaceActionState = { error: string | null };
 
@@ -73,35 +79,69 @@ function actionError(error: unknown, operation: string): WorkspaceActionState {
   return { error: "Đã xảy ra lỗi. Vui lòng thử lại." };
 }
 
-export async function startWorkspaceAction(
+export async function createTrialBriefAction(
   _previousState: WorkspaceActionState,
   formData: FormData,
 ): Promise<WorkspaceActionState> {
   const problemId = readText(formData, "problemId");
+  const deadline = new Date(readText(formData, "deadline"));
+  const input: TrialBriefInput = {
+    objective: readText(formData, "objective"),
+    scope: readText(formData, "scope"),
+    deliverables: readText(formData, "deliverables"),
+    deadline,
+    evaluationCriteria: readText(formData, "evaluationCriteria"),
+    maxRevisionRequests: Number(readText(formData, "maxRevisionRequests")),
+    businessProvidedData: readText(formData, "businessProvidedData"),
+    confidentialityTerms: readText(formData, "confidentialityTerms"),
+    ownershipTerms: readText(formData, "ownershipTerms"),
+    compensationTerms: readText(formData, "compensationTerms"),
+  };
   try {
-    const { session, workspace } = await requireWorkspace(
-      problemId,
-      readText(formData, "applicationId"),
+    const session = await auth();
+    if (!session?.user || session.user.role !== "BUSINESS") {
+      throw new Error("Chỉ doanh nghiệp sở hữu bài toán mới được soạn hồ sơ.");
+    }
+    await prisma.$transaction((transaction) =>
+      createTrialBriefVersion(transaction, {
+        problemId,
+        businessUserId: session.user.id,
+        input,
+      }),
     );
-    if (session.user.role !== "STUDENT") {
-      throw new Error("Chỉ nhóm được chọn mới có thể bắt đầu.");
-    }
-    if (workspace.status !== "TEAM_SELECTED") {
-      throw new Error("Bài toán không còn ở trạng thái chờ bắt đầu.");
-    }
-    const changed = await prisma.problem.updateMany({
-      where: {
-        id: problemId,
-        status: "TEAM_SELECTED",
-        applications: { some: { status: "SELECTED" } },
-      },
-      data: { status: "PROTOTYPING" },
-    });
-    if (changed.count !== 1) {
-      throw new Error("Trạng thái bài toán đã thay đổi. Vui lòng tải lại trang.");
-    }
   } catch (error) {
-    return actionError(error, "Bắt đầu không gian làm việc");
+    return actionError(error, "Tạo hồ sơ thử nghiệm");
+  }
+  revalidateWorkspace(problemId);
+  return { error: null };
+}
+
+export async function respondToTrialBriefAction(
+  _previousState: WorkspaceActionState,
+  formData: FormData,
+): Promise<WorkspaceActionState> {
+  const problemId = readText(formData, "problemId");
+  const version = Number(readText(formData, "version"));
+  const decision = readText(formData, "decision");
+  try {
+    const session = await auth();
+    if (!session?.user || session.user.role !== "STUDENT") {
+      throw new Error("Chỉ nhóm được chọn mới được phản hồi hồ sơ.");
+    }
+    if (decision !== "CONFIRMED" && decision !== "REVISION_REQUESTED") {
+      throw new Error("Lựa chọn phản hồi hồ sơ không hợp lệ.");
+    }
+    await prisma.$transaction((transaction) =>
+      respondToTrialBrief(transaction, {
+        problemId,
+        version,
+        studentUserId: session.user.id,
+        decision,
+        note: readText(formData, "note"),
+      }),
+    );
+  } catch (error) {
+    return actionError(error, "Phản hồi hồ sơ thử nghiệm");
   }
   revalidateWorkspace(problemId);
   return { error: null };
@@ -320,6 +360,7 @@ export async function evaluateProposalAction(
     if (session.user.role !== "BUSINESS") {
       throw new Error("Chỉ doanh nghiệp sở hữu bài toán mới có thể đánh giá.");
     }
+    assertLegacyEvaluationEnabled(workspace.prototypeLegacy);
     if (workspace.status !== "EVALUATING") {
       throw new Error("Bài toán hiện không chờ doanh nghiệp đánh giá.");
     }

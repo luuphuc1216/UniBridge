@@ -466,7 +466,7 @@ export async function selectTeamAction(
         data: [...new Set(studentUserIds)].map((userId) => ({
           userId,
           title: "Nhóm của bạn đã được doanh nghiệp lựa chọn",
-          message: "Bắt đầu làm việc trong không gian chung để phát triển Prototype / Solution Proposal.",
+          message: "Hãy mở không gian làm việc để xem và xác nhận hồ sơ dự án thử nghiệm.",
           href: `/student/workspace/${problemId}`,
         })),
       });

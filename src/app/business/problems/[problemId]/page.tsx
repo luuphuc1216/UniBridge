@@ -43,6 +43,11 @@ export default async function BusinessProblemDetailPage({
     where: { id: problemId, businessProfileId },
     include: {
       attachments: { orderBy: { createdAt: "asc" } },
+      applications: {
+        where: { status: "SELECTED" },
+        take: 1,
+        select: { id: true },
+      },
       _count: {
         select: { applications: { where: activeApplicationsWhere } },
       },
@@ -104,7 +109,7 @@ export default async function BusinessProblemDetailPage({
           {hasWorkspace && (
             <Link
               className="rounded-xl bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground hover:opacity-90"
-              href={`/business/problems/${problem.id}/workspace`}
+              href={`/business/problems/${problem.id}/workspace?applicationId=${problem.applications[0]?.id ?? ""}`}
             >
               Mở không gian làm việc
             </Link>

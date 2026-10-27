@@ -9,8 +9,9 @@ import {
 import Link from "next/link";
 import {
   evaluateProposalAction,
+  createTrialBriefAction,
   sendWorkspaceMessageAction,
-  startWorkspaceAction,
+  respondToTrialBriefAction,
   submitProposalAction,
   type WorkspaceActionState,
 } from "@/app/workspace/actions";
@@ -67,7 +68,32 @@ export type WorkspaceViewData = {
     companyName: string;
     teamName: string;
     applicationId: string;
+    trialBriefLockedAt: Date | null;
+    prototypeLegacy: boolean;
+    canRespondToTrialBrief: boolean;
   };
+  trialBriefVersions: {
+    id: string;
+    version: number;
+    objective: string;
+    scope: string;
+    deliverables: string;
+    deadline: Date;
+    evaluationCriteria: string;
+    maxRevisionRequests: number;
+    businessProvidedData: string | null;
+    confidentialityTerms: string;
+    ownershipTerms: string;
+    compensationTerms: string | null;
+    createdAt: Date;
+    lockedAt: Date | null;
+    responses: {
+      party: string;
+      decision: string;
+      note: string | null;
+      respondedBy: { name: string };
+    }[];
+  }[];
   messages: {
     id: string;
     content: string;
@@ -129,23 +155,160 @@ function ActionFeedback({ state }: { state: WorkspaceActionState }) {
   );
 }
 
-function StartWorkspaceForm({ problemId }: { problemId: string }) {
+function TrialBriefForm({ problemId }: { problemId: string }) {
   const [state, action, pending] = useActionState<WorkspaceActionState, FormData>(
-    startWorkspaceAction,
+    createTrialBriefAction,
     { error: null },
   );
   return (
-    <form action={action} className="mt-5">
+    <form action={action} className="mt-4 grid gap-3 sm:grid-cols-2">
       <input name="problemId" type="hidden" value={problemId} />
-      <button
-        className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60 sm:w-auto"
-        disabled={pending}
-        type="submit"
-      >
-        {pending ? "Đang bắt đầu..." : "Bắt đầu làm Prototype / Solution Proposal"}
-      </button>
+      {[
+        ["objective", "Mục tiêu"],
+        ["scope", "Phạm vi"],
+        ["deliverables", "Sản phẩm đầu ra"],
+        ["evaluationCriteria", "Tiêu chí đánh giá"],
+        ["confidentialityTerms", "Yêu cầu bảo mật"],
+        ["ownershipTerms", "Quyền sở hữu/sử dụng"],
+      ].map(([name, label]) => (
+        <label className="text-sm font-medium" key={name}>
+          {label}
+          <textarea className="mt-1.5 min-h-20 w-full rounded-xl border border-border bg-background p-3" name={name} required />
+        </label>
+      ))}
+      <label className="text-sm font-medium">
+        Thời hạn
+        <input className="mt-1.5 w-full rounded-xl border border-border bg-background p-3" name="deadline" required type="datetime-local" />
+      </label>
+      <label className="text-sm font-medium">
+        Số lần chỉnh sửa tối đa
+        <input className="mt-1.5 w-full rounded-xl border border-border bg-background p-3" defaultValue="1" min="0" name="maxRevisionRequests" required type="number" />
+      </label>
+      <label className="text-sm font-medium">
+        Dữ liệu doanh nghiệp cung cấp (không bắt buộc)
+        <textarea className="mt-1.5 min-h-20 w-full rounded-xl border border-border bg-background p-3" name="businessProvidedData" />
+      </label>
+      <label className="text-sm font-medium">
+        Thù lao thử nghiệm (chỉ thông tin, không tạo giao dịch)
+        <textarea className="mt-1.5 min-h-20 w-full rounded-xl border border-border bg-background p-3" name="compensationTerms" />
+      </label>
+      <div className="sm:col-span-2">
+        <button className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={pending} type="submit">
+          {pending ? "Đang gửi..." : "Gửi phiên bản hồ sơ mới"}
+        </button>
+        <ActionFeedback state={state} />
+      </div>
+    </form>
+  );
+}
+
+function TrialBriefResponseForm({ problemId, version }: { problemId: string; version: number }) {
+  const [state, action, pending] = useActionState<WorkspaceActionState, FormData>(
+    respondToTrialBriefAction,
+    { error: null },
+  );
+  return (
+    <form action={action} className="mt-4">
+      <input name="problemId" type="hidden" value={problemId} />
+      <input name="version" type="hidden" value={version} />
+      <textarea className="min-h-20 w-full rounded-xl border border-border bg-background p-3 text-sm" name="note" placeholder="Ghi chú khi đề nghị điều chỉnh (bắt buộc với lựa chọn này)" />
+      <p className="mt-1 text-xs text-muted-foreground">
+        Ghi rõ nội dung cần điều chỉnh để gửi đề nghị.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={pending} name="decision" value="CONFIRMED" type="submit">
+          Đồng ý phiên bản {version}
+        </button>
+        <button className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold disabled:opacity-60" disabled={pending} name="decision" value="REVISION_REQUESTED" type="submit">
+          Đề nghị điều chỉnh
+        </button>
+      </div>
       <ActionFeedback state={state} />
     </form>
+  );
+}
+
+function TrialBriefPanel({
+  problemId,
+  versions,
+  isBusiness,
+  lockedAt,
+  status,
+  canRespondToTrialBrief,
+}: {
+  problemId: string;
+  versions: WorkspaceViewData["trialBriefVersions"];
+  isBusiness: boolean;
+  lockedAt: Date | null;
+  status: string;
+  canRespondToTrialBrief: boolean;
+}) {
+  if (status !== "TEAM_SELECTED" && !versions.length) return null;
+  const latest = versions[0];
+  return (
+    <section className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-5">
+      <h2 className="font-semibold">Hồ sơ dự án thử nghiệm</h2>
+      {lockedAt ? (
+        <p className="mt-2 rounded-lg bg-emerald-100 p-3 text-sm text-emerald-900">
+          Hồ sơ đã được hai bên xác nhận và khóa. Bài toán đang trong giai đoạn Prototype.
+        </p>
+      ) : latest ? (
+        <>
+          <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+            <p><strong>Phiên bản:</strong> {latest.version}</p>
+            <p><strong>Thời hạn:</strong> {dateLabel(latest.deadline)}</p>
+            <p><strong>Mục tiêu:</strong> {latest.objective}</p>
+            <p><strong>Phạm vi:</strong> {latest.scope}</p>
+            <p><strong>Sản phẩm đầu ra:</strong> {latest.deliverables}</p>
+            <p><strong>Tiêu chí:</strong> {latest.evaluationCriteria}</p>
+            <p><strong>Số lần chỉnh sửa tối đa:</strong> {latest.maxRevisionRequests}</p>
+            <p><strong>Bảo mật:</strong> {latest.confidentialityTerms}</p>
+            <p><strong>Quyền sở hữu/sử dụng:</strong> {latest.ownershipTerms}</p>
+            <p><strong>Thù lao:</strong> {latest.compensationTerms || "Không có thông tin"}</p>
+          </div>
+          {!isBusiness && canRespondToTrialBrief && (
+            <TrialBriefResponseForm
+              problemId={problemId}
+              version={latest.version}
+            />
+          )}
+          {!isBusiness && !canRespondToTrialBrief && (
+            <p className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+              Chỉ chủ nhóm mới được xác nhận hoặc đề nghị điều chỉnh hồ sơ thử nghiệm.
+            </p>
+          )}
+          {isBusiness && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              Đang chờ nhóm phản hồi phiên bản này.
+            </p>
+          )}
+        </>
+      ) : isBusiness ? (
+        <TrialBriefForm problemId={problemId} />
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">Doanh nghiệp chưa gửi hồ sơ thử nghiệm.</p>
+      )}
+      {isBusiness && latest && !lockedAt && (
+        <TrialBriefForm problemId={problemId} />
+      )}
+      <div className="mt-5 border-t border-primary/20 pt-4">
+        <h3 className="text-sm font-semibold">Lịch sử phiên bản</h3>
+        <ol className="mt-2 space-y-2 text-sm">
+          {versions.map((version) => (
+            <li className="rounded-lg bg-background/70 p-3" key={version.id}>
+              Phiên bản {version.version} · tạo ngày {dateLabel(version.createdAt)} ·{" "}
+              {version.lockedAt ? "Đã khóa" : "Đang chờ xác nhận"}
+              {version.responses.map((response) => (
+                <span className="ml-2 text-muted-foreground" key={`${version.id}-${response.party}`}>
+                  {response.party === "BUSINESS" ? "Doanh nghiệp" : "Nhóm"}:{" "}
+                  {response.decision === "CONFIRMED" ? "Đã xác nhận" : `Đề nghị điều chỉnh${response.note ? ` — ${response.note}` : ""}`}
+                </span>
+              ))}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
   );
 }
 
@@ -372,6 +535,11 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
           {statusLabels[problem.status] ?? problem.status}
         </span>
       </div>
+      {problem.prototypeLegacy && (
+        <p className="mt-3 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+          Dữ liệu trước thay đổi
+        </p>
+      )}
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2">
         <article className="rounded-2xl border border-border bg-card p-5">
@@ -389,15 +557,17 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
           Quy trình Prototype / Solution Proposal đã kết thúc. Không thể gửi thêm tin nhắn hoặc Proposal tại đây;
           lịch sử vẫn được xem. Thỏa thuận và Milestone được quản lý trong trang dự án.
         </p>
-      ) : problem.status === "TEAM_SELECTED" && !isBusiness ? (
-        <section className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-5">
-          <h2 className="font-semibold">Nhóm đã được chọn</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Bắt đầu làm để chuyển bài toán sang giai đoạn Prototype / Solution Proposal.
-          </p>
-          <StartWorkspaceForm problemId={problem.id} />
-        </section>
       ) : null}
+      {!readonly && (
+        <TrialBriefPanel
+          isBusiness={isBusiness}
+          lockedAt={problem.trialBriefLockedAt}
+          problemId={problem.id}
+          status={problem.status}
+          versions={data.trialBriefVersions}
+          canRespondToTrialBrief={problem.canRespondToTrialBrief}
+        />
+      )}
 
       {["READY_FOR_IMPLEMENTATION", "COMPLETED"].includes(problem.status) && (
         <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">

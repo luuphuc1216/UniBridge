@@ -105,7 +105,7 @@ export default async function StudentApplicationsPage() {
                 ) && (
                   <Link
                     className="ml-4 inline-flex text-sm font-semibold text-primary hover:underline"
-                    href={`/student/workspace/${application.problem.id}`}
+                    href={`/student/workspace/${application.problem.id}?applicationId=${application.id}`}
                   >
                     Mở không gian làm việc
                   </Link>

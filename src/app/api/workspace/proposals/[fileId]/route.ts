@@ -22,7 +22,7 @@ export async function GET(
       proposal: {
         select: {
           application: {
-            select: { problemId: true, status: true },
+            select: { id: true, problemId: true, status: true },
           },
         },
       },
@@ -40,6 +40,7 @@ export async function GET(
           file.proposal.application.problemId,
           session.user.id,
           session.user.role,
+          file.proposal.application.id,
         )
       : null;
   const belongsToSelectedTeam = file.proposal.application.status === "SELECTED";

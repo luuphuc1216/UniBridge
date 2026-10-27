@@ -1853,6 +1853,103 @@ async function main() {
       });
     }
   }
+
+  const trialBriefBusiness = businessProfiles[0];
+  const trialBriefTeam = await prisma.studentTeam.findUniqueOrThrow({
+    where: { slug: "nextgen-digital" },
+    include: { owner: true },
+  });
+  if (!trialBriefTeam.ownerId || !trialBriefTeam.owner) {
+    throw new Error("Nhóm seed không có chủ sở hữu: nextgen-digital");
+  }
+  if (!trialBriefBusiness) throw new Error("Thiếu doanh nghiệp seed cho hồ sơ thử nghiệm.");
+  const trialBriefBusinessUser = await prisma.businessProfile.findUniqueOrThrow({
+    where: { id: trialBriefBusiness.id },
+    select: { userId: true },
+  });
+
+  async function ensureTrialBriefProblem(
+    slug: string,
+    title: string,
+    withBrief: boolean,
+  ) {
+    let problem = await prisma.problem.findUnique({ where: { slug } });
+    if (!problem) {
+      problem = await prisma.problem.create({
+        data: {
+          businessProfileId: trialBriefBusiness.id,
+          reviewedById: admin.id,
+          title,
+          slug,
+          description: "Bài toán seed để kiểm thử hồ sơ dự án thử nghiệm.",
+          goal: "Thống nhất phạm vi và sản phẩm thử nghiệm với nhóm sinh viên.",
+          field: "Công nghệ thông tin",
+          requirements: "Có hồ sơ rõ ràng và tiêu chí nghiệm thu cụ thể.",
+          expectedDuration: "4 tuần",
+          status: "TEAM_SELECTED",
+          approvedAt: new Date(),
+        },
+      });
+    }
+    let application = await prisma.application.findUnique({
+      where: {
+        problemId_teamId: { problemId: problem.id, teamId: trialBriefTeam.id },
+      },
+    });
+    if (!application) {
+      application = await prisma.application.create({
+        data: {
+          problemId: problem.id,
+          teamId: trialBriefTeam.id,
+          approach: "Nhóm đề xuất xây dựng bản thử nghiệm theo phạm vi đã thống nhất.",
+          estimatedDuration: "4 tuần",
+          status: "SELECTED",
+        },
+      });
+    }
+    if (!withBrief) return;
+    const existingBrief = await prisma.trialBriefVersion.findFirst({
+      where: { problemId: problem.id },
+    });
+    if (!existingBrief) {
+      await prisma.trialBriefVersion.create({
+        data: {
+          id: "seed-trial-brief-pending-v1",
+          problemId: problem.id,
+          version: 1,
+          objective: "Kiểm chứng bản thử nghiệm cho quy trình nội bộ.",
+          scope: "Thiết kế và xây dựng bản thử nghiệm giới hạn.",
+          deliverables: "Bản demo, tài liệu hướng dẫn và ghi chú bàn giao.",
+          deadline: new Date("2030-12-31T17:00:00.000Z"),
+          evaluationCriteria: "Đủ chức năng trong phạm vi và có tài liệu sử dụng.",
+          maxRevisionRequests: 1,
+          businessProvidedData: "",
+          confidentialityTerms: "Không chia sẻ dữ liệu doanh nghiệp ra ngoài phạm vi thử nghiệm.",
+          ownershipTerms: "Hai bên thống nhất quyền sử dụng theo hồ sơ đã xác nhận.",
+          compensationTerms: "",
+          createdByUserId: trialBriefBusinessUser.userId,
+          responses: {
+            create: {
+              party: "BUSINESS",
+              decision: "CONFIRMED",
+              respondedByUserId: trialBriefBusinessUser.userId,
+            },
+          },
+        },
+      });
+    }
+  }
+
+  await ensureTrialBriefProblem(
+    "seed-trial-brief-team-selected",
+    "Bài toán seed chờ lập hồ sơ thử nghiệm",
+    false,
+  );
+  await ensureTrialBriefProblem(
+    "seed-trial-brief-pending-confirmation",
+    "Bài toán seed chờ nhóm xác nhận hồ sơ",
+    true,
+  );
 }
 
 main()

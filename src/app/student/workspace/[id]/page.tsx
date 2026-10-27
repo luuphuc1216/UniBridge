@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { WorkspaceView } from "@/components/workspace/workspace-view";
 import { findAuthorizedWorkspace } from "@/lib/workspace-access";
+import { canRespondForTeam } from "@/lib/team-permissions";
 
 export const instant = false;
 
@@ -41,7 +42,11 @@ export default async function StudentWorkspacePage({
           companyName: problem.businessProfile.companyName,
           teamName: application.team.name,
           applicationId: application.id,
+          trialBriefLockedAt: problem.trialBriefLockedAt,
+          prototypeLegacy: problem.prototypeLegacy,
+          canRespondToTrialBrief: canRespondForTeam(application.team.ownerId, session.user.id),
         },
+        trialBriefVersions: problem.trialBriefVersions,
         messages: problem.workspaceMessages,
         proposals: application.proposals,
         project: application.project,

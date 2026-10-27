@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+export { canRespondForTeam } from "./team-permissions";
 
 export function getOwnedTeam(userId: string) {
   return prisma.studentTeam.findUnique({

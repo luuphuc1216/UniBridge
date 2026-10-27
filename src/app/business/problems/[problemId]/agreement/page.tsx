@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { AgreementForm, type AgreementFormValues } from "@/components/projects/agreement-form";
-import { findAuthorizedWorkspace } from "@/lib/workspace-access";
+import { canOpenPaidImplementationAgreement } from "@/lib/agreement-access";
+import {
+  findAuthorizedWorkspace,
+} from "@/lib/workspace-access";
 
 export const instant = false;
 
@@ -20,7 +23,7 @@ export default async function BusinessAgreementPage({
     session.user.role,
   );
   const application = problem?.applications[0];
-  if (!problem || problem.status !== "READY_FOR_IMPLEMENTATION" || !application) {
+  if (!problem || !canOpenPaidImplementationAgreement(problem) || !application) {
     notFound();
   }
   if (application.project) redirect(`/business/projects/${application.project.id}`);
