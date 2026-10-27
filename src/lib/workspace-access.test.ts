@@ -117,6 +117,25 @@ async function fixture() {
       { id: "message-legacy", problemId: problem.id, applicationId: null, senderId: "team-a-owner", content: "Tin cũ" },
     ],
   });
+  await prisma.proposal.create({
+    data: {
+      id: "proposal-a",
+      applicationId: "application-a",
+      version: 1,
+      type: "SOLUTION",
+      description: "Proposal của nhóm A",
+      files: {
+        create: {
+          id: "proposal-file-a",
+          originalName: "proposal-a.pdf",
+          contentType: "application/pdf",
+          sizeBytes: 10,
+          storageKey: "proposal-storage-a",
+        },
+      },
+    },
+    include: { files: true },
+  });
   return { database, problemId: problem.id, otherProblemId: otherProblem.id };
 }
 
@@ -217,5 +236,110 @@ describe("workspace access integration", () => {
     assert.ok(workspace);
     assert.equal(workspace.applications[0]?.id, "application-a");
     assert.equal(otherProblemId, "other-problem");
+  });
+
+  it("isolates Proposal files by the file's application for both student and business access", async () => {
+    const teamA = await findAuthorizedWorkspace(
+      problemId,
+      "team-a-owner",
+      "STUDENT",
+      "application-a",
+      database.prisma,
+    );
+    const teamBImplicit = await findAuthorizedWorkspace(
+      problemId,
+      "team-b-owner",
+      "STUDENT",
+      undefined,
+      database.prisma,
+    );
+    const teamBExplicit = await findAuthorizedWorkspace(
+      problemId,
+      "team-b-owner",
+      "STUDENT",
+      "application-a",
+      database.prisma,
+    );
+    const business = await findAuthorizedWorkspace(
+      problemId,
+      "business-owner",
+      "BUSINESS",
+      "application-a",
+      database.prisma,
+    );
+    const otherBusiness = await findAuthorizedWorkspace(
+      problemId,
+      "other-business",
+      "BUSINESS",
+      "application-a",
+      database.prisma,
+    );
+
+    assert.equal(teamA?.applications[0]?.proposals[0]?.files[0]?.id, "proposal-file-a");
+    assert.equal(teamBImplicit?.applications[0]?.proposals.length, 0);
+    assert.equal(teamBExplicit, null);
+    assert.equal(business?.applications[0]?.proposals[0]?.files[0]?.id, "proposal-file-a");
+    assert.equal(otherBusiness, null);
+  });
+
+  it("does not expose Team A Trial Brief to Team B without an application id", async () => {
+    await database.prisma.$transaction((transaction) =>
+      createTrialBriefVersion(transaction, {
+        problemId,
+        businessUserId: "business-owner",
+        input: {
+          objective: "Mục tiêu riêng của nhóm A",
+          scope: "Phạm vi riêng",
+          deliverables: "Đầu ra riêng",
+          deadline: futureDeadline,
+          evaluationCriteria: "Tiêu chí",
+          maxRevisionRequests: 0,
+          businessProvidedData: "Dữ liệu nhạy cảm",
+          confidentialityTerms: "Điều khoản bảo mật riêng",
+          ownershipTerms: "Quyền sử dụng",
+          compensationTerms: "Thù lao ẩn",
+        },
+      }),
+    );
+    const teamA = await findAuthorizedWorkspace(
+      problemId,
+      "team-a-owner",
+      "STUDENT",
+      undefined,
+      database.prisma,
+    );
+    const teamB = await findAuthorizedWorkspace(
+      problemId,
+      "team-b-owner",
+      "STUDENT",
+      undefined,
+      database.prisma,
+    );
+    const teamBExplicit = await findAuthorizedWorkspace(
+      problemId,
+      "team-b-owner",
+      "STUDENT",
+      "application-b",
+      database.prisma,
+    );
+    const business = await findAuthorizedWorkspace(
+      problemId,
+      "business-owner",
+      "BUSINESS",
+      undefined,
+      database.prisma,
+    );
+
+    assert.equal(teamA?.trialBriefVersions[0]?.businessProvidedData, "Dữ liệu nhạy cảm");
+    assert.equal(teamA?.trialBriefVersions[0]?.confidentialityTerms, "Điều khoản bảo mật riêng");
+    assert.equal(teamA?.trialBriefVersions[0]?.compensationTerms, "Thù lao ẩn");
+    assert.equal(teamB?.trialBriefVersions.length, 0);
+    assert.equal(teamBExplicit?.trialBriefVersions.length, 0);
+    assert.equal(business?.trialBriefVersions[0]?.businessProvidedData, "Dữ liệu nhạy cảm");
+    const notifications = await database.prisma.notification.findMany({
+      where: { title: "Có hồ sơ thử nghiệm mới" },
+      select: { userId: true },
+    });
+    assert.deepEqual(notifications.map(({ userId }) => userId), ["team-a-owner"]);
   });
 });

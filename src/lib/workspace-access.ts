@@ -6,7 +6,7 @@ import {
 
 type WorkspaceDatabase = Pick<
   PrismaClient,
-  "application" | "problem" | "workspaceMessage"
+  "application" | "problem" | "trialBriefVersion" | "workspaceMessage"
 >;
 
 export async function findAuthorizedWorkspace(
@@ -119,21 +119,25 @@ export async function findAuthorizedWorkspace(
           project: { select: { id: true, status: true } },
         },
       },
-      trialBriefVersions: {
-        orderBy: { version: "desc" },
-        include: {
-          responses: {
-            orderBy: { respondedAt: "asc" },
-            include: { respondedBy: { select: { name: true } } },
-          },
-        },
-      },
     },
   });
 
   if (!problem) return null;
   const workspaceApplication = problem.applications[0];
   if (!workspaceApplication) return null;
+  const trialBriefVersions =
+    workspaceApplication.status === "SELECTED" || role === "BUSINESS"
+      ? await database.trialBriefVersion.findMany({
+          where: { problemId: problem.id },
+          orderBy: { version: "desc" },
+          include: {
+            responses: {
+              orderBy: { respondedAt: "asc" },
+              include: { respondedBy: { select: { name: true } } },
+            },
+          },
+        })
+      : [];
   const workspaceMessages = await database.workspaceMessage.findMany({
     where: {
       problemId,
@@ -143,7 +147,7 @@ export async function findAuthorizedWorkspace(
     include: { sender: { select: { id: true, name: true, role: true } } },
   });
 
-  return { ...problem, workspaceMessages };
+  return { ...problem, trialBriefVersions, workspaceMessages };
 }
 
 export function isFinalWorkspaceStatus(status: string): boolean {
