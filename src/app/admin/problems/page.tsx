@@ -1,24 +1,9 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
+import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
 
 export const instant = false;
-
-const statusLabels: Record<string, string> = {
-  DRAFT: "Bản nháp",
-  PENDING_REVIEW: "Chờ duyệt",
-  NEEDS_REVISION: "Cần chỉnh sửa",
-  CHANGES_REQUESTED: "Cần chỉnh sửa",
-  REJECTED: "Bị từ chối",
-  APPROVED: "Đã duyệt",
-  PUBLISHED: "Đang nhận hồ sơ",
-  TEAM_SELECTED: "Đã chọn nhóm",
-  PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
-  EVALUATING: "Doanh nghiệp đang đánh giá",
-  CLOSED: "Đã kết thúc – không triển khai",
-  READY_FOR_IMPLEMENTATION: "Sẵn sàng sang Paid Implementation",
-  COMPLETED: "Đã hoàn thành",
-};
 
 const statusOptions = [
   ["PENDING_REVIEW", "Chờ duyệt"],
@@ -31,7 +16,7 @@ const statusOptions = [
   ["PROTOTYPING", "Đang xây dựng Prototype / Solution Proposal"],
   ["EVALUATING", "Doanh nghiệp đang đánh giá"],
   ["CLOSED", "Đã kết thúc – không triển khai"],
-  ["READY_FOR_IMPLEMENTATION", "Sẵn sàng sang Paid Implementation"],
+  ["READY_FOR_IMPLEMENTATION", "Đã quyết định triển khai – chờ thỏa thuận"],
   ["COMPLETED", "Đã hoàn thành"],
   ["DRAFT", "Bản nháp"],
 ] as const;
@@ -111,7 +96,7 @@ export default async function AdminProblemsPage({
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-lg font-semibold">{problem.title}</h2>
                     <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                      {statusLabels[problem.status] ?? problem.status}
+                      {getPrototypeProblemStatusLabel(problem)}
                     </span>
                   </div>
                   <p className="mt-2 text-sm font-medium text-muted-foreground">

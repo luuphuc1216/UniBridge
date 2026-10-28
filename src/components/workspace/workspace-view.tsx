@@ -9,10 +9,14 @@ import {
 import Link from "next/link";
 import {
   evaluateProposalAction,
+  evaluatePrototypeAction,
+  decidePrototypeImplementationAction,
+  closePrototypeWithoutSubmissionAction,
   createTrialBriefAction,
   sendWorkspaceMessageAction,
   respondToTrialBriefAction,
   submitProposalAction,
+  type PrototypeDecisionActionState,
   type WorkspaceActionState,
 } from "@/app/workspace/actions";
 import {
@@ -27,6 +31,8 @@ import {
   proposalTypeOptions,
 } from "@/lib/workspace";
 import { FilePicker } from "@/components/uploads/file-picker";
+import { canOpenPaidImplementationAgreement } from "@/lib/agreement-access";
+import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
 
 type WorkspaceFile = {
   id: string;
@@ -88,6 +94,9 @@ export type WorkspaceViewData = {
     applicationId: string;
     trialBriefLockedAt: Date | null;
     prototypeLegacy: boolean;
+    evaluationResult: string | null;
+    implementationDecision: string | null;
+    prototypeRevisionRequestCount: number;
     canRespondToTrialBrief: boolean;
   };
   trialBriefVersions: {
@@ -134,6 +143,8 @@ const statusLabels: Record<string, string> = {
   CHANGES_REQUESTED: "Được yêu cầu chỉnh sửa",
   NOT_IMPLEMENTED: "Không triển khai",
   ACCEPTED: "Được chấp nhận",
+  REVISION_REQUESTED: "Doanh nghiệp yêu cầu chỉnh sửa Prototype",
+  STOPPED: "Doanh nghiệp không tiếp tục Prototype",
   PENDING_REVIEW: "Đang chờ Admin kiểm tra bàn giao",
   APPROVED: "Đã qua kiểm tra bàn giao",
   RETURNED: "Cần bổ sung bàn giao",
@@ -557,12 +568,236 @@ function EvaluationForm({
   );
 }
 
+function PrototypeEvaluationForm({
+  problemId,
+  applicationId,
+  proposalId,
+  revisionCount,
+  maxRevisionRequests,
+}: {
+  problemId: string;
+  applicationId: string;
+  proposalId: string;
+  revisionCount: number;
+  maxRevisionRequests: number;
+}) {
+  const [state, action, pending] = useActionState<WorkspaceActionState, FormData>(
+    evaluatePrototypeAction,
+    { error: null },
+  );
+  const canRequestRevision = revisionCount < maxRevisionRequests;
+  return (
+    <form action={action} className="mt-5 space-y-4 border-t border-border pt-5">
+      <input name="problemId" type="hidden" value={problemId} />
+      <input name="applicationId" type="hidden" value={applicationId} />
+      <input name="proposalId" type="hidden" value={proposalId} />
+      <h4 className="font-semibold">Đánh giá Prototype theo thang điểm 1–5</h4>
+      <p className="text-sm text-muted-foreground">
+        Bắt buộc chấm đủ 7 tiêu chí và ghi nhận xét cho mọi kết quả.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {proposalEvaluationFields.map(([name, label, description]) => (
+          <label className="text-sm font-medium" key={name}>
+            {label}
+            <span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">
+              {description}
+            </span>
+            <select
+              className="mt-2 block w-full rounded-lg border border-border bg-background px-3 py-2"
+              name={name}
+              required
+            >
+              <option value="">Chọn điểm</option>
+              {[1, 2, 3, 4, 5].map((score) => (
+                <option key={score} value={score}>
+                  {score} - {evaluationScoreLabels[score]}
+                  {score === 5 && "/đáp ứng hoàn toàn"}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+      <label className="block text-sm font-medium">
+        Nhận xét{ " " }{`(bắt buộc${canRequestRevision ? "; ghi rõ nội dung cần chỉnh sửa nếu chọn yêu cầu chỉnh sửa" : ""})`}
+        <textarea
+          className="mt-1.5 min-h-24 w-full rounded-xl border border-border bg-background p-3"
+          maxLength={4000}
+          name="comment"
+          required
+        />
+      </label>
+      <label className="block text-sm font-medium">
+        Kết quả
+        <select
+          className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5"
+          name="decision"
+          required
+        >
+          <option value="ACCEPTED">Chấp nhận Prototype</option>
+          {canRequestRevision && (
+            <option value="REVISION_REQUESTED">Yêu cầu chỉnh sửa</option>
+          )}
+          <option value="STOPPED">Không tiếp tục</option>
+        </select>
+      </label>
+      {!canRequestRevision && (
+        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+          Đã dùng hết {maxRevisionRequests} lần chỉnh sửa theo hồ sơ đã khóa. Chỉ còn Chấp nhận hoặc Không tiếp tục.
+        </p>
+      )}
+      <button
+        className="rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+        disabled={pending}
+        type="submit"
+      >
+        {pending ? "Đang lưu đánh giá..." : "Gửi đánh giá"}
+      </button>
+      <ActionFeedback state={state} />
+    </form>
+  );
+}
+
+function ImplementationDecisionForm({
+  problemId,
+  applicationId,
+}: {
+  problemId: string;
+  applicationId: string;
+}) {
+  const [state, action, pending] = useActionState<PrototypeDecisionActionState, FormData>(
+    decidePrototypeImplementationAction,
+    { error: null, completed: 0 },
+  );
+  return (
+    <ImplementationDecisionFields
+      action={action}
+      applicationId={applicationId}
+      key={state.completed}
+      pending={pending}
+      problemId={problemId}
+      state={state}
+    />
+  );
+}
+
+function ImplementationDecisionFields({
+  action,
+  applicationId,
+  pending,
+  problemId,
+  state,
+}: {
+  action: (formData: FormData) => void;
+  applicationId: string;
+  pending: boolean;
+  problemId: string;
+  state: PrototypeDecisionActionState;
+}) {
+  const [decision, setDecision] = useState("");
+  const [reason, setReason] = useState("");
+  return (
+    <form
+      action={action}
+      className="mt-4 space-y-3"
+      onSubmit={(event) => {
+        if (!window.confirm("Quyết định này không thể thay đổi sau khi lưu. Bạn có muốn tiếp tục không?")) {
+          event.preventDefault();
+        }
+      }}
+    >
+      <input name="problemId" type="hidden" value={problemId} />
+      <input name="applicationId" type="hidden" value={applicationId} />
+      <label className="block text-sm font-medium">
+        Quyết định sau khi chấp nhận Prototype
+        <select
+          className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5"
+          name="decision"
+          onChange={(event) => setDecision(event.target.value)}
+          required
+          value={decision}
+        >
+          <option disabled value="">Chọn quyết định...</option>
+          <option value="IMPLEMENT">Tạo thỏa thuận triển khai</option>
+          <option value="ENDED">Kết thúc</option>
+        </select>
+      </label>
+      {decision === "ENDED" && (
+        <label className="block text-sm font-medium">
+          Lý do kết thúc (bắt buộc)
+          <textarea
+            className="mt-1.5 min-h-20 w-full rounded-xl border border-border bg-background p-3"
+            maxLength={4000}
+            name="reason"
+            onChange={(event) => setReason(event.target.value)}
+            required
+            value={reason}
+          />
+        </label>
+      )}
+      <button
+        className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+        disabled={pending || !decision}
+        type="submit"
+      >
+        {pending ? "Đang lưu..." : "Lưu quyết định"}
+      </button>
+      <ActionFeedback state={state} />
+    </form>
+  );
+}
+
+function ClosePrototypeForm({
+  problemId,
+  applicationId,
+}: {
+  problemId: string;
+  applicationId: string;
+}) {
+  const [state, action, pending] = useActionState<WorkspaceActionState, FormData>(
+    closePrototypeWithoutSubmissionAction,
+    { error: null },
+  );
+  return (
+    <form action={action} className="mt-4 border-t border-border pt-4">
+      <input name="problemId" type="hidden" value={problemId} />
+      <input name="applicationId" type="hidden" value={applicationId} />
+      <label className="block text-sm font-medium">
+        Kết thúc thử nghiệm khi nhóm chưa có lần nộp đang chờ kiểm tra
+        <textarea
+          className="mt-1.5 min-h-20 w-full rounded-xl border border-border bg-background p-3"
+          maxLength={4000}
+          name="reason"
+          placeholder="Lý do kết thúc (bắt buộc)"
+          required
+        />
+      </label>
+      <button
+        className="mt-3 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+        disabled={pending}
+        type="submit"
+      >
+        {pending ? "Đang lưu..." : "Kết thúc thử nghiệm"}
+      </button>
+      <ActionFeedback state={state} />
+    </form>
+  );
+}
+
 export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
   const { problem, messages, proposals, isBusiness } = data;
   const readonly = ["CLOSED", "READY_FOR_IMPLEMENTATION", "COMPLETED"].includes(problem.status);
   const latestProposal = proposals[0];
+  const maxRevisionRequests =
+    data.trialBriefVersions.find((version) => version.lockedAt !== null)
+      ?.maxRevisionRequests ?? 0;
+  const revisionResubmissionAvailable =
+    !problem.prototypeLegacy &&
+    problem.evaluationResult === "REVISION_REQUESTED" &&
+    latestProposal?.handoffStatus === "APPROVED";
   const returnedProposal =
-    !problem.prototypeLegacy && latestProposal?.handoffStatus === "RETURNED"
+    !problem.prototypeLegacy &&
+    (latestProposal?.handoffStatus === "RETURNED" || revisionResubmissionAvailable)
       ? latestProposal
       : undefined;
   const handoffPending = proposals.some(
@@ -571,6 +806,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
   const handoffApproved = proposals.some(
     (proposal) => proposal.handoffStatus === "APPROVED",
   );
+  const canCreateAgreement = isBusiness && canOpenPaidImplementationAgreement(problem);
   return (
     <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-10">
       <p className="text-sm font-semibold text-primary">Không gian làm việc chung</p>
@@ -582,7 +818,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
           </p>
         </div>
         <span className="w-fit rounded-full bg-primary/10 px-3 py-1.5 text-sm font-semibold text-primary">
-          {statusLabels[problem.status] ?? problem.status}
+          {getPrototypeProblemStatusLabel(problem)}
         </span>
       </div>
       {problem.prototypeLegacy && (
@@ -618,6 +854,24 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
           canRespondToTrialBrief={problem.canRespondToTrialBrief}
         />
       )}
+      {isBusiness &&
+        !problem.prototypeLegacy &&
+        problem.status === "EVALUATING" &&
+        problem.evaluationResult === "ACCEPTED" &&
+        problem.implementationDecision === "PENDING" && (
+          <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+            <h2 className="font-semibold text-emerald-950">
+              Prototype đã được chấp nhận
+            </h2>
+            <p className="mt-1 text-sm text-emerald-900">
+              Chọn riêng việc tạo thỏa thuận triển khai hoặc kết thúc. Chấp nhận Prototype chưa tạo dự án hay giao dịch.
+            </p>
+            <ImplementationDecisionForm
+              applicationId={problem.applicationId}
+              problemId={problem.id}
+            />
+          </section>
+        )}
 
       {["READY_FOR_IMPLEMENTATION", "COMPLETED"].includes(problem.status) && (
         <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
@@ -634,7 +888,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
             >
               Mở dự án
             </Link>
-          ) : isBusiness && problem.status === "READY_FOR_IMPLEMENTATION" ? (
+          ) : canCreateAgreement ? (
             <Link
               className="mt-3 inline-flex rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
               href={`/business/problems/${problem.id}/agreement`}
@@ -772,10 +1026,24 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
                       </dl>
                     </div>
                   ))}
-                  {isBusiness && problem.prototypeLegacy && problem.status === "EVALUATING" &&
-                    proposal.id === latestProposal?.id && proposal.status === "SUBMITTED" && (
+                  {isBusiness &&
+                    problem.status === "EVALUATING" &&
+                    proposal.id === latestProposal?.id &&
+                    proposal.status === "SUBMITTED" &&
+                    (problem.prototypeLegacy ||
+                      (problem.evaluationResult === null &&
+                        proposal.handoffStatus === "APPROVED")) &&
+                    (problem.prototypeLegacy ? (
                       <EvaluationForm problemId={problem.id} proposalId={proposal.id} />
-                    )}
+                    ) : (
+                      <PrototypeEvaluationForm
+                        applicationId={problem.applicationId}
+                        maxRevisionRequests={maxRevisionRequests}
+                        problemId={problem.id}
+                        proposalId={proposal.id}
+                        revisionCount={problem.prototypeRevisionRequestCount}
+                      />
+                    ))}
                 </li>
               ))}
             </ol>
@@ -783,7 +1051,8 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
           {!isBusiness && problem.status === "PROTOTYPING" &&
             (problem.prototypeLegacy ||
               (problem.canRespondToTrialBrief && problem.trialBriefLockedAt !== null)) &&
-            (problem.prototypeLegacy || (!handoffPending && !handoffApproved)) && (
+            (problem.prototypeLegacy ||
+              (!handoffPending && (!handoffApproved || revisionResubmissionAvailable))) && (
             <div className="mt-5 border-t border-border pt-4">
               <h3 className="font-semibold">
                 {returnedProposal ? `Nộp lại phiên bản ${returnedProposal.version}` : "Nộp Proposal"}
@@ -814,6 +1083,15 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
               <p className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
                 Chỉ chủ nhóm mới có thể nộp Proposal.
               </p>
+            )}
+          {isBusiness &&
+            !problem.prototypeLegacy &&
+            problem.status === "PROTOTYPING" &&
+            problem.trialBriefLockedAt !== null && (
+              <ClosePrototypeForm
+                applicationId={problem.applicationId}
+                problemId={problem.id}
+              />
             )}
           {!isBusiness &&
             !problem.prototypeLegacy &&

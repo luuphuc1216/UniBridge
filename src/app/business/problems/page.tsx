@@ -2,23 +2,9 @@ import Link from "next/link";
 import { activeApplicationsWhere } from "@/lib/applications";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
+import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
 
 export const instant = false;
-
-const statusLabels: Record<string, string> = {
-  DRAFT: "Bản nháp",
-  PENDING_REVIEW: "Chờ duyệt",
-  NEEDS_REVISION: "Cần chỉnh sửa",
-  CHANGES_REQUESTED: "Cần chỉnh sửa",
-  REJECTED: "Bị từ chối",
-  APPROVED: "Đã duyệt",
-  PUBLISHED: "Đang nhận hồ sơ",
-  TEAM_SELECTED: "Đã chọn nhóm",
-  PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
-  EVALUATING: "Doanh nghiệp đang đánh giá",
-  CLOSED: "Đã kết thúc – không triển khai",
-  READY_FOR_IMPLEMENTATION: "Sẵn sàng sang Paid Implementation",
-};
 
 const statusClasses: Record<string, string> = {
   DRAFT: "bg-muted text-muted-foreground",
@@ -91,7 +77,7 @@ export default async function BusinessProblemsPage() {
                         statusClasses[problem.status] ?? "bg-muted text-muted-foreground"
                       }`}
                     >
-                      {statusLabels[problem.status] ?? problem.status}
+                      {getPrototypeProblemStatusLabel(problem)}
                     </span>
                   </div>
                   <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">

@@ -99,6 +99,14 @@ Hệ thống lưu trữ các nhóm dữ liệu:
 
 Các dữ liệu được liên kết với hồ sơ dự án để phục vụ việc theo dõi và đối chiếu.
 
+### **7. Mã kết quả đánh giá và kết thúc Prototype**
+
+- `ProposalEvaluation.evaluationResult`: `ACCEPTED`, `REVISION_REQUESTED` hoặc `STOPPED`. `STOPPED` lưu lý do trong nhận xét đánh giá.
+- `Problem.implementationDecision`: sau `ACCEPTED`, là `PENDING` cho tới khi doanh nghiệp chọn `IMPLEMENT` hoặc `ENDED`.
+- `PrototypeClosure.result`: `ENDED_AFTER_ACCEPTANCE` khi kết thúc sau khi đã chấp nhận Prototype; `ENDED_WITHOUT_SUBMISSION` khi doanh nghiệp kết thúc lúc không có lần nộp nào đang chờ Admin kiểm tra.
+- `Problem.status` là trạng thái quy trình, không thay thế các kết quả trên. `ACCEPTED + PENDING` vẫn ở `EVALUATING`; `ACCEPTED + IMPLEMENT` chuyển sang `READY_FOR_IMPLEMENTATION`; `ACCEPTED + ENDED` và `STOPPED` chuyển sang `CLOSED`.
+- `IMPLEMENT` chỉ mở cổng soạn thỏa thuận. Không tạo `Project`, `PlatformCharge` hoặc `ProjectTransaction` cho tới các bước giao dịch riêng.
+
 ## **II. Module Paid Implementation và giao dịch**
 
 ### **1. Mục đích chức năng**

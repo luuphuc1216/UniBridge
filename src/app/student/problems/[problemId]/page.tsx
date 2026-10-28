@@ -14,6 +14,7 @@ import {
   isProblemAcceptingApplications,
   STUDENT_DISCOVERABLE_PROBLEM_STATUSES,
 } from "@/lib/problem-workflow";
+import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
 
 export const instant = false;
 
@@ -27,7 +28,7 @@ const workspaceStatusLabels: Record<string, string> = {
   PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
   EVALUATING: "Đang được doanh nghiệp đánh giá",
   CLOSED: "Đã kết thúc – không triển khai",
-  READY_FOR_IMPLEMENTATION: "Sẵn sàng sang Paid Implementation",
+  READY_FOR_IMPLEMENTATION: "Đã quyết định triển khai – chờ thỏa thuận",
 };
 
 function formatCurrency(amount: number | null): string {
@@ -131,7 +132,7 @@ export default async function StudentProblemDetailPage({
       </p>
       {workspaceStatusLabels[problem.status] && (
         <span className="mt-3 inline-flex rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
-          {workspaceStatusLabels[problem.status]}
+          {getPrototypeProblemStatusLabel(problem)}
         </span>
       )}
       {!["REJECTED", "CLOSED", "READY_FOR_IMPLEMENTATION"].includes(problem.status) && (

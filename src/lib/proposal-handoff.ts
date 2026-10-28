@@ -72,6 +72,7 @@ async function submitInTransaction(
           id: true,
           title: true,
           status: true,
+          evaluationResult: true,
           businessProfile: { select: { userId: true } },
         },
       },
@@ -83,24 +84,61 @@ async function submitInTransaction(
     );
   }
 
-  const blockedProposal = await transaction.proposal.findFirst({
+  const pendingProposal = await transaction.proposal.findFirst({
     where: {
       applicationId,
-      handoffStatus: { in: ["PENDING_REVIEW", "APPROVED"] },
+      handoffStatus: "PENDING_REVIEW",
     },
     select: { id: true },
   });
-  if (blockedProposal) {
+  const approvedProposal = await transaction.proposal.findFirst({
+    where: { applicationId, handoffStatus: "APPROVED" },
+    orderBy: { version: "desc" },
+    select: {
+      id: true,
+      evaluations: {
+        where: { evaluationResult: "REVISION_REQUESTED" },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+  const resubmittingAfterRevision =
+    application.problem.evaluationResult === "REVISION_REQUESTED" &&
+    Boolean(approvedProposal?.evaluations.length);
+  if (
+    pendingProposal ||
+    (approvedProposal && !resubmittingAfterRevision)
+  ) {
     throw new Error("Proposal đang chờ kiểm tra hoặc đã được duyệt bàn giao.");
+  }
+  const problemStillWritable = await transaction.problem.updateMany({
+    where: {
+      id: application.problem.id,
+      status: "PROTOTYPING",
+      prototypeLegacy: false,
+      trialBriefLockedAt: { not: null },
+      ...(resubmittingAfterRevision
+        ? { evaluationResult: "REVISION_REQUESTED" }
+        : {}),
+      applications: { some: { id: applicationId, status: "SELECTED" } },
+    },
+    data: { updatedAt: now },
+  });
+  if (problemStillWritable.count !== 1) {
+    throw new Error("Bài toán vừa thay đổi trạng thái. Vui lòng tải lại trang.");
   }
 
   let proposalIdToSubmit = proposalId;
   if (proposalIdToSubmit) {
+    const resubmittableStatuses = resubmittingAfterRevision
+      ? ["RETURNED", "APPROVED"]
+      : ["RETURNED"];
     const returnedProposal = await transaction.proposal.findFirst({
       where: {
         id: proposalIdToSubmit,
         applicationId,
-        handoffStatus: "RETURNED",
+        handoffStatus: { in: resubmittableStatuses },
       },
       select: { id: true, type: true },
     });
@@ -136,13 +174,33 @@ async function submitInTransaction(
   }
 
   if (proposalId) {
+    const resubmittableStatuses = resubmittingAfterRevision
+      ? ["RETURNED", "APPROVED"]
+      : ["RETURNED"];
     const changed = await transaction.proposal.updateMany({
       where: {
         id: proposalId,
         applicationId,
-        handoffStatus: "RETURNED",
+        handoffStatus: { in: resubmittableStatuses },
+        application: {
+          is: {
+            status: "SELECTED",
+            problem: {
+              is: {
+                id: application.problem.id,
+                status: "PROTOTYPING",
+                prototypeLegacy: false,
+                trialBriefLockedAt: { not: null },
+                ...(resubmittingAfterRevision
+                  ? { evaluationResult: "REVISION_REQUESTED" }
+                  : {}),
+              },
+            },
+          },
+        },
       },
       data: {
+        status: "SUBMITTED",
         submissionStatus: "SUBMITTED",
         handoffStatus: "PENDING_REVIEW",
         submittedByUserId: submitterId,

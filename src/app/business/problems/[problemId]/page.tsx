@@ -3,24 +3,9 @@ import { notFound } from "next/navigation";
 import { activeApplicationsWhere } from "@/lib/applications";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
+import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
 
 export const instant = false;
-
-const statusLabels: Record<string, string> = {
-  DRAFT: "Bản nháp",
-  PENDING_REVIEW: "Chờ duyệt",
-  NEEDS_REVISION: "Cần chỉnh sửa",
-  CHANGES_REQUESTED: "Cần chỉnh sửa",
-  REJECTED: "Bị từ chối",
-  APPROVED: "Đã duyệt",
-  PUBLISHED: "Đang nhận hồ sơ",
-  TEAM_SELECTED: "Đã chọn nhóm",
-  PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
-  EVALUATING: "Doanh nghiệp đang đánh giá",
-  CLOSED: "Đã kết thúc – không triển khai",
-  READY_FOR_IMPLEMENTATION: "Sẵn sàng sang Paid Implementation",
-  COMPLETED: "Đã hoàn thành",
-};
 
 function formatCurrency(amount: number | null): string {
   return amount === null
@@ -84,7 +69,7 @@ export default async function BusinessProblemDetailPage({
           <p className="text-sm font-semibold text-primary">{problem.field}</p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">{problem.title}</h1>
           <span className="mt-3 inline-flex rounded-full bg-muted px-3 py-1 text-sm font-semibold">
-            {statusLabels[problem.status] ?? problem.status}
+            {getPrototypeProblemStatusLabel(problem)}
           </span>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">

@@ -24,12 +24,33 @@ import {
 import { assertLegacyEvaluationEnabled } from "@/lib/proposal-evaluation-access";
 import { canRespondForTeam } from "@/lib/team-permissions";
 import { submitPrototypeProposal } from "@/lib/proposal-handoff";
+import {
+  closePrototypeWithoutSubmission,
+  decidePrototypeImplementation,
+  evaluatePrototypeProposal,
+  parsePrototypeImplementationFormData,
+  PrototypeDecisionError,
+  type PrototypeEvaluationDecision,
+} from "@/lib/prototype-evaluation";
 
 export type WorkspaceActionState = { error: string | null };
+export type PrototypeDecisionActionState = WorkspaceActionState & {
+  completed: number;
+};
 
 function readText(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function parsePrototypeEvaluationDecision(
+  value: string,
+): PrototypeEvaluationDecision | null {
+  return value === "ACCEPTED" ||
+    value === "REVISION_REQUESTED" ||
+    value === "STOPPED"
+    ? value
+    : null;
 }
 
 async function requireWorkspace(problemId: string, applicationId?: string) {
@@ -470,6 +491,132 @@ export async function evaluateProposalAction(
     });
   } catch (error) {
     return actionError(error, "Đánh giá Proposal");
+  }
+  revalidateWorkspace(problemId);
+  return { error: null };
+}
+
+export async function evaluatePrototypeAction(
+  _previousState: WorkspaceActionState,
+  formData: FormData,
+): Promise<WorkspaceActionState> {
+  const problemId = readText(formData, "problemId");
+  const decision = parsePrototypeEvaluationDecision(readText(formData, "decision"));
+  if (!decision) {
+    return { error: "Kết quả đánh giá Prototype không hợp lệ." };
+  }
+  const scores = {
+    problemResponse: Number(readText(formData, "problemResponse")),
+    feasibility: Number(readText(formData, "feasibility")),
+    goalAlignment: Number(readText(formData, "goalAlignment")),
+    practicalImplementation: Number(readText(formData, "practicalImplementation")),
+    estimatedCost: Number(readText(formData, "estimatedCost")),
+    implementationTime: Number(readText(formData, "implementationTime")),
+    valueDelivered: Number(readText(formData, "valueDelivered")),
+  };
+  try {
+    const { session, workspace, application } = await requireWorkspace(
+      problemId,
+      readText(formData, "applicationId"),
+    );
+    if (session.user.role !== "BUSINESS") {
+      throw new Error("Chỉ doanh nghiệp sở hữu bài toán mới có thể đánh giá.");
+    }
+    if (workspace.prototypeLegacy) {
+      throw new Error("Bài toán legacy phải tiếp tục dùng luồng đánh giá cũ.");
+    }
+    await prisma.$transaction((transaction) =>
+      evaluatePrototypeProposal(transaction, {
+        problemId,
+        applicationId: application.id,
+        proposalId: readText(formData, "proposalId"),
+        businessUserId: session.user.id,
+        decision,
+        scores,
+        comment: readText(formData, "comment"),
+      }),
+    );
+  } catch (error) {
+    return actionError(error, "Đánh giá Prototype");
+  }
+  revalidateWorkspace(problemId);
+  return { error: null };
+}
+
+export async function decidePrototypeImplementationAction(
+  previousState: PrototypeDecisionActionState,
+  formData: FormData,
+): Promise<PrototypeDecisionActionState> {
+  const problemId = readText(formData, "problemId");
+  try {
+    const { decision, reason } = parsePrototypeImplementationFormData(formData);
+    const { session, workspace, application } = await requireWorkspace(
+      problemId,
+      readText(formData, "applicationId"),
+    );
+    if (session.user.role !== "BUSINESS") {
+      throw new Error("Chỉ doanh nghiệp sở hữu bài toán mới có thể quyết định triển khai.");
+    }
+    if (workspace.prototypeLegacy) {
+      throw new Error("Bài toán legacy không thuộc luồng quyết định Prototype mới.");
+    }
+    await prisma.$transaction((transaction) =>
+      decidePrototypeImplementation(transaction, {
+        problemId,
+        applicationId: application.id,
+        businessUserId: session.user.id,
+        decision,
+        reason,
+      }),
+    );
+  } catch (error) {
+    if (error instanceof PrototypeDecisionError) {
+      return { error: error.message, completed: previousState.completed };
+    }
+    if (
+      error instanceof Error &&
+      /^(Vui lòng đăng nhập|Không tìm thấy không gian|Không tìm thấy nhóm|Chỉ doanh nghiệp sở hữu|Bài toán legacy)/.test(
+        error.message,
+      )
+    ) {
+      return { error: error.message, completed: previousState.completed };
+    }
+    console.error("Lỗi hệ thống khi lưu quyết định triển khai Prototype:", error);
+    return {
+      error: "Đã xảy ra lỗi hệ thống khi lưu quyết định. Vui lòng liên hệ quản trị viên.",
+      completed: previousState.completed,
+    };
+  }
+  revalidateWorkspace(problemId);
+  return { error: null, completed: previousState.completed + 1 };
+}
+
+export async function closePrototypeWithoutSubmissionAction(
+  _previousState: WorkspaceActionState,
+  formData: FormData,
+): Promise<WorkspaceActionState> {
+  const problemId = readText(formData, "problemId");
+  try {
+    const { session, workspace, application } = await requireWorkspace(
+      problemId,
+      readText(formData, "applicationId"),
+    );
+    if (session.user.role !== "BUSINESS") {
+      throw new Error("Chỉ doanh nghiệp sở hữu bài toán mới có thể kết thúc thử nghiệm.");
+    }
+    if (workspace.prototypeLegacy) {
+      throw new Error("Bài toán legacy không thuộc luồng kết thúc Prototype mới.");
+    }
+    await prisma.$transaction((transaction) =>
+      closePrototypeWithoutSubmission(transaction, {
+        problemId,
+        applicationId: application.id,
+        businessUserId: session.user.id,
+        reason: readText(formData, "reason"),
+      }),
+    );
+  } catch (error) {
+    return actionError(error, "Kết thúc giai đoạn Prototype");
   }
   revalidateWorkspace(problemId);
   return { error: null };

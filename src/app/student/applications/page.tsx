@@ -3,6 +3,7 @@ import { requireStudent } from "@/lib/student-access";
 import { getOwnedTeam } from "@/lib/student-team";
 import { prisma } from "@/lib/prisma";
 import { getApplicationStatusDisplay } from "@/lib/application-status";
+import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
 
 export const instant = false;
 
@@ -20,6 +21,9 @@ export default async function StudentApplicationsPage() {
               title: true,
               field: true,
               status: true,
+              prototypeLegacy: true,
+              evaluationResult: true,
+              implementationDecision: true,
               businessProfile: { select: { companyName: true } },
             },
           },
@@ -63,19 +67,7 @@ export default async function StudentApplicationsPage() {
                     {application.problem.businessProfile.companyName}
                   </p>
                   <p className="mt-2 text-xs font-medium text-primary">
-                    {application.problem.status === "PROTOTYPING"
-                      ? "Đang xây dựng Prototype / Solution Proposal"
-                      : application.problem.status === "EVALUATING"
-                        ? "Doanh nghiệp đang đánh giá Proposal"
-                        : application.problem.status === "CLOSED"
-                          ? "Đã kết thúc – không triển khai"
-                          : application.problem.status === "READY_FOR_IMPLEMENTATION"
-                            ? "Sẵn sàng sang Paid Implementation"
-                            : application.problem.status === "COMPLETED"
-                              ? "Paid Implementation đã hoàn tất"
-                            : application.problem.status === "TEAM_SELECTED"
-                              ? "Đã chọn nhóm"
-                              : ""}
+                    {getPrototypeProblemStatusLabel(application.problem)}
                   </p>
                 </div>
                 <span
