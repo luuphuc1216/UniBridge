@@ -6,7 +6,7 @@ import {
 
 type WorkspaceDatabase = Pick<
   PrismaClient,
-  "application" | "problem" | "trialBriefVersion" | "workspaceMessage"
+  "application" | "problem" | "proposal" | "trialBriefVersion" | "workspaceMessage"
 >;
 
 export async function findAuthorizedWorkspace(
@@ -109,13 +109,6 @@ export async function findAuthorizedWorkspace(
               },
             },
           },
-          proposals: {
-            orderBy: { version: "desc" },
-            include: {
-              files: { orderBy: { createdAt: "asc" } },
-              evaluations: { orderBy: { createdAt: "desc" } },
-            },
-          },
           project: { select: { id: true, status: true } },
         },
       },
@@ -125,6 +118,37 @@ export async function findAuthorizedWorkspace(
   if (!problem) return null;
   const workspaceApplication = problem.applications[0];
   if (!workspaceApplication) return null;
+  const canReadApplicationProposals =
+    workspaceApplication.status === "SELECTED";
+  const hideUnapprovedHandoffs = role === "BUSINESS" && !problem.prototypeLegacy;
+  const proposals = canReadApplicationProposals
+    ? await database.proposal.findMany({
+        where: {
+          applicationId: workspaceApplication.id,
+          ...(hideUnapprovedHandoffs ? { handoffStatus: "APPROVED" } : {}),
+        },
+        orderBy: { version: "desc" },
+        include: {
+          files: {
+            where: hideUnapprovedHandoffs
+              ? { attempt: { is: { handoffReviews: { some: { result: "APPROVED" } } } } }
+              : {},
+            orderBy: { createdAt: "asc" },
+          },
+          evaluations: { orderBy: { createdAt: "desc" } },
+          submissionAttempts: {
+            where: hideUnapprovedHandoffs
+              ? { handoffReviews: { some: { result: "APPROVED" } } }
+              : {},
+            orderBy: { attempt: "desc" },
+            include: {
+              files: { orderBy: { createdAt: "asc" } },
+              handoffReviews: { orderBy: { createdAt: "desc" } },
+            },
+          },
+        },
+      })
+    : [];
   const trialBriefVersions =
     workspaceApplication.status === "SELECTED" || role === "BUSINESS"
       ? await database.trialBriefVersion.findMany({
@@ -147,7 +171,12 @@ export async function findAuthorizedWorkspace(
     include: { sender: { select: { id: true, name: true, role: true } } },
   });
 
-  return { ...problem, trialBriefVersions, workspaceMessages };
+  return {
+    ...problem,
+    applications: [{ ...workspaceApplication, proposals }],
+    trialBriefVersions,
+    workspaceMessages,
+  };
 }
 
 export function isFinalWorkspaceStatus(status: string): boolean {

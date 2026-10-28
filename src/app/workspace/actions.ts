@@ -22,6 +22,8 @@ import {
   type TrialBriefInput,
 } from "@/lib/trial-brief";
 import { assertLegacyEvaluationEnabled } from "@/lib/proposal-evaluation-access";
+import { canRespondForTeam } from "@/lib/team-permissions";
+import { submitPrototypeProposal } from "@/lib/proposal-handoff";
 
 export type WorkspaceActionState = { error: string | null };
 
@@ -235,7 +237,7 @@ export async function submitProposalAction(
     return { error: `Mỗi phiên bản được đính kèm tối đa ${MAX_PROPOSAL_FILE_COUNT} tệp.` };
   }
 
-  const storedKeys: string[] = [];
+  const legacyStoredKeys: string[] = [];
   try {
     const { session, workspace, application } = await requireWorkspace(
       problemId,
@@ -247,6 +249,12 @@ export async function submitProposalAction(
     if (workspace.status !== "PROTOTYPING") {
       throw new Error("Chỉ có thể nộp Proposal khi bài toán đang ở giai đoạn xây dựng.");
     }
+    if (
+      !workspace.prototypeLegacy &&
+      !canRespondForTeam(application.team.ownerId, session.user.id)
+    ) {
+      throw new Error("Chỉ chủ nhóm được chọn mới có thể nộp Proposal.");
+    }
     const validatedFiles = await Promise.all(uploadedFiles.map(validateAttachment));
     if (
       validatedFiles.reduce((total, file) => total + file.sizeBytes, 0) >
@@ -254,75 +262,97 @@ export async function submitProposalAction(
     ) {
       throw new Error("Tổng dung lượng tệp đính kèm vượt quá giới hạn cho phép.");
     }
-    for (const file of validatedFiles) {
-      const storageKey = randomUUID();
-      storedKeys.push(storageKey);
-      await attachmentStorage.save(storageKey, file.content);
-    }
+    if (!workspace.prototypeLegacy) {
+      await submitPrototypeProposal({
+        database: prisma,
+        storage: attachmentStorage,
+        applicationId: application.id,
+        proposalId:
+          readText(formData, "newVersion") === "true"
+            ? null
+            : readText(formData, "proposalId") || null,
+        submitterId: session.user.id,
+        type,
+        description,
+        files: validatedFiles.map((file) => ({
+          originalName: file.originalName,
+          contentType: file.contentType,
+          sizeBytes: file.sizeBytes,
+          content: file.content,
+        })),
+      });
+    } else {
+      for (const file of validatedFiles) {
+        const storageKey = randomUUID();
+        legacyStoredKeys.push(storageKey);
+        await attachmentStorage.save(storageKey, file.content);
+      }
 
-    await prisma.$transaction(async (transaction) => {
-      const currentProblem = await transaction.problem.findFirst({
-        where: {
-          id: problemId,
-          status: "PROTOTYPING",
-          applications: { some: { id: application.id, status: "SELECTED" } },
-        },
-        select: { id: true },
-      });
-      if (!currentProblem) {
-        throw new Error("Bài toán không còn nhận Proposal.");
-      }
-      const latest = await transaction.proposal.aggregate({
-        where: { applicationId: application.id },
-        _max: { version: true },
-      });
-      const version = (latest._max.version ?? 0) + 1;
-      await transaction.proposal.create({
-        data: {
-          applicationId: application.id,
-          version,
-          type,
-          description,
-          files: {
-            create: validatedFiles.map((file, index) => ({
-              originalName: file.originalName,
-              contentType: file.contentType,
-              sizeBytes: file.sizeBytes,
-              storageKey: storedKeys[index],
-            })),
+      await prisma.$transaction(async (transaction) => {
+        const currentProblem = await transaction.problem.findFirst({
+          where: {
+            id: problemId,
+            status: "PROTOTYPING",
+            applications: { some: { id: application.id, status: "SELECTED" } },
           },
-        },
-      });
-      const changed = await transaction.problem.updateMany({
-        where: {
-          id: problemId,
-          status: "PROTOTYPING",
-          applications: { some: { id: application.id, status: "SELECTED" } },
-        },
-        data: { status: "EVALUATING" },
-      });
-      if (changed.count !== 1) {
-        throw new Error("Trạng thái bài toán đã thay đổi. Vui lòng tải lại trang.");
-      }
-      await transaction.notification.create({
-        data: {
-          userId: workspace.businessProfile.userId,
-          title: "Nhóm đã nộp Proposal để đánh giá",
-          message: `Nhóm đã nộp phiên bản ${version} cho bài toán “${workspace.title}”.`,
-          href: `/business/problems/${problemId}/workspace`,
-        },
-      });
-    });
-  } catch (error) {
-    await Promise.all(
-      storedKeys.map(async (storageKey) => {
-        try {
-          await attachmentStorage.delete(storageKey);
-        } catch (cleanupError) {
-          console.error("Không thể dọn tệp Proposal sau lỗi:", cleanupError);
+          select: { id: true },
+        });
+        if (!currentProblem) {
+          throw new Error("Bài toán không còn nhận Proposal.");
         }
-      }),
+        const latest = await transaction.proposal.aggregate({
+          where: { applicationId: application.id },
+          _max: { version: true },
+        });
+        const version = (latest._max.version ?? 0) + 1;
+        await transaction.proposal.create({
+          data: {
+            applicationId: application.id,
+            version,
+            type,
+            description,
+            files: {
+              create: validatedFiles.map((file, index) => ({
+                originalName: file.originalName,
+                contentType: file.contentType,
+                sizeBytes: file.sizeBytes,
+                storageKey: legacyStoredKeys[index],
+              })),
+            },
+          },
+        });
+        const changed = await transaction.problem.updateMany({
+          where: {
+            id: problemId,
+            status: "PROTOTYPING",
+            applications: { some: { id: application.id, status: "SELECTED" } },
+          },
+          data: { status: "EVALUATING" },
+        });
+        if (changed.count !== 1) {
+          throw new Error("Trạng thái bài toán đã thay đổi. Vui lòng tải lại trang.");
+        }
+        await transaction.notification.create({
+          data: {
+            userId: workspace.businessProfile.userId,
+            title: "Nhóm đã nộp Proposal để đánh giá",
+            message: `Nhóm đã nộp phiên bản ${version} cho bài toán “${workspace.title}”.`,
+            href: `/business/problems/${problemId}/workspace`,
+          },
+        });
+      });
+    }
+  } catch (error) {
+    const cleanupResults = await Promise.allSettled(
+      legacyStoredKeys.map((storageKey) => attachmentStorage.delete(storageKey)),
     );
+    const cleanupErrors = cleanupResults.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    if (cleanupErrors.length > 0) {
+      console.error("Không thể dọn tệp Proposal cũ sau lỗi:", cleanupErrors);
+      return { error: "Nộp Proposal thất bại và không thể xóa toàn bộ tệp vừa tải lên." };
+    }
     return actionError(error, "Nộp Proposal");
   }
   revalidateWorkspace(problemId);

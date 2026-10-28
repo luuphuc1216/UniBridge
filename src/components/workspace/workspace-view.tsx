@@ -47,15 +47,33 @@ type Evaluation = {
   createdAt: Date;
 };
 
+type SubmissionAttempt = {
+  id: string;
+  attempt: number;
+  description: string;
+  submittedAt: Date;
+  files: WorkspaceFile[];
+  handoffReviews: {
+    id: string;
+    result: string;
+    note: string;
+    missingItems: string | null;
+    createdAt: Date;
+  }[];
+};
+
 type Proposal = {
   id: string;
   version: number;
   type: string;
   description: string;
   status: string;
+  submissionStatus: string;
+  handoffStatus: string;
   submittedAt: Date;
   files: WorkspaceFile[];
   evaluations: Evaluation[];
+  submissionAttempts: SubmissionAttempt[];
 };
 
 export type WorkspaceViewData = {
@@ -116,6 +134,9 @@ const statusLabels: Record<string, string> = {
   CHANGES_REQUESTED: "Được yêu cầu chỉnh sửa",
   NOT_IMPLEMENTED: "Không triển khai",
   ACCEPTED: "Được chấp nhận",
+  PENDING_REVIEW: "Đang chờ Admin kiểm tra bàn giao",
+  APPROVED: "Đã qua kiểm tra bàn giao",
+  RETURNED: "Cần bổ sung bàn giao",
 };
 
 function dateLabel(date: Date) {
@@ -351,7 +372,15 @@ function MessageForm({
   );
 }
 
-function ProposalForm({ problemId }: { problemId: string }) {
+function ProposalForm({
+  problemId,
+  applicationId,
+  returnedProposal,
+}: {
+  problemId: string;
+  applicationId: string;
+  returnedProposal?: Proposal;
+}) {
   const [pending, startPendingTransition] = useTransition();
   const [fileError, setFileError] = useState<string | null>(null);
 
@@ -394,10 +423,21 @@ function ProposalForm({ problemId }: { problemId: string }) {
   return (
     <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
       <input name="problemId" type="hidden" value={problemId} />
+      <input name="applicationId" type="hidden" value={applicationId} />
+      {returnedProposal && (
+        <>
+          <input name="proposalId" type="hidden" value={returnedProposal.id} />
+          <label className="flex items-start gap-2 text-sm">
+            <input className="mt-1" name="newVersion" type="checkbox" value="true" />
+            <span>Nộp thành phiên bản mới thay vì nộp lại phiên bản {returnedProposal.version}</span>
+          </label>
+        </>
+      )}
       <label className="block text-sm font-medium">
         Loại kết quả
         <select
           className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5"
+          defaultValue={returnedProposal?.type ?? ""}
           name="type"
           required
         >
@@ -521,6 +561,16 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
   const { problem, messages, proposals, isBusiness } = data;
   const readonly = ["CLOSED", "READY_FOR_IMPLEMENTATION", "COMPLETED"].includes(problem.status);
   const latestProposal = proposals[0];
+  const returnedProposal =
+    !problem.prototypeLegacy && latestProposal?.handoffStatus === "RETURNED"
+      ? latestProposal
+      : undefined;
+  const handoffPending = proposals.some(
+    (proposal) => proposal.handoffStatus === "PENDING_REVIEW",
+  );
+  const handoffApproved = proposals.some(
+    (proposal) => proposal.handoffStatus === "APPROVED",
+  );
   return (
     <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-10">
       <p className="text-sm font-semibold text-primary">Không gian làm việc chung</p>
@@ -634,7 +684,9 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
           <h2 className="text-lg font-semibold">Prototype / Solution Proposal</h2>
           {proposals.length === 0 ? (
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Nhóm chưa nộp phiên bản nào. Các phiên bản nộp lại sẽ được lưu thành lịch sử riêng.
+              {isBusiness && !problem.prototypeLegacy && problem.status !== "EVALUATING"
+                ? "Chưa có Proposal nào được duyệt bàn giao để doanh nghiệp xem."
+                : "Nhóm chưa nộp phiên bản nào. Các phiên bản nộp lại sẽ được lưu thành lịch sử riêng."}
             </p>
           ) : (
             <ol className="mt-4 space-y-4">
@@ -643,31 +695,62 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="font-semibold">Phiên bản {proposal.version}</h3>
                     <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
-                      {statusLabels[proposal.status] ?? proposal.status}
+                      {statusLabels[proposal.handoffStatus] ?? statusLabels[proposal.status] ?? proposal.status}
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {proposalTypeOptions.find(([value]) => value === proposal.type)?.[1] ?? proposal.type}
-                    {" · Nộp "}{dateLabel(proposal.submittedAt)}
-                  </p>
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{proposal.description}</p>
-                  {proposal.files.length > 0 && (
-                    <ul className="mt-3 space-y-1">
-                      {proposal.files.map((file) => (
-                        <li key={file.id}>
-                          <a
-                            className="break-all text-sm font-medium text-primary hover:underline"
-                            href={`/api/workspace/proposals/${file.id}`}
-                          >
-                            {file.originalName}
-                          </a>
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            ({(file.sizeBytes / 1024 / 1024).toFixed(2)} MB)
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  {(() => {
+                    const attempts: SubmissionAttempt[] = proposal.submissionAttempts.length
+                      ? proposal.submissionAttempts
+                      : [{
+                          id: proposal.id,
+                          attempt: 1,
+                          description: proposal.description,
+                          submittedAt: proposal.submittedAt,
+                          files: proposal.files,
+                          handoffReviews: [],
+                        }];
+                    return attempts.map((attempt) => (
+                      <div className="mt-4 border-t border-border pt-4" key={attempt.id}>
+                        <p className="text-xs text-muted-foreground">
+                          {proposalTypeOptions.find(([value]) => value === proposal.type)?.[1] ?? proposal.type}
+                          {" · "}{problem.prototypeLegacy ? "Nộp " : `Lần nộp ${attempt.attempt} · `}
+                          {dateLabel(attempt.submittedAt)}
+                        </p>
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{attempt.description}</p>
+                        {attempt.files.length > 0 && (
+                          <ul className="mt-3 space-y-1">
+                            {attempt.files.map((file) => (
+                              <li key={file.id}>
+                                <a
+                                  className="break-all text-sm font-medium text-primary hover:underline"
+                                  href={`/api/workspace/proposals/${file.id}`}
+                                >
+                                  {file.originalName}
+                                </a>
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  ({(file.sizeBytes / 1024 / 1024).toFixed(2)} MB)
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {attempt.handoffReviews.map((review) => (
+                          <div className="mt-3 rounded-lg bg-muted/60 p-3 text-sm" key={review.id}>
+                            <p className="font-semibold">
+                              {review.result === "RETURNED" ? "Cần bổ sung bàn giao" : "Đã qua kiểm tra bàn giao"}
+                              {" · "}{dateLabel(review.createdAt)}
+                            </p>
+                            <p className="mt-1 whitespace-pre-wrap">{review.note}</p>
+                            {review.missingItems && (
+                              <p className="mt-2 whitespace-pre-wrap">
+                                Mục cần bổ sung: {review.missingItems.split("\n").join(", ")}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ));
+                  })()}
                   {proposal.evaluations.map((evaluation, index) => (
                     <div className="mt-4 rounded-lg bg-muted/60 p-3 text-sm" key={`${proposal.id}-${index}`}>
                       <p className="font-semibold">
@@ -689,7 +772,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
                       </dl>
                     </div>
                   ))}
-                  {isBusiness && problem.status === "EVALUATING" &&
+                  {isBusiness && problem.prototypeLegacy && problem.status === "EVALUATING" &&
                     proposal.id === latestProposal?.id && proposal.status === "SUBMITTED" && (
                       <EvaluationForm problemId={problem.id} proposalId={proposal.id} />
                     )}
@@ -697,15 +780,50 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
               ))}
             </ol>
           )}
-          {!isBusiness && problem.status === "PROTOTYPING" && (
+          {!isBusiness && problem.status === "PROTOTYPING" &&
+            (problem.prototypeLegacy ||
+              (problem.canRespondToTrialBrief && problem.trialBriefLockedAt !== null)) &&
+            (problem.prototypeLegacy || (!handoffPending && !handoffApproved)) && (
             <div className="mt-5 border-t border-border pt-4">
-              <h3 className="font-semibold">Nộp phiên bản mới</h3>
+              <h3 className="font-semibold">
+                {returnedProposal ? `Nộp lại phiên bản ${returnedProposal.version}` : "Nộp Proposal"}
+              </h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Sau khi nộp, doanh nghiệp sẽ nhận thông báo và bài toán chuyển sang trạng thái đánh giá.
+                {problem.prototypeLegacy
+                  ? "Sau khi nộp, bài toán chuyển sang trạng thái doanh nghiệp đánh giá."
+                  : "Sau khi nộp, Proposal được khóa để Admin kiểm tra bàn giao. Doanh nghiệp chỉ xem được khi Admin duyệt đạt."}
               </p>
-              <ProposalForm problemId={problem.id} />
+              <ProposalForm
+                applicationId={problem.applicationId}
+                problemId={problem.id}
+                returnedProposal={returnedProposal}
+              />
             </div>
           )}
+          {!isBusiness && problem.status === "PROTOTYPING" && handoffPending && (
+            <p className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+              Đang chờ Admin kiểm tra bàn giao. Không thể chỉnh sửa hoặc nộp lại trong thời gian này.
+            </p>
+          )}
+          {!isBusiness &&
+            !problem.prototypeLegacy &&
+            problem.status === "PROTOTYPING" &&
+            !handoffPending &&
+            !handoffApproved &&
+            !problem.canRespondToTrialBrief && (
+              <p className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+                Chỉ chủ nhóm mới có thể nộp Proposal.
+              </p>
+            )}
+          {!isBusiness &&
+            !problem.prototypeLegacy &&
+            problem.status === "PROTOTYPING" &&
+            problem.trialBriefLockedAt === null &&
+            !handoffPending && (
+              <p className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+                Chỉ có thể nộp Proposal sau khi hai bên xác nhận và khóa hồ sơ thử nghiệm.
+              </p>
+            )}
           {problem.status === "EVALUATING" && !isBusiness && (
             <p className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
               Đang chờ doanh nghiệp đánh giá. Nếu được yêu cầu chỉnh sửa, bạn có thể nộp phiên bản tiếp theo.

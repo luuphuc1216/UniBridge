@@ -67,6 +67,7 @@ async function fixture() {
       requirements: "Yêu cầu",
       expectedDuration: "4 tuần",
       status: "TEAM_SELECTED",
+      prototypeLegacy: true,
       applications: {
         create: [
           {
@@ -124,6 +125,8 @@ async function fixture() {
       version: 1,
       type: "SOLUTION",
       description: "Proposal của nhóm A",
+      submissionStatus: "LEGACY",
+      handoffStatus: "APPROVED",
       files: {
         create: {
           id: "proposal-file-a",

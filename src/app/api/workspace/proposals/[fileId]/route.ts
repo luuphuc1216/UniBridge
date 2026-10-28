@@ -1,7 +1,6 @@
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
 import { attachmentStorage } from "@/lib/storage";
-import { findAuthorizedWorkspace } from "@/lib/workspace-access";
+import { findAuthorizedProposalFile } from "@/lib/proposal-handoff-access";
 
 export async function GET(
   _request: Request,
@@ -12,39 +11,8 @@ export async function GET(
     return new Response("Vui lòng đăng nhập để tải Proposal.", { status: 401 });
   }
   const { fileId } = await params;
-  const file = await prisma.proposalFile.findUnique({
-    where: { id: fileId },
-    select: {
-      originalName: true,
-      contentType: true,
-      sizeBytes: true,
-      storageKey: true,
-      proposal: {
-        select: {
-          application: {
-            select: { id: true, problemId: true, status: true },
-          },
-        },
-      },
-    },
-  });
+  const file = await findAuthorizedProposalFile(fileId, session.user.id, session.user.role);
   if (!file) {
-    return new Response("Không tìm thấy tệp Proposal.", { status: 404 });
-  }
-
-  const isAdmin = session.user.role === "ADMIN";
-  const workspace = isAdmin
-    ? null
-    : ["BUSINESS", "STUDENT"].includes(session.user.role)
-      ? await findAuthorizedWorkspace(
-          file.proposal.application.problemId,
-          session.user.id,
-          session.user.role,
-          file.proposal.application.id,
-        )
-      : null;
-  const belongsToSelectedTeam = file.proposal.application.status === "SELECTED";
-  if (!isAdmin && (!workspace || !belongsToSelectedTeam)) {
     return new Response("Không tìm thấy tệp Proposal.", { status: 404 });
   }
 
