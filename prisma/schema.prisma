@@ -148,7 +148,7 @@ model Problem {
   savedBy           SavedProblem[]
   viewLogs          ViewLog[]
   invitations       ApplicationInvitation[]
-  consumedCreditId  String?                 @unique
+  consumedCreditId  String?
   creditRefundedAt  DateTime?
   prototypeLegacy     Boolean                 @default(false)
   evaluationResult    String?
@@ -162,6 +162,7 @@ model Problem {
 
   @@index([status, field])
   @@index([businessProfileId])
+  @@index([consumedCreditId])
 }
 
 model PostCredit {
@@ -173,7 +174,7 @@ model PostCredit {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   businessProfile   BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
-  consumedProblem   Problem?
+  consumedProblems  Problem[]
 
   @@index([businessProfileId, source, expiresAt])
 }

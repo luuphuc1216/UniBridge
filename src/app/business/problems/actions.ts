@@ -25,6 +25,16 @@ function getText(formData: FormData, key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function isPrismaError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    /^P\d{4}$/.test(error.code)
+  );
+}
+
 function parseBudget(formData: FormData) {
   const minValue = getText(formData, "budgetMin");
   const maxValue = getText(formData, "budgetMax");
@@ -170,9 +180,18 @@ export async function createProblemAction(
     });
     problemId = problem.id;
     if (getText(formData, "intent") === "submit") {
-      const result = await prisma.$transaction((transaction) =>
-        submitProblemForReview(transaction, { businessProfileId, problemId }),
-      );
+      let result;
+      try {
+        result = await prisma.$transaction((transaction) =>
+          submitProblemForReview(transaction, { businessProfileId, problemId }),
+        );
+      } catch (error) {
+        console.error("Không thể gửi Problem mới để kiểm duyệt:", error);
+        return {
+          error: "Không thể gửi duyệt lúc này, bản nháp đã được lưu.",
+          actionHref: `/business/problems/${problemId}/edit`,
+        };
+      }
       if (result.status === "no_credits") {
         return {
           error:
@@ -191,7 +210,7 @@ export async function createProblemAction(
         }
       }),
     );
-    if (error instanceof Error) {
+    if (error instanceof Error && !isPrismaError(error)) {
       return { error: error.message };
     }
     console.error("Tạo Problem thất bại:", error);
@@ -271,7 +290,7 @@ export async function updateProblemAction(
 
       }),
     );
-    if (error instanceof Error) {
+    if (error instanceof Error && !isPrismaError(error)) {
       return { error: error.message };
     }
     console.error("Cập nhật Problem thất bại:", error);
@@ -279,9 +298,25 @@ export async function updateProblemAction(
   }
 
   if (shouldSubmit) {
-    const result = await prisma.$transaction((transaction) =>
-      submitProblemForReview(transaction, { businessProfileId, problemId }),
-    );
+    let result;
+    try {
+      result = await prisma.$transaction((transaction) =>
+        submitProblemForReview(transaction, { businessProfileId, problemId }),
+      );
+    } catch (error) {
+      console.error("Không thể gửi Problem đã lưu để kiểm duyệt:", error);
+      for (const storageKey of removedStorageKeys) {
+        try {
+          await attachmentStorage.delete(storageKey);
+        } catch (cleanupError) {
+          console.error("Không thể dọn tệp đã xóa sau lỗi gửi duyệt:", cleanupError);
+        }
+      }
+      return {
+        error: "Không thể gửi duyệt lúc này, bản nháp đã được lưu.",
+        actionHref: `/business/problems/${problemId}/edit`,
+      };
+    }
     if (result.status === "no_credits") {
       return {
         error:
