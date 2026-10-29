@@ -33,6 +33,7 @@ import {
 import { FilePicker } from "@/components/uploads/file-picker";
 import { canOpenPaidImplementationAgreement } from "@/lib/agreement-access";
 import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
+import type { WorkspacePrototypeOverdueStatus } from "@/lib/prototype-reminders";
 
 type WorkspaceFile = {
   id: string;
@@ -98,6 +99,7 @@ export type WorkspaceViewData = {
     implementationDecision: string | null;
     prototypeRevisionRequestCount: number;
     canRespondToTrialBrief: boolean;
+    overdue: WorkspacePrototypeOverdueStatus;
   };
   trialBriefVersions: {
     id: string;
@@ -807,6 +809,11 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
     (proposal) => proposal.handoffStatus === "APPROVED",
   );
   const canCreateAgreement = isBusiness && canOpenPaidImplementationAgreement(problem);
+  const overdueLabels = [
+    ["submission", "Nộp Proposal quá hạn"],
+    ["evaluation", "Doanh nghiệp đánh giá quá hạn"],
+    ["implementationDecision", "Quyết định triển khai quá hạn"],
+  ] as const;
   return (
     <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-10">
       <p className="text-sm font-semibold text-primary">Không gian làm việc chung</p>
@@ -821,6 +828,16 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
           {getPrototypeProblemStatusLabel(problem)}
         </span>
       </div>
+      {overdueLabels
+        .filter(([kind]) => data.problem.overdue[kind])
+        .map(([, label]) => (
+          <p
+            className="mt-3 w-fit rounded-full bg-rose-100 px-3 py-1.5 text-sm font-semibold text-rose-800"
+            key={label}
+          >
+            Quá hạn · {label}
+          </p>
+        ))}
       {problem.prototypeLegacy && (
         <p className="mt-3 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
           Dữ liệu trước thay đổi

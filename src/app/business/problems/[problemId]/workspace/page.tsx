@@ -2,6 +2,10 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { WorkspaceView } from "@/components/workspace/workspace-view";
 import { findAuthorizedWorkspace } from "@/lib/workspace-access";
+import {
+  ensureBusinessPrototypeReminders,
+  getWorkspacePrototypeOverdueStatus,
+} from "@/lib/prototype-reminders";
 
 export const instant = false;
 
@@ -28,6 +32,19 @@ export default async function BusinessWorkspacePage({
   if (!problem || !application) {
     notFound();
   }
+  const now = new Date();
+  try {
+    await ensureBusinessPrototypeReminders(problem.id, session.user.id, {
+      clock: { now: () => now },
+    });
+  } catch (error) {
+    console.error("Không thể tạo nhắc nhở Prototype cho doanh nghiệp:", error);
+  }
+  const overdue = getWorkspacePrototypeOverdueStatus(
+    { problem, trialBriefVersions: problem.trialBriefVersions, proposals: application.proposals },
+    "BUSINESS",
+    now,
+  );
 
   return (
     <WorkspaceView
@@ -47,6 +64,7 @@ export default async function BusinessWorkspacePage({
           implementationDecision: problem.implementationDecision,
           prototypeRevisionRequestCount: problem.prototypeRevisionRequestCount,
           canRespondToTrialBrief: false,
+          overdue,
         },
         trialBriefVersions: problem.trialBriefVersions,
         messages: problem.workspaceMessages,

@@ -3,6 +3,10 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-access";
 import { getProposalHandoffPageData } from "@/lib/proposal-handoff-page-data";
 import { ProposalHandoffReviewForm } from "@/components/admin/proposal-handoff-review-form";
+import {
+  ensureAdminHandoffReminders,
+  isAdminHandoffOverdue,
+} from "@/lib/prototype-reminders";
 
 export const instant = false;
 
@@ -13,6 +17,15 @@ export default async function ProposalHandoffReviewPage({
 }) {
   await requireAdmin();
   const { attemptId } = await params;
+  const now = new Date();
+  try {
+    await ensureAdminHandoffReminders({
+      attemptId,
+      clock: { now: () => now },
+    });
+  } catch (error) {
+    console.error("Không thể tạo nhắc nhở kiểm tra bàn giao cho Admin:", error);
+  }
   const detail = await getProposalHandoffPageData(attemptId, "ADMIN");
   if (detail.kind === "not-found") {
     notFound();
@@ -20,6 +33,12 @@ export default async function ProposalHandoffReviewPage({
   const { attempt } = detail;
   const { problem } = attempt.proposal.application;
   const brief = problem.trialBriefVersions[0];
+  const overdue = isAdminHandoffOverdue(
+    problem,
+    attempt.proposal.handoffStatus,
+    attempt.submittedAt,
+    now,
+  );
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
@@ -34,6 +53,11 @@ export default async function ProposalHandoffReviewPage({
         <p className="mt-1 text-sm text-muted-foreground">
           {problem.businessProfile.companyName} · Nhóm {attempt.proposal.application.team.name}
         </p>
+        {overdue && (
+          <p className="mt-2 w-fit rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-800">
+            Quá hạn kiểm tra
+          </p>
+        )}
         <p className="mt-3 text-sm">
           Phiên bản {attempt.proposal.version}, lần nộp {attempt.attempt} ·{" "}
           {new Intl.DateTimeFormat("vi-VN", {

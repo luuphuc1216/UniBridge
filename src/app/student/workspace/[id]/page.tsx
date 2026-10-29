@@ -3,6 +3,10 @@ import { auth } from "@/auth";
 import { WorkspaceView } from "@/components/workspace/workspace-view";
 import { findAuthorizedWorkspace } from "@/lib/workspace-access";
 import { canRespondForTeam } from "@/lib/team-permissions";
+import {
+  ensureGroupSubmissionReminders,
+  getWorkspacePrototypeOverdueStatus,
+} from "@/lib/prototype-reminders";
 
 export const instant = false;
 
@@ -29,6 +33,19 @@ export default async function StudentWorkspacePage({
   if (!problem || !application) {
     notFound();
   }
+  const now = new Date();
+  try {
+    await ensureGroupSubmissionReminders(problem.id, {
+      clock: { now: () => now },
+    });
+  } catch (error) {
+    console.error("Không thể tạo nhắc nhở nộp Proposal cho nhóm:", error);
+  }
+  const overdue = getWorkspacePrototypeOverdueStatus(
+    { problem, trialBriefVersions: problem.trialBriefVersions, proposals: application.proposals },
+    "STUDENT",
+    now,
+  );
 
   return (
     <WorkspaceView
@@ -48,6 +65,7 @@ export default async function StudentWorkspacePage({
           implementationDecision: problem.implementationDecision,
           prototypeRevisionRequestCount: problem.prototypeRevisionRequestCount,
           canRespondToTrialBrief: canRespondForTeam(application.team.ownerId, session.user.id),
+          overdue,
         },
         trialBriefVersions: problem.trialBriefVersions,
         messages: problem.workspaceMessages,

@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
+import {
+  ensureAdminHandoffReminders,
+  isAdminHandoffOverdue,
+} from "@/lib/prototype-reminders";
 
 export const instant = false;
 
@@ -11,6 +15,12 @@ export default async function ProposalHandoffQueuePage({
 }) {
   await requireAdmin();
   const { result } = await searchParams;
+  const now = new Date();
+  try {
+    await ensureAdminHandoffReminders({ clock: { now: () => now } });
+  } catch (error) {
+    console.error("Không thể tạo nhắc nhở kiểm tra bàn giao cho Admin:", error);
+  }
   const attempts = await prisma.proposalSubmissionAttempt.findMany({
     where: {
       proposal: {
@@ -40,6 +50,8 @@ export default async function ProposalHandoffQueuePage({
                 select: {
                   id: true,
                   title: true,
+                  status: true,
+                  prototypeLegacy: true,
                   businessProfile: { select: { companyName: true } },
                 },
               },
@@ -75,11 +87,22 @@ export default async function ProposalHandoffQueuePage({
         <ul className="mt-8 grid gap-4">
           {latestAttempts.map(({ id, attempt, submittedAt, proposal }) => {
             const { problem } = proposal.application;
+            const overdue = isAdminHandoffOverdue(
+              problem,
+              proposal.handoffStatus,
+              submittedAt,
+              now,
+            );
             return (
               <li className="rounded-2xl border border-border bg-card p-5" key={id}>
                 <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                   <div>
                     <h2 className="font-semibold">{problem.title}</h2>
+                    {overdue && (
+                      <p className="mt-1 w-fit rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-800">
+                        Quá hạn kiểm tra
+                      </p>
+                    )}
                     <p className="mt-1 text-sm text-muted-foreground">
                       {problem.businessProfile.companyName} · Nhóm {proposal.application.team.name}
                     </p>
