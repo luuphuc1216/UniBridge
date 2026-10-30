@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { connection } from "next/server";
 import { auth } from "@/auth";
 import { getRoleHome } from "@/lib/roles";
 
@@ -79,6 +80,7 @@ export default function Home() {
 }
 
 async function HomeActions() {
+  await connection();
   const session = await auth();
 
   if (session?.user) {
