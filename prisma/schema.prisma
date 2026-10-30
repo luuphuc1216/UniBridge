@@ -8,31 +8,39 @@ datasource db {
 }
 
 model User {
-  id                   String                @id @default(cuid())
-  email                String                @unique
-  name                 String
-  passwordHash         String
-  role                 String                @default("STUDENT")
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  businessProfile      BusinessProfile?
-  studentProfile       StudentProfile?
-  ownedTeam            StudentTeam?          @relation("StudentTeamOwner")
-  reviewedProblems     Problem[]             @relation("ProblemReviewer")
-  reviews              Review[]
-  notifications        Notification[]
-  savedProblems        SavedProblem[]
-  problemViews         ViewLog[]
-  problemSearches      SearchLog[]
-  workspaceMessages    WorkspaceMessage[]
-  milestoneSubmissions MilestoneSubmission[]
-  platformCharges      PlatformCharge[]      @relation("PlatformChargeBuyer")
-  createdTrialBriefVersions TrialBriefVersion[] @relation("TrialBriefVersionCreator")
-  trialBriefResponses      TrialBriefResponse[] @relation("TrialBriefResponseUser")
-  submittedProposalAttempts ProposalSubmissionAttempt[] @relation("ProposalSubmissionUser")
-  submittedProposals       Proposal[]             @relation("ProposalSubmitter")
-  reviewedProposalHandoffs ProposalHandoffReview[] @relation("ProposalHandoffReviewer")
-  prototypeClosures        PrototypeClosure[] @relation("PrototypeClosureActor")
+  id                                String                      @id @default(cuid())
+  email                             String                      @unique
+  name                              String
+  passwordHash                      String
+  role                              String                      @default("STUDENT")
+  createdAt                         DateTime                    @default(now())
+  updatedAt                         DateTime                    @updatedAt
+  businessProfile                   BusinessProfile?
+  studentProfile                    StudentProfile?
+  ownedTeam                         StudentTeam?                @relation("StudentTeamOwner")
+  reviewedProblems                  Problem[]                   @relation("ProblemReviewer")
+  reviews                           Review[]
+  notifications                     Notification[]
+  savedProblems                     SavedProblem[]
+  problemViews                      ViewLog[]
+  problemSearches                   SearchLog[]
+  workspaceMessages                 WorkspaceMessage[]
+  milestoneSubmissions              MilestoneSubmission[]
+  platformCharges                   PlatformCharge[]            @relation("PlatformChargeBuyer")
+  createdTrialBriefVersions         TrialBriefVersion[]         @relation("TrialBriefVersionCreator")
+  trialBriefResponses               TrialBriefResponse[]        @relation("TrialBriefResponseUser")
+  submittedProposalAttempts         ProposalSubmissionAttempt[] @relation("ProposalSubmissionUser")
+  submittedProposals                Proposal[]                  @relation("ProposalSubmitter")
+  reviewedProposalHandoffs          ProposalHandoffReview[]     @relation("ProposalHandoffReviewer")
+  prototypeClosures                 PrototypeClosure[]          @relation("PrototypeClosureActor")
+  acceptedFinalProjects             Project[]                   @relation("ProjectFinalAccepter")
+  createdAgreementVersions          ProjectAgreementVersion[]   @relation("AgreementVersionCreator")
+  businessAcceptedAgreementVersions ProjectAgreementVersion[]   @relation("AgreementVersionBusinessAccepter")
+  teamAcceptedAgreementVersions     ProjectAgreementVersion[]   @relation("AgreementVersionTeamAccepter")
+  milestoneProgressUpdates          MilestoneProgressUpdate[]
+  requestedProjectChanges           ProjectChangeRequest[]
+  projectWorkflowEvents             ProjectWorkflowEvent[]
+  projectSupportNotes               ProjectSupportNote[]
 }
 
 model BusinessProfile {
@@ -120,45 +128,45 @@ model TeamSkill {
 }
 
 model Problem {
-  id                String                  @id @default(cuid())
-  businessProfileId String
-  reviewedById      String?
-  title             String
-  slug              String                  @unique
-  description       String
-  goal              String
-  field             String
-  requirements      String
-  expectedDuration  String
-  budgetMin         Int?
-  budgetMax         Int?
-  status            String                  @default("PENDING_REVIEW")
-  reviewNote        String?
-  submittedAt       DateTime?
-  approvedAt        DateTime?
-  firstApprovedAt   DateTime?
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
-  businessProfile   BusinessProfile         @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
-  reviewer          User?                   @relation("ProblemReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  skills            ProblemSkill[]
-  applications      Application[]
-  attachments       ProblemAttachment[]
-  workspaceMessages WorkspaceMessage[]
-  savedBy           SavedProblem[]
-  viewLogs          ViewLog[]
-  invitations       ApplicationInvitation[]
-  consumedCreditId  String?
-  creditRefundedAt  DateTime?
-  prototypeLegacy     Boolean                 @default(false)
-  evaluationResult    String?
-  implementationDecision String?
-  prototypeRevisionRequestCount Int            @default(0)
-  trialBriefLockedAt  DateTime?
-  consumedCredit      PostCredit?             @relation(fields: [consumedCreditId], references: [id])
-  trialBriefVersions  TrialBriefVersion[]
-  proposalHandoffReviews ProposalHandoffReview[]
-  prototypeClosures   PrototypeClosure[]
+  id                            String                  @id @default(cuid())
+  businessProfileId             String
+  reviewedById                  String?
+  title                         String
+  slug                          String                  @unique
+  description                   String
+  goal                          String
+  field                         String
+  requirements                  String
+  expectedDuration              String
+  budgetMin                     Int?
+  budgetMax                     Int?
+  status                        String                  @default("PENDING_REVIEW")
+  reviewNote                    String?
+  submittedAt                   DateTime?
+  approvedAt                    DateTime?
+  firstApprovedAt               DateTime?
+  createdAt                     DateTime                @default(now())
+  updatedAt                     DateTime                @updatedAt
+  businessProfile               BusinessProfile         @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+  reviewer                      User?                   @relation("ProblemReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  skills                        ProblemSkill[]
+  applications                  Application[]
+  attachments                   ProblemAttachment[]
+  workspaceMessages             WorkspaceMessage[]
+  savedBy                       SavedProblem[]
+  viewLogs                      ViewLog[]
+  invitations                   ApplicationInvitation[]
+  consumedCreditId              String?
+  creditRefundedAt              DateTime?
+  prototypeLegacy               Boolean                 @default(false)
+  evaluationResult              String?
+  implementationDecision        String?
+  prototypeRevisionRequestCount Int                     @default(0)
+  trialBriefLockedAt            DateTime?
+  consumedCredit                PostCredit?             @relation(fields: [consumedCreditId], references: [id])
+  trialBriefVersions            TrialBriefVersion[]
+  proposalHandoffReviews        ProposalHandoffReview[]
+  prototypeClosures             PrototypeClosure[]
 
   @@index([status, field])
   @@index([businessProfileId])
@@ -342,39 +350,39 @@ model SolutionProposal {
 }
 
 model Proposal {
-  id            String               @id @default(cuid())
-  applicationId String
-  version       Int
-  type          String
-  description   String
-  status        String               @default("SUBMITTED")
-  submissionStatus     String               @default("NOT_SUBMITTED")
-  handoffStatus        String               @default("NOT_SUBMITTED")
-  submittedByUserId    String?
-  lastResubmittedAt    DateTime?
-  submittedAt          DateTime             @default(now())
-  createdAt     DateTime             @default(now())
-  application   Application          @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  files         ProposalFile[]
-  evaluations   ProposalEvaluation[]
-  submissionAttempts   ProposalSubmissionAttempt[]
-  handoffReviews       ProposalHandoffReview[]
-  submittedBy          User?                @relation("ProposalSubmitter", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+  id                 String                      @id @default(cuid())
+  applicationId      String
+  version            Int
+  type               String
+  description        String
+  status             String                      @default("SUBMITTED")
+  submissionStatus   String                      @default("NOT_SUBMITTED")
+  handoffStatus      String                      @default("NOT_SUBMITTED")
+  submittedByUserId  String?
+  lastResubmittedAt  DateTime?
+  submittedAt        DateTime                    @default(now())
+  createdAt          DateTime                    @default(now())
+  application        Application                 @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  files              ProposalFile[]
+  evaluations        ProposalEvaluation[]
+  submissionAttempts ProposalSubmissionAttempt[]
+  handoffReviews     ProposalHandoffReview[]
+  submittedBy        User?                       @relation("ProposalSubmitter", fields: [submittedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([applicationId, version])
   @@index([applicationId, submittedAt])
 }
 
 model ProposalFile {
-  id           String   @id @default(cuid())
+  id           String                     @id @default(cuid())
   proposalId   String
   attemptId    String?
   originalName String
   contentType  String
   sizeBytes    Int
-  storageKey   String   @unique
-  createdAt    DateTime @default(now())
-  proposal     Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  storageKey   String                     @unique
+  createdAt    DateTime                   @default(now())
+  proposal     Proposal                   @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   attempt      ProposalSubmissionAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
 
   @@index([proposalId])
@@ -410,68 +418,68 @@ model ProposalEvaluation {
   evaluationResult        String?
   implementationDecision  String?
   revisionRequestNumber   Int?
-  createdAt               DateTime   @default(now())
+  createdAt               DateTime @default(now())
   proposal                Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
   @@index([proposalId, createdAt])
 }
 
 model TrialBriefVersion {
-  id                  String   @id @default(cuid())
-  problemId           String
-  version             Int
-  objective           String
-  scope               String
-  deliverables        String
-  deadline            DateTime
-  evaluationCriteria  String
-  maxRevisionRequests Int
+  id                   String               @id @default(cuid())
+  problemId            String
+  version              Int
+  objective            String
+  scope                String
+  deliverables         String
+  deadline             DateTime
+  evaluationCriteria   String
+  maxRevisionRequests  Int
   businessProvidedData String?
   confidentialityTerms String
-  ownershipTerms      String
-  compensationTerms   String?
-  createdByUserId     String
-  createdAt           DateTime @default(now())
-  lockedAt            DateTime?
-  problem             Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  createdBy           User     @relation("TrialBriefVersionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  responses           TrialBriefResponse[]
+  ownershipTerms       String
+  compensationTerms    String?
+  createdByUserId      String
+  createdAt            DateTime             @default(now())
+  lockedAt             DateTime?
+  problem              Problem              @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  createdBy            User                 @relation("TrialBriefVersionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  responses            TrialBriefResponse[]
 
   @@unique([problemId, version])
 }
 
 model TrialBriefResponse {
-  id                  String   @id @default(cuid())
+  id                  String            @id @default(cuid())
   trialBriefVersionId String
   party               String
   decision            String
   note                String?
   respondedByUserId   String
-  respondedAt         DateTime @default(now())
+  respondedAt         DateTime          @default(now())
   trialBriefVersion   TrialBriefVersion @relation(fields: [trialBriefVersionId], references: [id], onDelete: Cascade)
-  respondedBy         User @relation("TrialBriefResponseUser", fields: [respondedByUserId], references: [id], onDelete: Restrict)
+  respondedBy         User              @relation("TrialBriefResponseUser", fields: [respondedByUserId], references: [id], onDelete: Restrict)
 
   @@unique([trialBriefVersionId, party])
 }
 
 model ProposalSubmissionAttempt {
-  id                String   @id @default(cuid())
+  id                String                  @id @default(cuid())
   proposalId        String
   attempt           Int
   submittedByUserId String
   description       String
-  submittedAt       DateTime @default(now())
-  proposal           Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  submittedBy        User @relation("ProposalSubmissionUser", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  submittedAt       DateTime                @default(now())
+  proposal          Proposal                @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  submittedBy       User                    @relation("ProposalSubmissionUser", fields: [submittedByUserId], references: [id], onDelete: Restrict)
   files             ProposalFile[]
-  handoffReviews     ProposalHandoffReview[]
+  handoffReviews    ProposalHandoffReview[]
 
   @@unique([proposalId, attempt])
   @@index([proposalId, submittedAt])
 }
 
 model ProposalHandoffReview {
-  id                    String   @id @default(cuid())
+  id                    String                     @id @default(cuid())
   problemId             String
   proposalId            String
   attemptId             String?
@@ -482,79 +490,104 @@ model ProposalHandoffReview {
   note                  String
   missingItems          String?
   result                String
-  createdAt             DateTime @default(now())
-  problem               Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  proposal              Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  createdAt             DateTime                   @default(now())
+  problem               Problem                    @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  proposal              Proposal                   @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   attempt               ProposalSubmissionAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
-  reviewedBy            User @relation("ProposalHandoffReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy            User                       @relation("ProposalHandoffReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
 
   @@index([problemId, createdAt])
   @@index([proposalId, createdAt])
 }
 
 model PrototypeClosure {
-  id          String   @id @default(cuid())
-  problemId   String
-  actorId     String
-  reason      String
-  result      String
-  createdAt   DateTime @default(now())
-  problem      Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  actor       User     @relation("PrototypeClosureActor", fields: [actorId], references: [id], onDelete: Restrict)
+  id        String   @id @default(cuid())
+  problemId String
+  actorId   String
+  reason    String
+  result    String
+  createdAt DateTime @default(now())
+  problem   Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  actor     User     @relation("PrototypeClosureActor", fields: [actorId], references: [id], onDelete: Restrict)
 
   @@index([problemId, createdAt])
 }
 
 model Project {
-  id                        String               @id @default(cuid())
-  applicationId             String               @unique
+  id                        String                    @id @default(cuid())
+  applicationId             String                    @unique
   teamId                    String
   title                     String
   agreedScope               String
-  deliverables              String               @default("")
-  duration                  String               @default("")
+  deliverables              String                    @default("")
+  duration                  String                    @default("")
   totalAmount               Int
-  generalAcceptanceCriteria String               @default("")
-  businessResponsibilities  String               @default("")
-  teamResponsibilities      String               @default("")
-  paymentMethod             String               @default("")
+  generalAcceptanceCriteria String                    @default("")
+  businessResponsibilities  String                    @default("")
+  teamResponsibilities      String                    @default("")
+  paymentMethod             String                    @default("")
   revisionNote              String?
-  agreementRevision         Int                  @default(1)
+  agreementRevision         Int                       @default(1)
   businessAcceptedAt        DateTime?
   teamAcceptedAt            DateTime?
-  status                    String               @default("AGREEING")
+  status                    String                    @default("AGREEING")
   startedAt                 DateTime?
   completedAt               DateTime?
   cancelledAt               DateTime?
-  createdAt                 DateTime             @default(now())
-  updatedAt                 DateTime             @updatedAt
-  application               Application          @relation(fields: [applicationId], references: [id], onDelete: Restrict)
-  team                      StudentTeam          @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  legacyTermsExempt         Boolean                   @default(false)
+  finalAcceptanceStatus     String                    @default("NOT_REQUESTED")
+  finalAcceptedAt           DateTime?
+  finalAcceptedById         String?
+  pausedAt                  DateTime?
+  pausedTotalSeconds        Int                       @default(0)
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  application               Application               @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  team                      StudentTeam               @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  finalAcceptedBy           User?                     @relation("ProjectFinalAccepter", fields: [finalAcceptedById], references: [id], onDelete: SetNull)
   milestones                Milestone[]
   transactions              ProjectTransaction[]
   reviews                   Review[]
+  agreementVersions         ProjectAgreementVersion[]
+  changeRequests            ProjectChangeRequest[]
+  workflowEvents            ProjectWorkflowEvent[]
+  supportNotes              ProjectSupportNote[]
 }
 
 model Milestone {
-  id                 String                @id @default(cuid())
+  id                 String                    @id @default(cuid())
   projectId          String
   title              String
   description        String
-  acceptanceCriteria String                @default("")
-  paymentPercent     Int                   @default(0)
+  acceptanceCriteria String                    @default("")
+  paymentPercent     Int                       @default(0)
   amount             Int?
   dueAt              DateTime?
   sortOrder          Int
-  status             String                @default("PENDING")
+  status             String                    @default("PENDING")
   submittedAt        DateTime?
   acceptedAt         DateTime?
   progressNote       String?
   revisionFeedback   String?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  project            Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  progressPercent    Int                       @default(0)
+  workCompleted      String                    @default("")
+  difficulties       String                    @default("")
+  acceptanceStatus   String                    @default("NOT_SUBMITTED")
+  paymentStatus      String                    @default("UNFUNDED")
+  revisionCount      Int                       @default(0)
+  responseDueAt      DateTime?
+  overdueSince       DateTime?
+  pausedAt           DateTime?
+  pausedTotalSeconds Int                       @default(0)
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  project            Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   submissions        MilestoneSubmission[]
   transactions       ProjectTransaction[]
+  progressUpdates    MilestoneProgressUpdate[]
+  changeRequests     ProjectChangeRequest[]
+  workflowEvents     ProjectWorkflowEvent[]
+  supportNotes       ProjectSupportNote[]
 
   @@unique([projectId, sortOrder])
 }
@@ -608,6 +641,119 @@ model MilestoneSubmissionFile {
   @@index([submissionId])
 }
 
+model ProjectAgreementVersion {
+  id                        String    @id @default(cuid())
+  projectId                 String
+  versionNumber             Int
+  status                    String
+  title                     String
+  agreedScope               String
+  deliverables              String
+  duration                  String
+  totalAmount               Int
+  generalAcceptanceCriteria String
+  businessResponsibilities  String
+  teamResponsibilities      String
+  paymentMethod             String
+  maxMilestoneRevisions     Int
+  ownershipTerms            String
+  usageTerms                String
+  confidentialityTerms      String
+  extensionTerms            String
+  suspensionTerms           String
+  terminationTerms          String
+  disputeTerms              String
+  milestonesSnapshot        String
+  createdByUserId           String
+  businessAcceptedAt        DateTime?
+  teamAcceptedAt            DateTime?
+  businessAcceptedByUserId  String?
+  teamAcceptedByUserId      String?
+  legacySnapshot            Boolean   @default(false)
+  createdAt                 DateTime  @default(now())
+  project                   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy                 User      @relation("AgreementVersionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  businessAcceptedBy        User?     @relation("AgreementVersionBusinessAccepter", fields: [businessAcceptedByUserId], references: [id], onDelete: SetNull)
+  teamAcceptedBy            User?     @relation("AgreementVersionTeamAccepter", fields: [teamAcceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, versionNumber])
+  @@index([projectId, createdAt])
+}
+
+model MilestoneProgressUpdate {
+  id              String    @id @default(cuid())
+  milestoneId     String
+  progressPercent Int
+  workCompleted   String
+  difficulties    String
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  milestone       Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  createdBy       User      @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([milestoneId, createdAt])
+}
+
+model ProjectChangeRequest {
+  id                 String               @id @default(cuid())
+  projectId          String
+  milestoneId        String?
+  kind               String
+  status             String
+  reason             String
+  payloadJson        String               @default("{}")
+  proposedDueAt      DateTime?
+  requestedByUserId  String
+  businessAcceptedAt DateTime?
+  teamAcceptedAt     DateTime?
+  idempotencyKey     String?              @unique
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  resolvedAt         DateTime?
+  project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestone          Milestone?           @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  requestedBy        User                 @relation(fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  supportNotes       ProjectSupportNote[]
+
+  @@index([projectId, status, createdAt])
+  @@index([milestoneId, status])
+}
+
+model ProjectWorkflowEvent {
+  id             String     @id @default(cuid())
+  projectId      String
+  milestoneId    String?
+  actorUserId    String?
+  eventType      String
+  fromStatus     String?
+  toStatus       String?
+  detailsJson    String     @default("{}")
+  idempotencyKey String?    @unique
+  createdAt      DateTime   @default(now())
+  project        Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestone      Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  actor          User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([milestoneId, createdAt])
+}
+
+model ProjectSupportNote {
+  id              String                @id @default(cuid())
+  projectId       String
+  milestoneId     String?
+  changeRequestId String?
+  adminUserId     String
+  note            String
+  createdAt       DateTime              @default(now())
+  project         Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestone       Milestone?            @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  changeRequest   ProjectChangeRequest? @relation(fields: [changeRequestId], references: [id], onDelete: SetNull)
+  admin           User                  @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, createdAt])
+}
+
 model Review {
   id                        String           @id @default(cuid())
   projectId                 String
@@ -637,7 +783,7 @@ model Notification {
   href      String
   readAt    DateTime?
   createdAt DateTime  @default(now())
-  dedupeKey String?          @unique
+  dedupeKey String?   @unique
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
