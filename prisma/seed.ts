@@ -1950,6 +1950,571 @@ async function main() {
     "Bài toán seed chờ nhóm xác nhận hồ sơ",
     true,
   );
+
+  // Prototype test accounts: business1-3 and teams nextgen-digital, data-spark, market-minds.
+  // Each scenario is created only when its stable slug/id is absent; reruns preserve manual test changes.
+  const prototypeSeedNow = new Date();
+  const prototypeBusiness = [
+    businessProfiles[0],
+    businessProfiles[1],
+    businessProfiles[2],
+  ];
+  if (prototypeBusiness.some((business) => !business)) {
+    throw new Error("Thiếu doanh nghiệp để tạo các trạng thái seed Prototype.");
+  }
+  const [prototypeBusinessOne, prototypeBusinessTwo, prototypeBusinessThree] =
+    prototypeBusiness;
+  const prototypeTeams = await Promise.all(
+    ["nextgen-digital", "data-spark", "market-minds"].map((slug) =>
+      prisma.studentTeam.findUniqueOrThrow({ where: { slug } }),
+    ),
+  );
+  const [nextgenTeam, dataSparkTeam, marketMindsTeam] = prototypeTeams;
+  if (!nextgenTeam || !dataSparkTeam || !marketMindsTeam || !nextgenTeam.ownerId) {
+    throw new Error("Thiếu nhóm seed Prototype hoặc chủ nhóm.");
+  }
+  const fallbackPrototypeTeamOwnerId = nextgenTeam.ownerId;
+
+  type PrototypeScenario = {
+    slug: string;
+    title: string;
+    businessProfileId: string;
+    status: string;
+    teamId?: string;
+    applicationStatus?: string;
+    brief?: {
+      locked: boolean;
+      deadline: Date;
+      responses?: { party: string; decision: string; note?: string }[];
+    };
+    proposal?: {
+      handoffStatus: string;
+      submittedAt: Date;
+      review?: {
+        result: string;
+        createdAt: Date;
+        missingItems?: string;
+      };
+      evaluation?: {
+        evaluationResult: string;
+        implementationDecision: string | null;
+        createdAt: Date;
+      };
+    };
+    problemEvaluationResult?: string;
+    implementationDecision?: string;
+    closure?: { result: string; reason: string };
+  };
+
+  async function ensurePrototypeScenario(scenario: PrototypeScenario) {
+    let problem = await prisma.problem.findUnique({ where: { slug: scenario.slug } });
+    if (!problem) {
+      problem = await prisma.problem.create({
+        data: {
+          businessProfileId: scenario.businessProfileId,
+          reviewedById: admin.id,
+          title: scenario.title,
+          slug: scenario.slug,
+          description: "Bài toán seed để kiểm thử luồng Prototype hai tầng.",
+          goal: "Kiểm thử hồ sơ, bàn giao, đánh giá và quyết định triển khai.",
+          field: "Công nghệ thông tin",
+          requirements: "Dữ liệu minh họa phục vụ kiểm thử giao diện và quyền truy cập.",
+          expectedDuration: "4 tuần",
+          status: scenario.status,
+          prototypeLegacy: false,
+          evaluationResult: scenario.problemEvaluationResult ?? null,
+          implementationDecision: scenario.implementationDecision ?? null,
+          trialBriefLockedAt: scenario.brief?.locked
+            ? prototypeSeedNow
+            : null,
+          approvedAt: prototypeSeedNow,
+          submittedAt: prototypeSeedNow,
+        },
+      });
+    }
+
+    let application: Awaited<
+      ReturnType<typeof prisma.application.findUnique>
+    > = null;
+    if (scenario.teamId) {
+      application = await prisma.application.findUnique({
+        where: {
+          problemId_teamId: {
+            problemId: problem.id,
+            teamId: scenario.teamId,
+          },
+        },
+      });
+      if (!application) {
+        application = await prisma.application.create({
+          data: {
+            problemId: problem.id,
+            teamId: scenario.teamId,
+            approach: "Hướng giải quyết seed để kiểm thử luồng Prototype.",
+            estimatedDuration: "4 tuần",
+            status: scenario.applicationStatus ?? "SELECTED",
+            submittedAt: prototypeSeedNow,
+          },
+        });
+      }
+    }
+    const scenarioTeamOwnerId = scenario.teamId
+      ? (
+          await prisma.studentTeam.findUniqueOrThrow({
+            where: { id: scenario.teamId },
+            select: { ownerId: true },
+          })
+        ).ownerId
+      : null;
+    if (scenario.teamId && !scenarioTeamOwnerId) {
+      throw new Error(`Nhóm seed không có chủ sở hữu: ${scenario.teamId}`);
+    }
+    const scenarioActorId = scenarioTeamOwnerId ?? fallbackPrototypeTeamOwnerId;
+
+    if (scenario.brief) {
+      let brief = await prisma.trialBriefVersion.findFirst({
+        where: { problemId: problem.id },
+        orderBy: { version: "asc" },
+      });
+      if (!brief) {
+        brief = await prisma.trialBriefVersion.create({
+          data: {
+            id: `seed-prototype-brief-${scenario.slug}`,
+            problemId: problem.id,
+            version: 1,
+            objective: "Kiểm thử mục tiêu Prototype đã thống nhất.",
+            scope: "Thực hiện trong phạm vi thử nghiệm giới hạn.",
+            deliverables: "Bản demo và tài liệu bàn giao.",
+            deadline: scenario.brief.deadline,
+            evaluationCriteria: "Đủ đầu ra, đúng phạm vi và tuân thủ quy định.",
+            maxRevisionRequests: 2,
+            businessProvidedData: "",
+            confidentialityTerms: "Chỉ dùng dữ liệu trong phạm vi thử nghiệm.",
+            ownershipTerms: "Theo thỏa thuận thử nghiệm.",
+            compensationTerms: "Chỉ là thông tin, không phát sinh thanh toán.",
+            createdByUserId: (
+              await prisma.businessProfile.findUniqueOrThrow({
+                where: { id: scenario.businessProfileId },
+                select: { userId: true },
+              })
+            ).userId,
+            createdAt: new Date(prototypeSeedNow.getTime() - 7 * 86_400_000),
+            lockedAt: scenario.brief.locked
+              ? new Date(prototypeSeedNow.getTime() - 7 * 86_400_000)
+              : null,
+          },
+        });
+      }
+      for (const response of scenario.brief.responses ?? []) {
+        const existingResponse = await prisma.trialBriefResponse.findUnique({
+          where: {
+            trialBriefVersionId_party: {
+              trialBriefVersionId: brief.id,
+              party: response.party,
+            },
+          },
+        });
+        if (!existingResponse) {
+          await prisma.trialBriefResponse.create({
+            data: {
+              id: `seed-prototype-response-${scenario.slug}-${response.party.toLowerCase()}`,
+              trialBriefVersionId: brief.id,
+              party: response.party,
+              decision: response.decision,
+              note: response.note,
+              respondedByUserId:
+                response.party === "BUSINESS"
+                  ? (
+                      await prisma.businessProfile.findUniqueOrThrow({
+                        where: { id: scenario.businessProfileId },
+                        select: { userId: true },
+                      })
+                    ).userId
+                  : scenarioActorId,
+              respondedAt: prototypeSeedNow,
+            },
+          });
+        }
+      }
+    }
+
+    if (application && scenario.proposal) {
+      let proposal = await prisma.proposal.findFirst({
+        where: { applicationId: application.id },
+        orderBy: { version: "asc" },
+      });
+      if (!proposal) {
+        proposal = await prisma.proposal.create({
+          data: {
+            id: `seed-prototype-proposal-${scenario.slug}`,
+            applicationId: application.id,
+            version: 1,
+            type: "PROTOTYPE",
+            description: `Bản Proposal minh họa cho ${scenario.title}.`,
+            status:
+              scenario.proposal.evaluation?.evaluationResult === "STOPPED"
+                ? "NOT_IMPLEMENTED"
+                : scenario.proposal.evaluation
+                  ? "ACCEPTED"
+                  : "SUBMITTED",
+            submissionStatus: "SUBMITTED",
+            handoffStatus: scenario.proposal.handoffStatus,
+            submittedByUserId: scenarioActorId,
+            lastResubmittedAt: scenario.proposal.submittedAt,
+            submittedAt: scenario.proposal.submittedAt,
+            createdAt: scenario.proposal.submittedAt,
+          },
+        });
+      }
+
+      let attempt = await prisma.proposalSubmissionAttempt.findFirst({
+        where: { proposalId: proposal.id },
+        orderBy: { attempt: "asc" },
+      });
+      if (!attempt) {
+        attempt = await prisma.proposalSubmissionAttempt.create({
+          data: {
+            id: `seed-prototype-attempt-${scenario.slug}`,
+            proposalId: proposal.id,
+            attempt: 1,
+            submittedByUserId: scenarioActorId,
+            description: `Lần nộp minh họa cho ${scenario.title}.`,
+            submittedAt: scenario.proposal.submittedAt,
+          },
+        });
+      }
+
+      if (scenario.proposal.review) {
+        const existingReview = await prisma.proposalHandoffReview.findUnique({
+          where: { id: `seed-prototype-review-${scenario.slug}` },
+        });
+        if (!existingReview) {
+          await prisma.proposalHandoffReview.create({
+            data: {
+              id: `seed-prototype-review-${scenario.slug}`,
+              problemId: problem.id,
+              proposalId: proposal.id,
+              attemptId: attempt.id,
+              reviewedByUserId: admin.id,
+              filesOrLinksComplete:
+                scenario.proposal.review.result === "APPROVED",
+              withinTrialBriefScope:
+                scenario.proposal.review.result === "APPROVED",
+              compliesWithRules:
+                scenario.proposal.review.result === "APPROVED",
+              note:
+                scenario.proposal.review.result === "APPROVED"
+                  ? "Đủ điều kiện chuyển doanh nghiệp đánh giá."
+                  : "Cần bổ sung nội dung bàn giao.",
+              missingItems: scenario.proposal.review.missingItems ?? null,
+              result: scenario.proposal.review.result,
+              createdAt: scenario.proposal.review.createdAt,
+            },
+          });
+        }
+      }
+
+      if (scenario.proposal.evaluation) {
+        const evaluationId = `seed-prototype-evaluation-${scenario.slug}`;
+        const existingEvaluation = await prisma.proposalEvaluation.findUnique({
+          where: { id: evaluationId },
+        });
+        if (!existingEvaluation) {
+          await prisma.proposalEvaluation.create({
+            data: {
+              id: evaluationId,
+              proposalId: proposal.id,
+              problemResponse: 4,
+              feasibility: 4,
+              goalAlignment: 4,
+              practicalImplementation: 4,
+              estimatedCost: 4,
+              implementationTime: 4,
+              valueDelivered: 4,
+              comment: `Kết quả đánh giá seed: ${scenario.proposal.evaluation.evaluationResult}.`,
+              decision: scenario.proposal.evaluation.evaluationResult,
+              evaluationResult: scenario.proposal.evaluation.evaluationResult,
+              implementationDecision:
+                scenario.proposal.evaluation.implementationDecision,
+              createdAt: scenario.proposal.evaluation.createdAt,
+            },
+          });
+        }
+      }
+    }
+
+    if (scenario.closure) {
+      const closureId = `seed-prototype-closure-${scenario.slug}`;
+      const existingClosure = await prisma.prototypeClosure.findUnique({
+        where: { id: closureId },
+      });
+      if (!existingClosure) {
+        await prisma.prototypeClosure.create({
+          data: {
+            id: closureId,
+            problemId: problem.id,
+            actorId: (await prisma.businessProfile.findUniqueOrThrow({
+              where: { id: scenario.businessProfileId },
+              select: { userId: true },
+            })).userId,
+            reason: scenario.closure.reason,
+            result: scenario.closure.result,
+            createdAt: prototypeSeedNow,
+          },
+        });
+      }
+    }
+  }
+
+  const day = 86_400_000;
+  const scenarios: PrototypeScenario[] = [
+    {
+      slug: "seed-prototype-unconfirmed-application",
+      title: "Seed Prototype — Chờ nhóm xác nhận",
+      businessProfileId: prototypeBusinessOne.id,
+      status: "TEAM_SELECTED",
+      teamId: nextgenTeam.id,
+      applicationStatus: "PENDING_CONFIRMATION",
+    },
+    {
+      slug: "seed-prototype-team-adjustment",
+      title: "Seed Prototype — Nhóm đề nghị điều chỉnh",
+      businessProfileId: prototypeBusinessOne.id,
+      status: "TEAM_SELECTED",
+      teamId: nextgenTeam.id,
+      brief: {
+        locked: false,
+        deadline: new Date(prototypeSeedNow.getTime() + 14 * day),
+        responses: [
+          { party: "BUSINESS", decision: "CONFIRMED" },
+          {
+            party: "STUDENT",
+            decision: "REVISION_REQUESTED",
+            note: "Đề nghị làm rõ dữ liệu đầu vào và phạm vi bản demo.",
+          },
+        ],
+      },
+    },
+    {
+      slug: "seed-prototype-no-submission",
+      title: "Seed Prototype — Đã xác nhận, chưa nộp",
+      businessProfileId: prototypeBusinessOne.id,
+      status: "PROTOTYPING",
+      teamId: nextgenTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() + 14 * day) },
+    },
+    {
+      slug: "seed-prototype-handoff-pending",
+      title: "Seed Prototype — Chờ kiểm tra bàn giao",
+      businessProfileId: prototypeBusinessTwo.id,
+      status: "PROTOTYPING",
+      teamId: dataSparkTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() + 14 * day) },
+      proposal: {
+        handoffStatus: "PENDING_REVIEW",
+        submittedAt: new Date(prototypeSeedNow.getTime() - day),
+      },
+    },
+    {
+      slug: "seed-prototype-handoff-returned",
+      title: "Seed Prototype — Bị trả bổ sung",
+      businessProfileId: prototypeBusinessTwo.id,
+      status: "PROTOTYPING",
+      teamId: dataSparkTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() + 14 * day) },
+      proposal: {
+        handoffStatus: "RETURNED",
+        submittedAt: new Date(prototypeSeedNow.getTime() - 2 * day),
+        review: {
+          result: "RETURNED",
+          createdAt: new Date(prototypeSeedNow.getTime() - day),
+          missingItems: "Tệp hướng dẫn sử dụng\nLiên kết bản demo",
+        },
+      },
+    },
+    {
+      slug: "seed-prototype-business-evaluation",
+      title: "Seed Prototype — Chờ doanh nghiệp đánh giá",
+      businessProfileId: prototypeBusinessTwo.id,
+      status: "EVALUATING",
+      teamId: dataSparkTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() - 2 * day) },
+      proposal: {
+        handoffStatus: "APPROVED",
+        submittedAt: new Date(prototypeSeedNow.getTime() - 4 * day),
+        review: {
+          result: "APPROVED",
+          createdAt: new Date(prototypeSeedNow.getTime() - 3 * day),
+        },
+      },
+    },
+    {
+      slug: "seed-prototype-accepted-pending",
+      title: "Seed Prototype — Đã chấp nhận, chờ quyết định",
+      businessProfileId: prototypeBusinessTwo.id,
+      status: "EVALUATING",
+      problemEvaluationResult: "ACCEPTED",
+      implementationDecision: "PENDING",
+      teamId: dataSparkTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() - 7 * day) },
+      proposal: {
+        handoffStatus: "APPROVED",
+        submittedAt: new Date(prototypeSeedNow.getTime() - 8 * day),
+        review: {
+          result: "APPROVED",
+          createdAt: new Date(prototypeSeedNow.getTime() - 7 * day),
+        },
+        evaluation: {
+          evaluationResult: "ACCEPTED",
+          implementationDecision: "PENDING",
+          createdAt: new Date(prototypeSeedNow.getTime() - 6 * day),
+        },
+      },
+    },
+    {
+      slug: "seed-prototype-accepted-ended",
+      title: "Seed Prototype — Kết thúc sau chấp nhận",
+      businessProfileId: prototypeBusinessThree.id,
+      status: "CLOSED",
+      problemEvaluationResult: "ACCEPTED",
+      implementationDecision: "ENDED",
+      teamId: marketMindsTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() - 10 * day) },
+      proposal: {
+        handoffStatus: "APPROVED",
+        submittedAt: new Date(prototypeSeedNow.getTime() - 12 * day),
+        review: {
+          result: "APPROVED",
+          createdAt: new Date(prototypeSeedNow.getTime() - 11 * day),
+        },
+        evaluation: {
+          evaluationResult: "ACCEPTED",
+          implementationDecision: "ENDED",
+          createdAt: new Date(prototypeSeedNow.getTime() - 10 * day),
+        },
+      },
+      closure: {
+        result: "ENDED_AFTER_ACCEPTED",
+        reason: "Seed kết thúc sau khi doanh nghiệp chấp nhận Prototype.",
+      },
+    },
+    {
+      slug: "seed-prototype-stopped",
+      title: "Seed Prototype — Không tiếp tục",
+      businessProfileId: prototypeBusinessThree.id,
+      status: "CLOSED",
+      problemEvaluationResult: "STOPPED",
+      teamId: marketMindsTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() - 10 * day) },
+      proposal: {
+        handoffStatus: "APPROVED",
+        submittedAt: new Date(prototypeSeedNow.getTime() - 12 * day),
+        review: {
+          result: "APPROVED",
+          createdAt: new Date(prototypeSeedNow.getTime() - 11 * day),
+        },
+        evaluation: {
+          evaluationResult: "STOPPED",
+          implementationDecision: null,
+          createdAt: new Date(prototypeSeedNow.getTime() - 10 * day),
+        },
+      },
+    },
+    {
+      slug: "seed-prototype-ready-implementation",
+      title: "Seed Prototype — Chờ soạn thỏa thuận",
+      businessProfileId: prototypeBusinessThree.id,
+      status: "READY_FOR_IMPLEMENTATION",
+      problemEvaluationResult: "ACCEPTED",
+      implementationDecision: "IMPLEMENT",
+      teamId: marketMindsTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() - 10 * day) },
+      proposal: {
+        handoffStatus: "APPROVED",
+        submittedAt: new Date(prototypeSeedNow.getTime() - 12 * day),
+        review: {
+          result: "APPROVED",
+          createdAt: new Date(prototypeSeedNow.getTime() - 11 * day),
+        },
+        evaluation: {
+          evaluationResult: "ACCEPTED",
+          implementationDecision: "IMPLEMENT",
+          createdAt: new Date(prototypeSeedNow.getTime() - 10 * day),
+        },
+      },
+    },
+    {
+      slug: "seed-prototype-overdue-submission",
+      title: "Seed Prototype — Quá hạn nộp",
+      businessProfileId: prototypeBusinessOne.id,
+      status: "PROTOTYPING",
+      teamId: nextgenTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() - day) },
+    },
+    {
+      slug: "seed-prototype-overdue-handoff",
+      title: "Seed Prototype — Quá hạn Admin kiểm tra",
+      businessProfileId: prototypeBusinessTwo.id,
+      status: "PROTOTYPING",
+      teamId: dataSparkTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() - 5 * day) },
+      proposal: {
+        handoffStatus: "PENDING_REVIEW",
+        submittedAt: new Date(prototypeSeedNow.getTime() - 3 * day),
+      },
+    },
+    {
+      slug: "seed-prototype-overdue-evaluation",
+      title: "Seed Prototype — Quá hạn doanh nghiệp đánh giá",
+      businessProfileId: prototypeBusinessThree.id,
+      status: "EVALUATING",
+      teamId: marketMindsTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() - 7 * day) },
+      proposal: {
+        handoffStatus: "APPROVED",
+        submittedAt: new Date(prototypeSeedNow.getTime() - 5 * day),
+        review: {
+          result: "APPROVED",
+          createdAt: new Date(prototypeSeedNow.getTime() - 4 * day),
+        },
+      },
+    },
+    {
+      slug: "seed-prototype-two-teams-isolation",
+      title: "Seed Prototype — Cô lập hai nhóm",
+      businessProfileId: prototypeBusinessOne.id,
+      status: "PROTOTYPING",
+      teamId: nextgenTeam.id,
+      brief: { locked: true, deadline: new Date(prototypeSeedNow.getTime() + 14 * day) },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    await ensurePrototypeScenario(scenario);
+  }
+  const isolationProblem = await prisma.problem.findUniqueOrThrow({
+    where: { slug: "seed-prototype-two-teams-isolation" },
+  });
+  const pendingIsolationApplication = await prisma.application.findUnique({
+    where: {
+      problemId_teamId: {
+        problemId: isolationProblem.id,
+        teamId: dataSparkTeam.id,
+      },
+    },
+  });
+  if (!pendingIsolationApplication) {
+    await prisma.application.create({
+      data: {
+        problemId: isolationProblem.id,
+        teamId: dataSparkTeam.id,
+        approach: "Hồ sơ đang chờ xác nhận, dùng để kiểm thử cô lập workspace.",
+        estimatedDuration: "4 tuần",
+        status: "PENDING_CONFIRMATION",
+        submittedAt: prototypeSeedNow,
+      },
+    });
+  }
 }
 
 main()

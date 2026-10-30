@@ -231,6 +231,8 @@ Nếu doanh nghiệp đánh giá giải pháp phù hợp và có nhu cầu đưa
 
 Ở giai đoạn đánh giá của UniBridge, READY_FOR_IMPLEMENTATION chỉ đánh dấu hai bên sẵn sàng chuyển tiếp; chưa tạo thỏa thuận, giao dịch, thanh toán hoặc Milestone. Các bước đó thuộc Giai đoạn 7.
 
+> **Ghi chú đối chiếu với luồng hiện tại:** mô tả ba lựa chọn ở trên là mô hình cũ. Luồng hiện tại tách kết quả đánh giá Prototype (`evaluationResult`: ACCEPTED, REVISION_REQUESTED hoặc STOPPED) khỏi quyết định triển khai (`implementationDecision`: PENDING, IMPLEMENT hoặc ENDED, chỉ sau ACCEPTED). Chấp nhận Prototype không tự mở thỏa thuận; cổng thỏa thuận chỉ mở khi bài toán ở READY_FOR_IMPLEMENTATION và quyết định là ACCEPTED + IMPLEMENT (hoặc dữ liệu legacy đủ điều kiện). Trước khi xây dựng, Trial Brief cần được hai bên xác nhận và khóa phiên bản. Bàn giao được Admin kiểm tra về tính đầy đủ, phạm vi và tuân thủ, không đánh giá chuyên môn. Quá hạn được tính khi đọc và có thể tạo thông báo nhắc; không tự đóng bài toán hoặc tự chấp nhận Proposal. Thù lao thử nghiệm chỉ là thông tin trong Trial Brief, không phát sinh thanh toán hay giao dịch.
+
 ### Bước 8. Paid Implementation
 
 Khi doanh nghiệp quyết định triển khai, doanh nghiệp và nhóm sinh viên thống nhất các điều kiện thực hiện dự án.
@@ -376,6 +378,8 @@ Như vậy, toàn bộ quy trình hoạt động của nền tảng hình thành
 Doanh nghiệp đăng vấn đề → Kiểm duyệt → Recommendation → Nhóm gửi Profile + Approach → Doanh nghiệp lựa chọn nhóm → Xây dựng Prototype/Solution Proposal → Doanh nghiệp đánh giá → Paid Implementation → Giao dịch → Thực hiện theo Milestone → Nghiệm thu → Rating/Reputation.
 
 Quy trình này giúp nền tảng không chỉ đóng vai trò kết nối doanh nghiệp với sinh viên mà còn hỗ trợ xuyên suốt quá trình từ xác định vấn đề, lựa chọn nguồn lực, phát triển giải pháp đến triển khai và đánh giá kết quả.
+
+> **Đối chiếu luồng Prototype hiện tại:** phần mô tả cũ về ba lựa chọn được thay thế trong hệ thống bằng hai tầng `evaluationResult` và `implementationDecision`; Trial Brief khóa phạm vi/thời hạn trước khi làm Prototype, Admin kiểm tra bàn giao trước khi doanh nghiệp đánh giá, và nhắc quá hạn chỉ được tính khi tải dữ liệu (không tự chấp nhận hay đóng). Thù lao thử nghiệm là thông tin, không phải khoản thanh toán.
 
 ## MÔ HÌNH DOANH THU
 

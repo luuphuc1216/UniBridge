@@ -53,6 +53,22 @@ describe("Prototype reminders", () => {
           role: "ADMIN",
           updatedAt: BASE_TIME,
         },
+        {
+          id: "other-business-owner",
+          email: "other-business-owner@example.com",
+          name: "Other business owner",
+          passwordHash: "test",
+          role: "BUSINESS",
+          updatedAt: BASE_TIME,
+        },
+        {
+          id: "other-team-owner",
+          email: "other-team-owner@example.com",
+          name: "Other team owner",
+          passwordHash: "test",
+          role: "STUDENT",
+          updatedAt: BASE_TIME,
+        },
       ],
     });
     await database.prisma.studentTeam.create({
@@ -63,6 +79,25 @@ describe("Prototype reminders", () => {
         slug: "team",
         university: "University",
         description: "Test team",
+      },
+    });
+    await database.prisma.studentTeam.create({
+      data: {
+        id: "other-team",
+        ownerId: "other-team-owner",
+        name: "Other team",
+        slug: "other-team",
+        university: "Other university",
+        description: "Other test team",
+      },
+    });
+    await database.prisma.businessProfile.create({
+      data: {
+        id: "other-business",
+        userId: "other-business-owner",
+        companyName: "Other business",
+        industry: "Technology",
+        description: "Other test business",
       },
     });
     await database.prisma.problem.create({
@@ -88,6 +123,44 @@ describe("Prototype reminders", () => {
         teamId: "team",
         approach: "Hướng giải quyết thử nghiệm",
         estimatedDuration: "1 tuần",
+        status: "SELECTED",
+        submittedAt: BASE_TIME,
+      },
+    });
+    await database.prisma.application.create({
+      data: {
+        id: "pending-application",
+        problemId: "problem",
+        teamId: "other-team",
+        approach: "Pending confirmation",
+        estimatedDuration: "1 week",
+        status: "PENDING_CONFIRMATION",
+        submittedAt: BASE_TIME,
+      },
+    });
+    await database.prisma.problem.create({
+      data: {
+        id: "other-team-problem",
+        businessProfileId: "business",
+        title: "Other team problem",
+        slug: "other-team-problem",
+        description: "Other problem",
+        goal: "Other goal",
+        field: "Technology",
+        requirements: "Other requirements",
+        expectedDuration: "1 week",
+        status: "PROTOTYPING",
+        prototypeLegacy: false,
+        updatedAt: BASE_TIME,
+      },
+    });
+    await database.prisma.application.create({
+      data: {
+        id: "other-team-selected-application",
+        problemId: "other-team-problem",
+        teamId: "other-team",
+        approach: "Other selected application",
+        estimatedDuration: "1 week",
         status: "SELECTED",
         submittedAt: BASE_TIME,
       },
@@ -255,6 +328,11 @@ describe("Prototype reminders", () => {
     });
     const adminNotifications = await reminders();
     assert.equal(adminNotifications.length, 2);
+    assert.ok(
+      adminNotifications.every(
+        ({ title }) => title === "Bàn giao Prototype đang chờ kiểm tra",
+      ),
+    );
     assert.deepEqual(
       adminNotifications.map(({ userId }) => userId).sort(),
       ["admin-one", "admin-two"],
@@ -313,6 +391,11 @@ describe("Prototype reminders", () => {
     await ensureBusinessPrototypeReminders("problem", "business-owner", {
       database: database.prisma,
       clock: { now: () => new Date(BASE_TIME.getTime() + 3 * DAY - 1) },
+    });
+    assert.equal((await reminders()).length, 2);
+    await ensureBusinessPrototypeReminders("problem", "other-business-owner", {
+      database: database.prisma,
+      clock: { now: () => new Date(BASE_TIME.getTime() + 3 * DAY) },
     });
     assert.equal((await reminders()).length, 2);
     await ensureBusinessPrototypeReminders("problem", "business-owner", {
@@ -426,6 +509,14 @@ describe("Prototype reminders", () => {
     assert.match(groupNotifications[2].dedupeKey ?? "", /attempt-after-return-2-3-team-owner$/);
     await run(new Date(BASE_TIME.getTime() + 9 * DAY));
     assert.equal((await reminders()).length, 3);
+    await run(new Date(BASE_TIME.getTime() + 30 * DAY));
+    assert.equal((await reminders()).length, 3);
+    assert.equal(
+      await database.prisma.notification.count({
+        where: { userId: "other-team-owner" },
+      }),
+      0,
+    );
 
     await database.prisma.proposal.update({
       where: { id: returned.proposalId },

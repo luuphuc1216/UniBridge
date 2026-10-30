@@ -1,3 +1,5 @@
+import type { Prisma } from "@/generated/prisma/client";
+
 export const PROBLEM_ACCEPTING_APPLICATION_STATUSES = ["APPROVED", "PUBLISHED"] as const;
 
 export const APPLICATION_EFFECTIVE_STATUSES = ["SUBMITTED", "PENDING_CONFIRMATION", "SELECTED"] as const;
@@ -17,6 +19,32 @@ export const STUDENT_DISCOVERABLE_PROBLEM_STATUSES = [
   "EVALUATING",
 ] as const;
 export const PROBLEM_REVIEWABLE_STATUS = "PENDING_REVIEW";
+
+export function getStudentDiscoverableProblemWhere(): Prisma.ProblemWhereInput {
+  return {
+    status: { in: [...STUDENT_DISCOVERABLE_PROBLEM_STATUSES] },
+    applications: { none: { status: "SELECTED" } },
+  };
+}
+
+export function getStudentRecommendationProblemWhere(
+  teamId: string,
+): Prisma.ProblemWhereInput {
+  return {
+    status: { in: [...PROBLEM_ACCEPTING_APPLICATION_STATUSES] },
+    AND: [
+      { applications: { none: { status: "SELECTED" } } },
+      {
+        applications: {
+          none: {
+            teamId,
+            status: { in: getEffectiveApplicationStatuses() },
+          },
+        },
+      },
+    ],
+  };
+}
 
 export function getEffectiveApplicationStatuses(): string[] {
   return [...APPLICATION_EFFECTIVE_STATUSES];

@@ -7,7 +7,7 @@ import {
 } from "@/components/student/problem-search-form";
 import { requireStudent } from "@/lib/student-access";
 import { prisma } from "@/lib/prisma";
-import { STUDENT_DISCOVERABLE_PROBLEM_STATUSES } from "@/lib/problem-workflow";
+import { getStudentDiscoverableProblemWhere } from "@/lib/problem-workflow";
 
 export const instant = false;
 
@@ -71,10 +71,10 @@ export default async function StudentProblemsPage({
     filters.push({ budgetMin: { lte: budgetMax } });
   }
 
-  const publicProblemStatuses = [...STUDENT_DISCOVERABLE_PROBLEM_STATUSES];
+  const studentProblemWhere = getStudentDiscoverableProblemWhere();
   const [problems, fields, durations, skills, savedRows] = await Promise.all([
     prisma.problem.findMany({
-      where: { status: { in: publicProblemStatuses }, AND: filters },
+      where: { ...studentProblemWhere, AND: filters },
       orderBy: { approvedAt: "desc" },
       include: {
         businessProfile: { select: { companyName: true } },
@@ -82,19 +82,19 @@ export default async function StudentProblemsPage({
       },
     }),
     prisma.problem.findMany({
-      where: { status: { in: publicProblemStatuses } },
+      where: studentProblemWhere,
       select: { field: true },
       distinct: ["field"],
       orderBy: { field: "asc" },
     }),
     prisma.problem.findMany({
-      where: { status: { in: publicProblemStatuses } },
+      where: studentProblemWhere,
       select: { expectedDuration: true },
       distinct: ["expectedDuration"],
       orderBy: { expectedDuration: "asc" },
     }),
     prisma.problemSkill.findMany({
-      where: { problem: { status: { in: publicProblemStatuses } } },
+      where: { problem: studentProblemWhere },
       select: { skill: { select: { name: true } } },
       distinct: ["skillId"],
       orderBy: { skill: { name: "asc" } },

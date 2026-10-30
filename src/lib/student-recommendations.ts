@@ -10,8 +10,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getTeamReputations } from "@/lib/reputation-data";
 import {
-  getEffectiveApplicationStatuses,
-  PROBLEM_ACCEPTING_APPLICATION_STATUSES,
+  getStudentRecommendationProblemWhere,
 } from "@/lib/problem-workflow";
 
 function mapHistoryProblem(problem: {
@@ -71,10 +70,7 @@ export async function getStudentRecommendations(userId: string) {
   const [problems, viewLogs, savedProblems, searchLogs, applications] = await Promise.all([
     prisma.problem.findMany({
       where: {
-        status: { in: [...PROBLEM_ACCEPTING_APPLICATION_STATUSES] },
-        applications: {
-          none: { teamId: team.id, status: { in: getEffectiveApplicationStatuses() } },
-        },
+        ...getStudentRecommendationProblemWhere(team.id),
       },
       select: {
         id: true,

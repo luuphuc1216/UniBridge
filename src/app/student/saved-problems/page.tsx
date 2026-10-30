@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ProblemResults } from "@/components/student/problem-results";
 import { requireStudent } from "@/lib/student-access";
 import { prisma } from "@/lib/prisma";
-import { STUDENT_DISCOVERABLE_PROBLEM_STATUSES } from "@/lib/problem-workflow";
+import { getStudentDiscoverableProblemWhere } from "@/lib/problem-workflow";
 
 export const instant = false;
 
@@ -11,11 +11,7 @@ export default async function SavedProblemsPage() {
   const savedRows = await prisma.savedProblem.findMany({
     where: {
       userId,
-      problem: {
-        status: {
-          in: [...STUDENT_DISCOVERABLE_PROBLEM_STATUSES],
-        },
-      },
+      problem: getStudentDiscoverableProblemWhere(),
     },
     orderBy: { createdAt: "desc" },
     include: {

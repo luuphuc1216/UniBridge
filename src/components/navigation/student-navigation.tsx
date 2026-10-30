@@ -4,12 +4,34 @@ import {
   NotificationBell,
   type BusinessNotification,
 } from "@/components/business/notification-bell";
+import { ensureGroupSubmissionReminders } from "@/lib/prototype-reminders";
 import { RoleNavigation } from "./role-navigation";
 
 export async function StudentNavigation() {
   const session = await auth();
   let notifications: BusinessNotification[] = [];
   if (session?.user?.role === "STUDENT") {
+    try {
+      const team = await prisma.studentTeam.findUnique({
+        where: { ownerId: session.user.id },
+        select: {
+          applications: {
+            where: {
+              status: "SELECTED",
+              problem: {
+                is: { status: "PROTOTYPING", prototypeLegacy: false },
+              },
+            },
+            select: { problemId: true },
+          },
+        },
+      });
+      for (const { problemId } of team?.applications ?? []) {
+        await ensureGroupSubmissionReminders(problemId);
+      }
+    } catch (error) {
+      console.error("Không thể tạo nhắc nhở Proposal trên chuông sinh viên:", error);
+    }
     notifications = await prisma.notification.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },

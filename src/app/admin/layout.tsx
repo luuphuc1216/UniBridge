@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { AdminNavigation } from "@/components/navigation/admin-navigation";
 
+export const instant = false;
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-muted/30">

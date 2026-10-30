@@ -16,7 +16,7 @@ const statusOptions = [
   ["PROTOTYPING", "Đang xây dựng Prototype / Solution Proposal"],
   ["EVALUATING", "Doanh nghiệp đang đánh giá"],
   ["CLOSED", "Đã kết thúc – không triển khai"],
-  ["READY_FOR_IMPLEMENTATION", "Đã quyết định triển khai – chờ thỏa thuận"],
+  ["READY_FOR_IMPLEMENTATION", "Sẵn sàng soạn thỏa thuận triển khai"],
   ["COMPLETED", "Đã hoàn thành"],
   ["DRAFT", "Bản nháp"],
 ] as const;

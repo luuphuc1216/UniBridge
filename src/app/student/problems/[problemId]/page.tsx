@@ -28,7 +28,7 @@ const workspaceStatusLabels: Record<string, string> = {
   PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
   EVALUATING: "Đang được doanh nghiệp đánh giá",
   CLOSED: "Đã kết thúc – không triển khai",
-  READY_FOR_IMPLEMENTATION: "Đã quyết định triển khai – chờ thỏa thuận",
+  READY_FOR_IMPLEMENTATION: "Sẵn sàng soạn thỏa thuận triển khai",
 };
 
 function formatCurrency(amount: number | null): string {

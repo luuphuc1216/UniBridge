@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireStudent } from "@/lib/student-access";
-import { STUDENT_DISCOVERABLE_PROBLEM_STATUSES } from "@/lib/problem-workflow";
+import { getStudentDiscoverableProblemWhere } from "@/lib/problem-workflow";
 
 function readText(formData: FormData, name: string): string {
   const value = formData.get(name);
@@ -61,9 +61,7 @@ export async function toggleSavedProblemAction(formData: FormData): Promise<void
     const problem = await prisma.problem.findFirst({
       where: {
         id: problemId,
-        status: {
-          in: [...STUDENT_DISCOVERABLE_PROBLEM_STATUSES],
-        },
+        ...getStudentDiscoverableProblemWhere(),
       },
       select: { id: true },
     });
