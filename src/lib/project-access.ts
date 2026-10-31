@@ -1,15 +1,20 @@
-import { prisma } from "@/lib/prisma";
+import type { PrismaClient } from "@/generated/prisma/client";
+
+type ProjectAccessDatabase = Pick<PrismaClient, "project">;
 
 export async function findAccessibleProject(
   projectId: string,
   userId: string,
   role: string,
+  database?: ProjectAccessDatabase,
 ) {
   if (role !== "BUSINESS" && role !== "STUDENT") {
     return null;
   }
 
-  return prisma.project.findFirst({
+  const projectDatabase = database ?? (await import("@/lib/prisma")).prisma;
+  // Read access is shared with team members for now; finer-grained permissions come later.
+  return projectDatabase.project.findFirst({
     where: {
       id: projectId,
       ...(role === "BUSINESS"
@@ -62,6 +67,15 @@ export async function findAccessibleProject(
       },
       transactions: {
         orderBy: { createdAt: "asc" },
+      },
+      agreementVersions: {
+        orderBy: { versionNumber: "desc" },
+        take: 1,
+      },
+      changeRequests: {
+        where: { kind: "AGREEMENT_REVISION" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
       },
     },
   });

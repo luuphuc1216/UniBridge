@@ -14,6 +14,20 @@ import {
   getMilestoneReleaseIdempotencyKey,
   shouldRecordMilestoneRelease,
 } from "@/lib/project-money";
+import {
+  assertBusinessCanDeposit,
+  recordProjectDeposit,
+} from "@/lib/project-deposits";
+import {
+  createProjectWithFirstAgreementVersion,
+  getAgreementResponseMode,
+  getAgreementErrorMessage,
+  respondToLegacyProjectAgreement,
+  respondToProjectAgreementVersion,
+  saveProjectAgreementVersion,
+  staleAgreementMessage,
+  type AgreementVersionInput,
+} from "@/lib/project-agreements";
 import { prisma } from "@/lib/prisma";
 import { findAuthorizedWorkspace } from "@/lib/workspace-access";
 
@@ -41,6 +55,14 @@ type AgreementInput = {
   businessResponsibilities: string;
   teamResponsibilities: string;
   paymentMethod: string;
+  maxMilestoneRevisions: number;
+  ownershipTerms: string;
+  usageTerms: string;
+  confidentialityTerms: string;
+  extensionTerms: string;
+  suspensionTerms: string;
+  terminationTerms: string;
+  disputeTerms: string;
   milestones: AgreementMilestoneInput[];
 };
 
@@ -57,7 +79,7 @@ function readText(formData: FormData, key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function parseAgreement(formData: FormData): AgreementInput {
+function parseAgreement(formData: FormData, requireNewTerms = true): AgreementInput {
   const rawMilestones = readText(formData, "milestones");
   let milestones: AgreementMilestoneInput[];
   try {
@@ -79,6 +101,14 @@ function parseAgreement(formData: FormData): AgreementInput {
     businessResponsibilities: readText(formData, "businessResponsibilities"),
     teamResponsibilities: readText(formData, "teamResponsibilities"),
     paymentMethod: readText(formData, "paymentMethod"),
+    maxMilestoneRevisions: Number(readText(formData, "maxMilestoneRevisions")),
+    ownershipTerms: readText(formData, "ownershipTerms"),
+    usageTerms: readText(formData, "usageTerms"),
+    confidentialityTerms: readText(formData, "confidentialityTerms"),
+    extensionTerms: readText(formData, "extensionTerms"),
+    suspensionTerms: readText(formData, "suspensionTerms"),
+    terminationTerms: readText(formData, "terminationTerms"),
+    disputeTerms: readText(formData, "disputeTerms"),
     milestones: milestones.map((milestone) => ({
       title: String(milestone.title ?? "").trim(),
       description: String(milestone.description ?? "").trim(),
@@ -102,6 +132,24 @@ function parseAgreement(formData: FormData): AgreementInput {
   ];
   if (requiredTexts.some((value) => !value || value.length > 10_000)) {
     throw new Error("Vui lòng điền đầy đủ các điều khoản (mỗi mục tối đa 10.000 ký tự).");
+  }
+  const versionedTerms = [
+    input.ownershipTerms,
+    input.usageTerms,
+    input.confidentialityTerms,
+    input.extensionTerms,
+    input.suspensionTerms,
+    input.terminationTerms,
+    input.disputeTerms,
+  ];
+  if (
+    requireNewTerms &&
+    (versionedTerms.some((value) => !value || value.length > 10_000) ||
+      !Number.isInteger(input.maxMilestoneRevisions) ||
+      input.maxMilestoneRevisions < 0 ||
+      input.maxMilestoneRevisions > 50)
+  ) {
+    throw new Error("Vui lòng điền đầy đủ điều khoản mới và số lần chỉnh sửa hợp lệ (0–50).");
   }
   if (!Number.isSafeInteger(input.totalAmount) || input.totalAmount <= 0) {
     throw new Error("Tổng chi phí phải là số nguyên VND lớn hơn 0.");
@@ -130,6 +178,29 @@ function parseAgreement(formData: FormData): AgreementInput {
     studentFeeRate,
   );
   return input;
+}
+
+function getVersionedAgreementInput(input: AgreementInput): AgreementVersionInput {
+  return {
+    title: input.title,
+    agreedScope: input.agreedScope,
+    deliverables: input.deliverables,
+    duration: input.duration,
+    totalAmount: input.totalAmount,
+    generalAcceptanceCriteria: input.generalAcceptanceCriteria,
+    businessResponsibilities: input.businessResponsibilities,
+    teamResponsibilities: input.teamResponsibilities,
+    paymentMethod: input.paymentMethod,
+    maxMilestoneRevisions: input.maxMilestoneRevisions,
+    ownershipTerms: input.ownershipTerms,
+    usageTerms: input.usageTerms,
+    confidentialityTerms: input.confidentialityTerms,
+    extensionTerms: input.extensionTerms,
+    suspensionTerms: input.suspensionTerms,
+    terminationTerms: input.terminationTerms,
+    disputeTerms: input.disputeTerms,
+    milestones: input.milestones,
+  };
 }
 
 function revalidateProject(projectId?: string, problemId?: string) {
@@ -190,6 +261,7 @@ export async function saveAgreementAction(
   const applicationId = readText(formData, "applicationId");
   const projectId = readText(formData, "projectId");
   const problemId = readText(formData, "problemId");
+  const expectedVersionNumber = Number(readText(formData, "expectedVersionNumber") || "0");
 
   try {
     const session = await auth();
@@ -200,6 +272,7 @@ export async function saveAgreementAction(
       problemId,
       session.user.id,
       session.user.role,
+      applicationId,
     );
     const application = workspace?.applications[0];
     if (
@@ -210,7 +283,15 @@ export async function saveAgreementAction(
     ) {
       throw new Error("Bài toán không còn sẵn sàng tạo thỏa thuận.");
     }
-    const input = parseAgreement(formData);
+    const existingBeforeSave = await prisma.project.findUnique({
+      where: { applicationId },
+      select: { id: true, legacyTermsExempt: true },
+    });
+    if (projectId && existingBeforeSave?.id !== projectId) {
+      throw new Error("Không tìm thấy thỏa thuận cần cập nhật.");
+    }
+    const isLegacy = existingBeforeSave?.legacyTermsExempt ?? false;
+    const input = parseAgreement(formData, !isLegacy);
     const breakdown = calculateProjectFinancialBreakdown(
       input.totalAmount,
       input.milestones.map(({ paymentPercent }) => paymentPercent),
@@ -221,10 +302,27 @@ export async function saveAgreementAction(
     const savedProject = await prisma.$transaction(async (transaction) => {
       const existing = await transaction.project.findUnique({
         where: { applicationId },
-        include: { transactions: { where: { type: "DEPOSIT" } } },
+        include: {
+          transactions: { where: { type: "DEPOSIT" } },
+          agreementVersions: {
+            orderBy: { versionNumber: "desc" },
+            take: 1,
+            select: { versionNumber: true },
+          },
+        },
       });
       if (projectId && existing?.id !== projectId) {
         throw new Error("Không tìm thấy thỏa thuận cần cập nhật.");
+      }
+      if (existing && !existing.legacyTermsExempt) {
+        await saveProjectAgreementVersion(transaction, {
+          projectId: existing.id,
+          expectedVersionNumber,
+          createdByUserId: session.user.id,
+          input: getVersionedAgreementInput(input),
+          team: application.team,
+        });
+        return { id: existing.id, versioned: true };
       }
       if (
         existing &&
@@ -277,34 +375,15 @@ export async function saveAgreementAction(
         });
         savedProjectId = existing.id;
       } else {
-        const project = await transaction.project.create({
-            data: {
-              applicationId,
-              teamId: application.team.id,
-              title: input.title,
-              agreedScope: input.agreedScope,
-              deliverables: input.deliverables,
-              duration: input.duration,
-              totalAmount: input.totalAmount,
-              generalAcceptanceCriteria: input.generalAcceptanceCriteria,
-              businessResponsibilities: input.businessResponsibilities,
-              teamResponsibilities: input.teamResponsibilities,
-              paymentMethod: input.paymentMethod,
-              status: "AGREEING",
-              milestones: {
-                create: input.milestones.map((milestone, index) => ({
-                  title: milestone.title,
-                  description: milestone.description,
-                  acceptanceCriteria: milestone.acceptanceCriteria,
-                  paymentPercent: milestone.paymentPercent,
-                  amount: breakdown.milestones[index]?.grossAmount,
-                  dueAt: parseDateOnly(milestone.dueAt),
-                  sortOrder: index,
-                })),
-              },
-            },
+          const project = await createProjectWithFirstAgreementVersion(transaction, {
+            applicationId,
+            teamId: application.team.id,
+            createdByUserId: session.user.id,
+            input: getVersionedAgreementInput(input),
+            team: application.team,
           });
-        savedProjectId = project.id;
+          savedProjectId = project.id;
+          return { id: savedProjectId, versioned: true };
       }
 
       await transaction.notification.createMany({
@@ -315,16 +394,23 @@ export async function saveAgreementAction(
           href: `/student/projects/${savedProjectId}`,
         })),
       });
-      return { id: savedProjectId };
+      return { id: savedProjectId, versioned: false };
     });
 
     revalidateProject(savedProject.id, problemId);
     return {
       error: null,
-      success: "Đã gửi thỏa thuận. Các xác nhận trước đây đã được làm mới.",
+      success: savedProject.versioned
+        ? "Đã gửi phiên bản thỏa thuận để nhóm xác nhận."
+        : "Đã gửi thỏa thuận. Các xác nhận trước đây đã được làm mới.",
       projectId: savedProject.id,
     };
   } catch (error) {
+    const staleMessage = getAgreementErrorMessage(error);
+    if (error instanceof Error && error.message === staleAgreementMessage) {
+      return { error: staleAgreementMessage };
+    }
+    if (staleMessage) return { error: staleMessage };
     return getActionError(error, "Lưu thỏa thuận");
   }
 }
@@ -336,140 +422,67 @@ export async function respondAgreementAction(
   const projectId = readText(formData, "projectId");
   const response = readText(formData, "response");
   const note = readText(formData, "note");
+  const versionNumber = Number(readText(formData, "versionNumber"));
 
   try {
     const { session, project } = await requireProject(projectId);
+    const responseMode = getAgreementResponseMode({
+      legacyTermsExempt: project.legacyTermsExempt,
+      role: session.user.role,
+      teamOwnerId: project.team.ownerId,
+      actorUserId: session.user.id,
+    });
+    if (responseMode === "VERSIONED") {
+      const isRetryOfAcceptedVersion =
+        project.status === "AWAITING_PAYMENT" && response === "ACCEPT";
+      if (project.status !== "AGREEING" && !isRetryOfAcceptedVersion) {
+        throw new Error("Thỏa thuận hiện không chờ phản hồi.");
+      }
+      if (
+        response !== "ACCEPT" &&
+        response !== "REQUEST_CHANGES"
+      ) {
+        throw new Error("Phản hồi phiên bản thỏa thuận không hợp lệ.");
+      }
+      const result = await prisma.$transaction((transaction) =>
+        respondToProjectAgreementVersion(transaction, {
+          projectId,
+          versionNumber,
+          actorUserId: session.user.id,
+          response,
+          note,
+        }),
+      );
+      revalidateProject(projectId, project.application.problem.id);
+      return {
+        error: null,
+        success: result.awaitingPayment
+          ? "Hai bên đã xác nhận cùng phiên bản. Dự án đang chờ nạp tiền giả lập."
+          : response === "ACCEPT"
+            ? "Đã xác nhận phiên bản thỏa thuận."
+            : "Đã gửi đề nghị chỉnh sửa thỏa thuận.",
+      };
+    }
     if (project.status !== "AGREEING") {
       throw new Error("Thỏa thuận hiện không chờ phản hồi.");
     }
-    const recipients = projectRecipients(project);
-
-    if (response === "REQUEST_CHANGES") {
-      if (
-        session.user.role !== "STUDENT" ||
-        !note ||
-        note.length > 4000
-      ) {
-        throw new Error("Nhóm cần ghi rõ đề nghị chỉnh sửa (tối đa 4.000 ký tự).");
-      }
-      await prisma.$transaction(async (transaction) => {
-        const changed = await transaction.project.updateMany({
-          where: { id: projectId, status: "AGREEING" },
-          data: {
-            revisionNote: note,
-            businessAcceptedAt: null,
-            teamAcceptedAt: null,
-          },
-        });
-        if (changed.count !== 1) throw new Error("Thỏa thuận đã thay đổi. Vui lòng tải lại.");
-        await transaction.notification.create({
-          data: {
-            userId: recipients.businessUserId,
-            title: "Nhóm đề nghị chỉnh sửa thỏa thuận",
-            message: `Nhóm gửi đề nghị chỉnh sửa cho dự án “${project.title}”.`,
-            href: `/business/projects/${projectId}`,
-          },
-        });
-      });
-    } else if (response === "ACCEPT") {
-      if (!["BUSINESS", "STUDENT"].includes(session.user.role)) {
-        throw new Error("Tài khoản không được phép xác nhận thỏa thuận.");
-      }
-      await prisma.$transaction(async (transaction) => {
-        const freshProject = await transaction.project.findFirst({
-          where: { id: projectId, status: "AGREEING" },
-          include: { milestones: { orderBy: { sortOrder: "asc" } } },
-        });
-        if (!freshProject) throw new Error("Thỏa thuận đã thay đổi. Vui lòng tải lại.");
-        if (freshProject.revisionNote) {
-          throw new Error("Doanh nghiệp cần cập nhật thỏa thuận theo đề nghị của nhóm trước khi đồng ý.");
-        }
-        calculateProjectFinancialBreakdown(
-          freshProject.totalAmount,
-          freshProject.milestones.map(({ paymentPercent }) => paymentPercent),
-          businessFeeRate,
-          studentFeeRate,
-        );
-        const currentAcceptance =
-          session.user.role === "BUSINESS"
-            ? freshProject.businessAcceptedAt
-            : freshProject.teamAcceptedAt;
-        if (!currentAcceptance) {
-          const accepted = await transaction.project.updateMany({
-            where: {
-              id: projectId,
-              status: "AGREEING",
-              agreementRevision: freshProject.agreementRevision,
-              revisionNote: null,
-              ...(session.user.role === "BUSINESS"
-                ? { businessAcceptedAt: null }
-                : { teamAcceptedAt: null }),
-            },
-            data:
-              session.user.role === "BUSINESS"
-                ? { businessAcceptedAt: new Date() }
-                : { teamAcceptedAt: new Date() },
-          });
-          if (accepted.count !== 1) {
-            throw new Error("Phiên bản thỏa thuận đã thay đổi. Vui lòng tải lại.");
-          }
-        }
-
-        const updated = await transaction.project.findUniqueOrThrow({
-          where: { id: projectId },
-        });
-        if (updated.businessAcceptedAt && updated.teamAcceptedAt) {
-          const agreed = await transaction.project.updateMany({
-            where: {
-              id: projectId,
-              status: "AGREEING",
-              businessAcceptedAt: { not: null },
-              teamAcceptedAt: { not: null },
-            },
-            data: { status: "AWAITING_PAYMENT", revisionNote: null },
-          });
-          if (agreed.count === 1) {
-            await transaction.notification.createMany({
-              data: [
-                {
-                  userId: recipients.businessUserId,
-                  title: "Hai bên đã đồng ý thỏa thuận",
-                  message: `Thỏa thuận dự án “${project.title}” đã được xác nhận. Có thể nạp tiền giả lập.`,
-                  href: `/business/projects/${projectId}`,
-                },
-                ...recipients.teamUserIds.map((userId) => ({
-                  userId,
-                  title: "Hai bên đã đồng ý thỏa thuận",
-                  message: `Thỏa thuận dự án “${project.title}” đã được xác nhận.`,
-                  href: `/student/projects/${projectId}`,
-                })),
-              ],
-            });
-          }
-        } else {
-          const otherPartyUserIds =
-            session.user.role === "BUSINESS"
-              ? recipients.teamUserIds
-              : [recipients.businessUserId];
-          await transaction.notification.createMany({
-            data: otherPartyUserIds.map((userId) => ({
-              userId,
-              title: "Đối tác đã đồng ý thỏa thuận",
-              message: `Một bên đã xác nhận phiên bản ${project.agreementRevision} của dự án “${project.title}”.`,
-              href:
-                session.user.role === "BUSINESS"
-                  ? `/student/projects/${projectId}`
-                  : `/business/projects/${projectId}`,
-            })),
-          });
-        }
-      });
-    } else {
+    if (response !== "ACCEPT" && response !== "REQUEST_CHANGES") {
       throw new Error("Phản hồi thỏa thuận không hợp lệ.");
     }
+    await prisma.$transaction((transaction) =>
+      respondToLegacyProjectAgreement(transaction, {
+        projectId,
+        actorUserId: session.user.id,
+        role: session.user.role as "BUSINESS" | "STUDENT",
+        response,
+        note,
+      }),
+    );
     revalidateProject(projectId, project.application.problem.id);
     return { error: null, success: "Đã ghi nhận phản hồi thỏa thuận." };
   } catch (error) {
+    const staleMessage = getAgreementErrorMessage(error);
+    if (staleMessage) return { error: staleMessage };
     return getActionError(error, "Phản hồi thỏa thuận");
   }
 }
@@ -528,94 +541,16 @@ export async function depositProjectAction(
   let authorizedBusiness = false;
   try {
     const { session, project } = await requireProject(projectId);
-    if (session.user.role !== "BUSINESS") {
-      throw new Error("Chỉ doanh nghiệp sở hữu dự án mới có thể nạp tiền.");
-    }
+    assertBusinessCanDeposit(session.user.role);
     authorizedBusiness = true;
-    const key = `deposit:${projectId}`;
-    await prisma.$transaction(async (transaction) => {
-      const existingDeposit = await transaction.projectTransaction.findUnique({
-        where: { idempotencyKey: key },
-      });
-      if (existingDeposit) return;
-
-      const current = await transaction.project.findUnique({
-        where: { id: projectId },
-        include: { milestones: { orderBy: { sortOrder: "asc" } } },
-      });
-      if (
-        !current ||
-        current.status !== "AWAITING_PAYMENT" ||
-        !current.businessAcceptedAt ||
-        !current.teamAcceptedAt
-      ) {
-        throw new Error("Dự án chưa được hai bên đồng ý hoặc đã nạp tiền.");
-      }
-      const breakdown = calculateProjectFinancialBreakdown(
-        current.totalAmount,
-        current.milestones.map(({ paymentPercent }) => paymentPercent),
-        businessFeeRate,
-        studentFeeRate,
-      );
-      const changed = await transaction.project.updateMany({
-        where: {
-          id: projectId,
-          status: "AWAITING_PAYMENT",
-          transactions: { none: { type: "DEPOSIT" } },
-        },
-        data: {
-          status: "IN_PROGRESS",
-          startedAt: new Date(),
-        },
-      });
-      if (changed.count !== 1) throw new Error("Dự án đã được nạp tiền.");
-      const firstMilestone = current.milestones[0];
-      if (!firstMilestone) throw new Error("Dự án chưa có Milestone.");
-      const opened = await transaction.milestone.updateMany({
-        where: {
-          id: firstMilestone.id,
-          projectId,
-          status: "PENDING",
-        },
-        data: { status: "IN_PROGRESS" },
-      });
-      if (opened.count !== 1) throw new Error("Không thể mở Milestone đầu tiên.");
-
-      await transaction.projectTransaction.create({
-        data: {
-          projectId,
-          idempotencyKey: key,
-          type: "DEPOSIT",
-          amount: breakdown.totalDeposit,
-          platformFee: breakdown.totalPlatformFee,
-          platformFeeBasisPoints: breakdown.platformFeeBasisPoints,
-          businessFeeBasisPoints: businessFeeRate,
-          studentFeeBasisPoints: studentFeeRate,
-          businessFee: breakdown.totalBusinessFee,
-          status: "ESCROW",
-          paidAt: new Date(),
-        },
-      });
-      const recipients = projectRecipients(project);
-      await transaction.notification.createMany({
-        data: [
-          {
-            userId: recipients.businessUserId,
-            title: "Đã nạp tiền vào escrow giả lập",
-            message: `Khoản nạp ${breakdown.totalDeposit.toLocaleString("vi-VN")} ₫ cho dự án “${current.title}” đã được ghi nhận giả lập.`,
-            href: `/business/projects/${projectId}`,
-          },
-          ...recipients.teamUserIds.map((userId) => ({
-            userId,
-            title: "Doanh nghiệp đã nạp tiền",
-            message: `Dự án “${current.title}” đã bắt đầu. Milestone đầu tiên đang mở.`,
-            href: `/student/projects/${projectId}`,
-          })),
-        ],
-      });
-    });
+    const result = await recordProjectDeposit(prisma, { projectId });
     revalidateProject(projectId, project.application.problem.id);
-    return { error: null, success: "Đã ghi nhận khoản nạp giả lập và mở Milestone đầu tiên." };
+    return {
+      error: null,
+      success: result.alreadyDeposited
+        ? "Khoản nạp trước đó đã được ghi nhận."
+        : "Đã ghi nhận khoản nạp giả lập và mở Milestone đầu tiên.",
+    };
   } catch (error) {
     if (authorizedBusiness) {
       const existing = await prisma.projectTransaction.findUnique({

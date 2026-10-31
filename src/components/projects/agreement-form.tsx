@@ -25,6 +25,14 @@ export type AgreementFormValues = {
   businessResponsibilities: string;
   teamResponsibilities: string;
   paymentMethod: string;
+  maxMilestoneRevisions: number;
+  ownershipTerms: string;
+  usageTerms: string;
+  confidentialityTerms: string;
+  extensionTerms: string;
+  suspensionTerms: string;
+  terminationTerms: string;
+  disputeTerms: string;
   milestones: AgreementFormMilestone[];
 };
 
@@ -86,11 +94,15 @@ export function AgreementForm({
   applicationId,
   problemId,
   projectId,
+  expectedVersionNumber = 0,
+  termsRequired = true,
   initialValues,
 }: {
   applicationId: string;
   problemId: string;
   projectId?: string;
+  expectedVersionNumber?: number;
+  termsRequired?: boolean;
   initialValues: AgreementFormValues;
 }) {
   const [state, formAction, pending] = useActionState(saveAgreementAction, emptyState);
@@ -135,6 +147,7 @@ export function AgreementForm({
       <input name="applicationId" type="hidden" value={applicationId} />
       <input name="problemId" type="hidden" value={problemId} />
       <input name="projectId" type="hidden" value={projectId ?? ""} />
+      <input name="expectedVersionNumber" type="hidden" value={expectedVersionNumber} />
       <input name="milestones" type="hidden" value={JSON.stringify(values.milestones)} />
 
       <section className="grid gap-4 sm:grid-cols-2">
@@ -201,6 +214,87 @@ export function AgreementForm({
           onChange={(value) => updateField("paymentMethod", value)}
           value={values.paymentMethod}
         />
+      </section>
+
+      <section className="space-y-4 rounded-xl border border-border p-4">
+        <div>
+          <h3 className="font-semibold">Điều khoản phiên bản</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Bản điều khoản đã gửi được lưu bất biến. Nếu nhóm đề nghị chỉnh sửa, hãy tạo phiên bản
+            mới; hai bên cần xác nhận cùng một phiên bản trước khi nạp tiền.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField
+            label="Quyền sở hữu sản phẩm"
+            name="ownershipTerms"
+            multiline
+            onChange={(value) => updateField("ownershipTerms", value)}
+            required={termsRequired}
+            value={values.ownershipTerms}
+          />
+          <TextField
+            label="Quyền sử dụng sản phẩm"
+            name="usageTerms"
+            multiline
+            onChange={(value) => updateField("usageTerms", value)}
+            required={termsRequired}
+            value={values.usageTerms}
+          />
+          <TextField
+            label="Bảo mật"
+            name="confidentialityTerms"
+            multiline
+            onChange={(value) => updateField("confidentialityTerms", value)}
+            required={termsRequired}
+            value={values.confidentialityTerms}
+          />
+          <TextField
+            label="Điều kiện gia hạn"
+            name="extensionTerms"
+            multiline
+            onChange={(value) => updateField("extensionTerms", value)}
+            required={termsRequired}
+            value={values.extensionTerms}
+          />
+          <TextField
+            label="Điều kiện tạm dừng"
+            name="suspensionTerms"
+            multiline
+            onChange={(value) => updateField("suspensionTerms", value)}
+            required={termsRequired}
+            value={values.suspensionTerms}
+          />
+          <TextField
+            label="Điều kiện chấm dứt"
+            name="terminationTerms"
+            multiline
+            onChange={(value) => updateField("terminationTerms", value)}
+            required={termsRequired}
+            value={values.terminationTerms}
+          />
+          <TextField
+            label="Xử lý bất đồng"
+            name="disputeTerms"
+            multiline
+            onChange={(value) => updateField("disputeTerms", value)}
+            required={termsRequired}
+            value={values.disputeTerms}
+          />
+          <TextField
+            label="Số lần chỉnh sửa tối đa cho mỗi Milestone"
+            name="maxMilestoneRevisions"
+            onChange={(value) =>
+              updateField(
+                "maxMilestoneRevisions",
+                value === "" ? 0 : Number(value),
+              )
+            }
+            required={termsRequired}
+            type="number"
+            value={String(values.maxMilestoneRevisions)}
+          />
+        </div>
       </section>
 
       <section className="space-y-4">

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { ProjectDetailView } from "@/components/projects/project-detail-view";
 import { findAccessibleProject } from "@/lib/project-access";
 import { getProjectReviewState } from "@/lib/reputation-data";
+import { canRespondForTeam } from "@/lib/team-permissions";
 
 export const instant = false;
 
@@ -21,5 +22,12 @@ export default async function StudentProjectPage({
       ? await getProjectReviewState(project.id, "TEAM_TO_BUSINESS", project.completedAt)
       : null;
 
-  return <ProjectDetailView project={project} reviewState={reviewState} role="STUDENT" />;
+  return (
+    <ProjectDetailView
+      canRespondForTeam={canRespondForTeam(project.team.ownerId, session.user.id)}
+      project={project}
+      reviewState={reviewState}
+      role="STUDENT"
+    />
+  );
 }

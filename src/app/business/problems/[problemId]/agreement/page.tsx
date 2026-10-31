@@ -38,6 +38,14 @@ export default async function BusinessAgreementPage({
     businessResponsibilities: "",
     teamResponsibilities: "",
     paymentMethod: "",
+    maxMilestoneRevisions: 0,
+    ownershipTerms: "",
+    usageTerms: "",
+    confidentialityTerms: "",
+    extensionTerms: "",
+    suspensionTerms: "",
+    terminationTerms: "",
+    disputeTerms: "",
     milestones: [
       {
         title: "",

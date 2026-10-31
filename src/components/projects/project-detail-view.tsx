@@ -20,6 +20,7 @@ import {
   calculateLegacyProjectFinancialBreakdown,
   calculateProjectFinancialBreakdown,
 } from "@/lib/project-money";
+import { readAgreementSnapshot, type AgreementSnapshot } from "@/lib/project-agreements";
 import { getStoredMilestoneSubmissionLinks } from "@/lib/milestone-submission-validation";
 import type { findAccessibleProject } from "@/lib/project-access";
 import type { ProjectReviewState } from "@/lib/reputation-data";
@@ -60,24 +61,39 @@ function formatDateTime(date: Date): string {
   }).format(date);
 }
 
-function getAgreementFormValues(project: ProjectDetailData): AgreementFormValues {
+function getAgreementFormValues(
+  project: ProjectDetailData,
+  snapshot?: AgreementSnapshot,
+): AgreementFormValues {
   return {
-    title: project.title,
-    agreedScope: project.agreedScope,
-    deliverables: project.deliverables,
-    duration: project.duration,
-    totalAmount: project.totalAmount,
-    generalAcceptanceCriteria: project.generalAcceptanceCriteria,
-    businessResponsibilities: project.businessResponsibilities,
-    teamResponsibilities: project.teamResponsibilities,
-    paymentMethod: project.paymentMethod,
-    milestones: project.milestones.map((milestone) => ({
-      title: milestone.title,
-      description: milestone.description,
-      acceptanceCriteria: milestone.acceptanceCriteria,
-      dueAt: milestone.dueAt?.toISOString().slice(0, 10) ?? "",
-      paymentPercent: milestone.paymentPercent,
-    })),
+    title: snapshot?.title ?? project.title,
+    agreedScope: snapshot?.agreedScope ?? project.agreedScope,
+    deliverables: snapshot?.deliverables ?? project.deliverables,
+    duration: snapshot?.duration ?? project.duration,
+    totalAmount: snapshot?.totalAmount ?? project.totalAmount,
+    generalAcceptanceCriteria:
+      snapshot?.generalAcceptanceCriteria ?? project.generalAcceptanceCriteria,
+    businessResponsibilities:
+      snapshot?.businessResponsibilities ?? project.businessResponsibilities,
+    teamResponsibilities: snapshot?.teamResponsibilities ?? project.teamResponsibilities,
+    paymentMethod: snapshot?.paymentMethod ?? project.paymentMethod,
+    maxMilestoneRevisions: snapshot?.maxMilestoneRevisions ?? 0,
+    ownershipTerms: snapshot?.ownershipTerms ?? "",
+    usageTerms: snapshot?.usageTerms ?? "",
+    confidentialityTerms: snapshot?.confidentialityTerms ?? "",
+    extensionTerms: snapshot?.extensionTerms ?? "",
+    suspensionTerms: snapshot?.suspensionTerms ?? "",
+    terminationTerms: snapshot?.terminationTerms ?? "",
+    disputeTerms: snapshot?.disputeTerms ?? "",
+    milestones: snapshot
+      ? snapshot.milestones
+      : project.milestones.map((milestone) => ({
+          title: milestone.title,
+          description: milestone.description,
+          acceptanceCriteria: milestone.acceptanceCriteria,
+          dueAt: milestone.dueAt?.toISOString().slice(0, 10) ?? "",
+          paymentPercent: milestone.paymentPercent,
+        })),
   };
 }
 
@@ -115,17 +131,27 @@ export function ProjectDetailView({
   role,
   applicationId,
   reviewState,
+  canRespondForTeam = false,
 }: {
   project: ProjectDetailData;
   role: "BUSINESS" | "STUDENT";
   applicationId?: string;
   reviewState: ProjectReviewState | null;
+  canRespondForTeam?: boolean;
 }) {
   const isBusiness = role === "BUSINESS";
+  const latestAgreementVersion = project.agreementVersions[0];
+  const agreementSnapshot =
+    latestAgreementVersion && !project.legacyTermsExempt
+      ? readAgreementSnapshot(latestAgreementVersion)
+      : undefined;
+  const agreementTitle = agreementSnapshot?.title ?? project.title;
   const summary = getPaymentSummary(project);
   const canEditAgreement =
     isBusiness &&
-    ["AGREEING", "AWAITING_PAYMENT"].includes(project.status) &&
+    (project.legacyTermsExempt
+      ? ["AGREEING", "AWAITING_PAYMENT"].includes(project.status)
+      : project.status === "AGREEING") &&
     project.transactions.every((transaction) => transaction.type !== "DEPOSIT");
   const canCancel = ["AGREEING", "AWAITING_PAYMENT"].includes(project.status);
   const isLegacyDeposit =
@@ -146,8 +172,9 @@ export function ProjectDetailView({
           summary.deposit.studentFeeBasisPoints ?? studentFeeRate,
         )
     : calculateProjectFinancialBreakdown(
-        project.totalAmount,
-        project.milestones.map(({ paymentPercent }) => paymentPercent),
+        agreementSnapshot?.totalAmount ?? project.totalAmount,
+        agreementSnapshot?.milestones.map(({ paymentPercent }) => paymentPercent) ??
+          project.milestones.map(({ paymentPercent }) => paymentPercent),
         businessFeeRate,
         studentFeeRate,
       );
@@ -172,7 +199,7 @@ export function ProjectDetailView({
             {" · Nhóm "}
             {project.team.name}
           </p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{project.title}</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{agreementTitle}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Bài toán: {project.application.problem.title}
           </p>
@@ -234,7 +261,7 @@ export function ProjectDetailView({
 
       <section className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Giá trị dự án", formatCurrency(project.totalAmount)],
+          ["Giá trị dự án", formatCurrency(paymentBreakdown.totalAmount)],
           ["Đã nạp vào escrow", formatCurrency(summary.deposited)],
           ["Đã giải ngân cho nhóm", formatCurrency(summary.paidOut)],
           ["Tổng phí nền tảng đã ghi nhận", formatCurrency(summary.fees)],
@@ -261,20 +288,49 @@ export function ProjectDetailView({
         <div className="space-y-6">
           <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
             <h2 className="text-lg font-semibold">Điều khoản thỏa thuận</h2>
-            {project.revisionNote && (
+            {project.legacyTermsExempt && project.revisionNote && (
               <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
                 Đề nghị chỉnh sửa từ nhóm: {project.revisionNote}
               </p>
             )}
+            {!project.legacyTermsExempt && project.changeRequests[0]?.status === "OPEN" && (
+              <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+                Đề nghị chỉnh sửa từ nhóm: {project.changeRequests[0].reason}
+              </p>
+            )}
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
               {[
-                ["Phạm vi công việc", project.agreedScope],
-                ["Sản phẩm đầu ra", project.deliverables],
-                ["Thời gian thực hiện", project.duration],
-                ["Tiêu chí nghiệm thu chung", project.generalAcceptanceCriteria],
-                ["Trách nhiệm doanh nghiệp", project.businessResponsibilities],
-                ["Trách nhiệm nhóm", project.teamResponsibilities],
-                ["Phương thức thanh toán", project.paymentMethod],
+                ["Phạm vi công việc", agreementSnapshot?.agreedScope ?? project.agreedScope],
+                ["Sản phẩm đầu ra", agreementSnapshot?.deliverables ?? project.deliverables],
+                ["Thời gian thực hiện", agreementSnapshot?.duration ?? project.duration],
+                [
+                  "Tiêu chí nghiệm thu chung",
+                  agreementSnapshot?.generalAcceptanceCriteria ?? project.generalAcceptanceCriteria,
+                ],
+                [
+                  "Trách nhiệm doanh nghiệp",
+                  agreementSnapshot?.businessResponsibilities ?? project.businessResponsibilities,
+                ],
+                [
+                  "Trách nhiệm nhóm",
+                  agreementSnapshot?.teamResponsibilities ?? project.teamResponsibilities,
+                ],
+                ["Phương thức thanh toán", agreementSnapshot?.paymentMethod ?? project.paymentMethod],
+                ...(agreementSnapshot
+                  ? [
+                      ["Quyền sở hữu sản phẩm", agreementSnapshot.ownershipTerms],
+                      ["Quyền sử dụng sản phẩm", agreementSnapshot.usageTerms],
+                      ["Bảo mật", agreementSnapshot.confidentialityTerms],
+                      ["Điều kiện gia hạn", agreementSnapshot.extensionTerms],
+                      ["Điều kiện tạm dừng", agreementSnapshot.suspensionTerms],
+                      ["Điều kiện chấm dứt", agreementSnapshot.terminationTerms],
+                      ["Xử lý bất đồng", agreementSnapshot.disputeTerms],
+                      [
+                        "Số lần chỉnh sửa tối đa mỗi Milestone",
+                        String(agreementSnapshot.maxMilestoneRevisions),
+                      ],
+                    ]
+                  : []),
               ].map(([label, value]) => (
                 <div className="rounded-xl bg-muted/50 p-3" key={label}>
                   <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
@@ -282,18 +338,36 @@ export function ProjectDetailView({
                 </div>
               ))}
             </dl>
-            <div className="mt-4 flex flex-wrap gap-3 text-sm">
-              <span>
-                Doanh nghiệp:{" "}
-                <strong>{project.businessAcceptedAt ? "Đã đồng ý" : "Chưa đồng ý"}</strong>
-              </span>
-              <span>
-                Nhóm: <strong>{project.teamAcceptedAt ? "Đã đồng ý" : "Chưa đồng ý"}</strong>
-              </span>
-              <span>Phiên bản {project.agreementRevision}</span>
-            </div>
+            {project.legacyTermsExempt ? (
+              <div className="mt-4 flex flex-wrap gap-3 text-sm">
+                <span>
+                  Doanh nghiệp:{" "}
+                  <strong>{project.businessAcceptedAt ? "Đã đồng ý" : "Chưa đồng ý"}</strong>
+                </span>
+                <span>
+                  Nhóm: <strong>{project.teamAcceptedAt ? "Đã đồng ý" : "Chưa đồng ý"}</strong>
+                </span>
+                <span>Phiên bản {project.agreementRevision}</span>
+              </div>
+            ) : latestAgreementVersion ? (
+              <div className="mt-4 flex flex-wrap gap-3 text-sm">
+                <span>
+                  Doanh nghiệp:{" "}
+                  <strong>
+                    {latestAgreementVersion.businessAcceptedAt ? "Đã xác nhận" : "Chưa xác nhận"}
+                  </strong>
+                </span>
+                <span>
+                  Nhóm:{" "}
+                  <strong>
+                    {latestAgreementVersion.teamAcceptedAt ? "Đã xác nhận" : "Chưa xác nhận"}
+                  </strong>
+                </span>
+                <span>Phiên bản {latestAgreementVersion.versionNumber}</span>
+              </div>
+            ) : null}
 
-            {project.status === "AGREEING" && (
+            {project.legacyTermsExempt && project.status === "AGREEING" && (
               <div className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2">
                 {project.revisionNote ? (
                   <p className="text-sm text-amber-900">
@@ -328,6 +402,47 @@ export function ProjectDetailView({
                 )}
               </div>
             )}
+            {!project.legacyTermsExempt &&
+              project.status === "AGREEING" &&
+              latestAgreementVersion?.status === "PENDING_TEAM" && (
+                <div className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2">
+                  {canRespondForTeam ? (
+                    <>
+                      <ProjectActionForm
+                        action={respondAgreementAction}
+                        buttonLabel="Xác nhận phiên bản này"
+                        hiddenFields={{
+                          projectId: project.id,
+                          response: "ACCEPT",
+                          versionNumber: String(latestAgreementVersion.versionNumber),
+                        }}
+                      />
+                      <ProjectActionForm
+                        action={respondAgreementAction}
+                        buttonClassName="rounded-lg border border-amber-400 px-4 py-2.5 text-sm font-semibold text-amber-900 disabled:opacity-60"
+                        buttonLabel="Đề nghị chỉnh sửa"
+                        hiddenFields={{
+                          projectId: project.id,
+                          response: "REQUEST_CHANGES",
+                          versionNumber: String(latestAgreementVersion.versionNumber),
+                        }}
+                      >
+                        <textarea
+                          className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                          maxLength={4000}
+                          name="note"
+                          placeholder="Mô tả nội dung cần làm rõ hoặc chỉnh sửa"
+                          required
+                        />
+                      </ProjectActionForm>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Chỉ chủ nhóm có thể xác nhận hoặc đề nghị chỉnh sửa phiên bản này.
+                    </p>
+                  )}
+                </div>
+              )}
           </section>
 
           {canEditAgreement && applicationId && (
@@ -341,9 +456,11 @@ export function ProjectDetailView({
               <div className="mt-4">
                 <AgreementForm
                   applicationId={applicationId}
-                  initialValues={getAgreementFormValues(project)}
+                  expectedVersionNumber={latestAgreementVersion?.versionNumber ?? 0}
+                  initialValues={getAgreementFormValues(project, agreementSnapshot)}
                   problemId={project.application.problem.id}
                   projectId={project.id}
+                  termsRequired={!project.legacyTermsExempt}
                 />
               </div>
             </section>
@@ -352,7 +469,42 @@ export function ProjectDetailView({
           <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
             <h2 className="text-lg font-semibold">Milestone và nghiệm thu</h2>
             <ol className="mt-4 space-y-4">
-              {project.milestones.map((milestone, index) => {
+              {project.status === "AGREEING" && agreementSnapshot
+                ? agreementSnapshot.milestones.map((milestone, index) => {
+                    const allocation = paymentBreakdown.milestones[index];
+                    return (
+                      <li
+                        className="rounded-xl border border-border p-4"
+                        key={`${latestAgreementVersion?.versionNumber}-${index}`}
+                      >
+                        <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                          <div>
+                            <p className="text-xs font-semibold text-primary">
+                              Milestone {index + 1}
+                            </p>
+                            <h3 className="mt-1 font-semibold">{milestone.title}</h3>
+                          </div>
+                          <span className="w-fit rounded-full bg-muted px-3 py-1 text-xs font-semibold">
+                            Chờ xác nhận phiên bản
+                          </span>
+                        </div>
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6">
+                          {milestone.description}
+                        </p>
+                        <p className="mt-3 text-sm">
+                          <strong>Tiêu chí nghiệm thu:</strong> {milestone.acceptanceCriteria}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                          <span>Hạn: {formatDate(new Date(`${milestone.dueAt}T12:00:00.000Z`))}</span>
+                          <span>Thanh toán: {milestone.paymentPercent}%</span>
+                          <span>
+                            Giá trị Milestone: {formatCurrency(allocation?.grossAmount ?? 0)}
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })
+                : project.milestones.map((milestone, index) => {
                 const allocation = paymentBreakdown.milestones[index];
                 const isCurrent =
                   project.status === "IN_PROGRESS" &&
@@ -487,7 +639,7 @@ export function ProjectDetailView({
                     )}
                   </li>
                 );
-              })}
+                  })}
             </ol>
           </section>
         </div>
