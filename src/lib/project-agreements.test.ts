@@ -28,6 +28,14 @@ import {
   recordProjectDeposit,
 } from "@/lib/project-deposits";
 import {
+  createProjectChangeRequest,
+  createProjectSupportNote,
+  ensurePendingProjectChangeRequestReminders,
+  refundUnreleasedMilestones,
+  resolveProjectDisputeForAdmin,
+  respondToProjectChangeRequest,
+} from "@/lib/project-change-requests";
+import {
   acceptLegacyMilestone,
   acceptPaidMilestone,
   acceptProjectFinalCompletion,
@@ -36,8 +44,10 @@ import {
   requestPaidMilestoneRevision,
   submitPaidMilestone,
   updatePaidMilestoneProgress,
+  assertProjectActionable,
 } from "@/lib/project-milestone-workflow";
 import { projectReminderConfig, projectReminderHourMs } from "@/lib/project-reminder-config";
+import { getProjectNotificationHref } from "@/lib/project-notification-links";
 
 const agreementInput = (
   title = "Dự án phiên bản 1",
@@ -76,6 +86,17 @@ const agreementInput = (
       paymentPercent: 30,
     },
   ],
+});
+
+it("builds project notification hrefs for the recipient role", () => {
+  assert.equal(
+    getProjectNotificationHref("BUSINESS", "project-1"),
+    "/business/projects/project-1",
+  );
+  assert.equal(
+    getProjectNotificationHref("STUDENT", "project-1"),
+    "/student/projects/project-1",
+  );
 });
 
 describe("ProjectAgreementVersion SQLite workflow", () => {
@@ -1379,6 +1400,16 @@ describe("ProjectAgreementVersion SQLite workflow", () => {
     assert.equal(awaitingFinal.status, "IN_PROGRESS");
     assert.equal(awaitingFinal.finalAcceptanceStatus, "AWAITING_FINAL_ACCEPTANCE");
     assert.equal(awaitingFinal.completedAt, null);
+    const [businessFinalNotification, teamFinalNotification] = await Promise.all([
+      database.prisma.notification.findUniqueOrThrow({
+        where: { dedupeKey: `final-acceptance-requested:${project.id}:business` },
+      }),
+      database.prisma.notification.findUniqueOrThrow({
+        where: { dedupeKey: `final-acceptance-requested:${project.id}:team-a-owner` },
+      }),
+    ]);
+    assert.equal(businessFinalNotification.href, `/business/projects/${project.id}`);
+    assert.equal(teamFinalNotification.href, `/student/projects/${project.id}`);
     assert.equal(awaitingFinal.transactions.find(({ type }) => type === "DEPOSIT")?.status, "RELEASED");
     assert.ok(
       awaitingFinal.milestones.every(
@@ -1607,5 +1638,1528 @@ describe("ProjectAgreementVersion SQLite workflow", () => {
       completed.transactions.filter(({ type }) => type === "MILESTONE_RELEASE").length,
       1,
     );
+  });
+
+  it("opens a dispute immediately, blocks only that milestone release, and requires both approvals to close", async () => {
+    const project = await createFirstVersion(agreementInput("Dispute isolation", 1_000_000));
+    await fundProject(project.id);
+    const [first, second] = await database.prisma.milestone.findMany({
+      where: { projectId: project.id },
+      orderBy: { sortOrder: "asc" },
+    });
+    assert.ok(first);
+    assert.ok(second);
+
+    const assertLedgerInvariant = async () => {
+      const [transactions, milestones] = await Promise.all([
+        database.prisma.projectTransaction.findMany({ where: { projectId: project.id } }),
+        database.prisma.milestone.findMany({ where: { projectId: project.id } }),
+      ]);
+      const deposit = transactions.find(({ type }) => type === "DEPOSIT");
+      assert.ok(deposit);
+      const refunds = transactions
+        .filter(({ type }) => type === "REFUND")
+        .reduce((sum, transaction) => sum + transaction.amount, 0);
+      const releases = transactions.filter(({ type }) => type === "MILESTONE_RELEASE");
+      const teamNet = releases.reduce((sum, transaction) => sum + transaction.amount, 0);
+      const teamFees = releases.reduce((sum, transaction) => sum + transaction.platformFee, 0);
+      const businessFee = deposit.businessFee ?? 0;
+      const escrow = milestones
+        .filter(({ paymentStatus }) => paymentStatus === "ESCROW")
+        .reduce((sum, milestone) => sum + (milestone.amount ?? 0), 0);
+      assert.equal(deposit.amount, businessFee + teamNet + teamFees + escrow + refunds);
+    };
+
+    await updatePaidMilestoneProgress(database.prisma, {
+      projectId: project.id,
+      milestoneId: first.id,
+      actorUserId: "team-a-owner",
+      progressPercent: 70,
+      workCompleted: "Đã hoàn thành phần đầu.",
+      difficulties: "",
+    });
+    await submitPaidMilestone(database.prisma, {
+      projectId: project.id,
+      milestoneId: first.id,
+      actorUserId: "team-a-owner",
+      note: "Bàn giao mốc đầu tiên để doanh nghiệp kiểm tra.",
+      links: [],
+    });
+    const dispute = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      milestoneId: first.id,
+      kind: "DISPUTE",
+      actorUserId: "team-a-owner",
+      reason: "Cần làm rõ tiêu chí của mốc đầu.",
+      idempotencyKey: "dispute-isolation-open",
+    });
+    const blockedState = await database.prisma.milestone.findUniqueOrThrow({
+      where: { id: first.id },
+    });
+    assert.equal(blockedState.status, "DISPUTED");
+    const transactionsBeforeBlockedRelease = await database.prisma.projectTransaction.count({
+      where: { projectId: project.id },
+    });
+    await assert.rejects(
+      acceptPaidMilestone(database.prisma, {
+        projectId: project.id,
+        milestoneId: first.id,
+        actorUserId: "business-owner",
+      }),
+      /Milestone đang|Milestone chưa|thứ tự/i,
+    );
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id } }),
+      transactionsBeforeBlockedRelease,
+    );
+    await assertLedgerInvariant();
+
+    await updatePaidMilestoneProgress(database.prisma, {
+      projectId: project.id,
+      milestoneId: second.id,
+      actorUserId: "team-a-owner",
+      progressPercent: 50,
+      workCompleted: "Đã hoàn thành phần tiếp theo.",
+      difficulties: "",
+    });
+    await submitPaidMilestone(database.prisma, {
+      projectId: project.id,
+      milestoneId: second.id,
+      actorUserId: "team-a-owner",
+      note: "Bàn giao mốc tiếp theo khi mốc trước đang chờ xử lý bất đồng.",
+      links: [],
+    });
+    await acceptPaidMilestone(database.prisma, {
+      projectId: project.id,
+      milestoneId: second.id,
+      actorUserId: "business-owner",
+    });
+    assert.equal(
+      await database.prisma.projectTransaction.count({
+        where: { projectId: project.id, type: "MILESTONE_RELEASE", milestoneId: second.id },
+      }),
+      1,
+    );
+    await assertLedgerInvariant();
+
+    const resolution = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      milestoneId: first.id,
+      kind: "DISPUTE_RESOLUTION",
+      actorUserId: "business-owner",
+      reason: "Hai bên thống nhất làm rõ tiêu chí.",
+      idempotencyKey: "dispute-isolation-resolution",
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: resolution.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+    });
+    assert.equal(
+      (await database.prisma.milestone.findUniqueOrThrow({ where: { id: first.id } })).status,
+      "DISPUTED",
+    );
+    await assert.rejects(
+      respondToProjectChangeRequest(database.prisma, {
+        requestId: resolution.id,
+        actorUserId: "business-owner",
+        response: "ACCEPT",
+      }),
+      /đã xác nhận/i,
+    );
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: resolution.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+    });
+    assert.equal(
+      (await database.prisma.projectChangeRequest.findUniqueOrThrow({
+        where: { id: dispute.id },
+      })).status,
+      "RESOLVED",
+    );
+    assert.equal(
+      (await database.prisma.milestone.findUniqueOrThrow({ where: { id: first.id } })).status,
+      "AWAITING_ACCEPTANCE",
+    );
+    await acceptPaidMilestone(database.prisma, {
+      projectId: project.id,
+      milestoneId: first.id,
+      actorUserId: "business-owner",
+    });
+    assert.equal(
+      await database.prisma.projectTransaction.count({
+        where: { projectId: project.id, type: "MILESTONE_RELEASE" },
+      }),
+      2,
+    );
+    await assertLedgerInvariant();
+  });
+
+  it("refunds a cancelled milestone from its signed value and still permits final acceptance", async () => {
+    const project = await createFirstVersion(agreementInput("Cancel milestone refund", 1_000_000));
+    await fundProject(project.id);
+    const [cancelledMilestone, remainingMilestone] = await database.prisma.milestone.findMany({
+      where: { projectId: project.id },
+      orderBy: { sortOrder: "asc" },
+    });
+    assert.ok(cancelledMilestone);
+    assert.ok(remainingMilestone);
+    const depositCount = await database.prisma.projectTransaction.count({
+      where: { projectId: project.id },
+    });
+    const cancellation = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      milestoneId: cancelledMilestone.id,
+      kind: "MILESTONE_CANCEL",
+      actorUserId: "business-owner",
+      reason: "Hai bên thống nhất hủy mốc đầu.",
+      idempotencyKey: "cancel-milestone-refund",
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: cancellation.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+    });
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id } }),
+      depositCount,
+    );
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: cancellation.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+    });
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id } }),
+      depositCount + 1,
+    );
+
+    const refund = await database.prisma.projectTransaction.findFirstOrThrow({
+      where: { projectId: project.id, type: "REFUND", milestoneId: cancelledMilestone.id },
+    });
+    assert.equal(refund.amount, 700_000);
+    assert.equal(refund.platformFee, 0);
+    assert.equal(refund.businessFee, 0);
+    assert.equal(
+      (await database.prisma.milestone.findUniqueOrThrow({ where: { id: cancelledMilestone.id } }))
+        .paymentStatus,
+      "REFUNDED",
+    );
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id, type: "REFUND" } }),
+      1,
+    );
+    assert.equal(
+      (await database.prisma.milestone.findMany({ where: { projectId: project.id } }))
+        .filter(({ paymentStatus }) => paymentStatus === "ESCROW")
+        .reduce((sum, item) => sum + (item.amount ?? 0), 0),
+      300_000,
+    );
+
+    const assertLedgerInvariant = async () => {
+      const [transactions, milestones] = await Promise.all([
+        database.prisma.projectTransaction.findMany({ where: { projectId: project.id } }),
+        database.prisma.milestone.findMany({ where: { projectId: project.id } }),
+      ]);
+      const deposit = transactions.find(({ type }) => type === "DEPOSIT");
+      assert.ok(deposit);
+      const releases = transactions.filter(({ type }) => type === "MILESTONE_RELEASE");
+      const refunds = transactions.filter(({ type }) => type === "REFUND");
+      const escrow = milestones
+        .filter(({ paymentStatus }) => paymentStatus === "ESCROW")
+        .reduce((sum, milestone) => sum + (milestone.amount ?? 0), 0);
+      assert.equal(
+        deposit.amount,
+        (deposit.businessFee ?? 0) +
+          releases.reduce((sum, item) => sum + item.amount, 0) +
+          releases.reduce((sum, item) => sum + item.platformFee, 0) +
+          escrow +
+          refunds.reduce((sum, item) => sum + item.amount, 0),
+      );
+    };
+    await assertLedgerInvariant();
+
+    await updatePaidMilestoneProgress(database.prisma, {
+      projectId: project.id,
+      milestoneId: remainingMilestone.id,
+      actorUserId: "team-a-owner",
+      progressPercent: 100,
+      workCompleted: "Đã hoàn thành mốc còn lại.",
+      difficulties: "",
+    });
+    await submitPaidMilestone(database.prisma, {
+      projectId: project.id,
+      milestoneId: remainingMilestone.id,
+      actorUserId: "team-a-owner",
+      note: "Bàn giao mốc còn lại để nghiệm thu.",
+      links: [],
+    });
+    await acceptPaidMilestone(database.prisma, {
+      projectId: project.id,
+      milestoneId: remainingMilestone.id,
+      actorUserId: "business-owner",
+    });
+    await acceptProjectFinalCompletion(database.prisma, {
+      projectId: project.id,
+      actorUserId: "business-owner",
+    });
+    assert.equal(
+      await database.prisma.projectTransaction.count({
+        where: { projectId: project.id, type: "MILESTONE_RELEASE", milestoneId: cancelledMilestone.id },
+      }),
+      0,
+    );
+    assert.equal(
+      await database.prisma.projectTransaction.count({
+        where: { projectId: project.id, type: "MILESTONE_RELEASE", milestoneId: remainingMilestone.id },
+      }),
+      1,
+    );
+    await assertLedgerInvariant();
+  });
+
+  it("refunds remaining escrow once on termination, including disputed milestones, without refunding released amounts", async () => {
+    const input = {
+      ...agreementInput("Termination ledger", 13_000_000),
+      milestones: [
+        { title: "Mốc 1", description: "Mốc 1", acceptanceCriteria: "Đạt", dueAt: "2030-01-15", paymentPercent: 40 },
+        { title: "Mốc 2", description: "Mốc 2", acceptanceCriteria: "Đạt", dueAt: "2030-02-15", paymentPercent: 50 },
+        { title: "Mốc 3", description: "Mốc 3", acceptanceCriteria: "Đạt", dueAt: "2030-03-15", paymentPercent: 10 },
+      ],
+    };
+    const project = await createFirstVersion(input);
+    await fundProject(project.id);
+    const [first, second] = await database.prisma.milestone.findMany({
+      where: { projectId: project.id },
+      orderBy: { sortOrder: "asc" },
+    });
+    assert.ok(first);
+    assert.ok(second);
+    await updatePaidMilestoneProgress(database.prisma, {
+      projectId: project.id,
+      milestoneId: first.id,
+      actorUserId: "team-a-owner",
+      progressPercent: 100,
+      workCompleted: "Đã hoàn thành mốc đầu tiên.",
+      difficulties: "",
+    });
+    await submitPaidMilestone(database.prisma, {
+      projectId: project.id,
+      milestoneId: first.id,
+      actorUserId: "team-a-owner",
+      note: "Bàn giao mốc đầu tiên.",
+      links: [],
+    });
+    await acceptPaidMilestone(database.prisma, {
+      projectId: project.id,
+      milestoneId: first.id,
+      actorUserId: "business-owner",
+    });
+    const transactionsBeforeTerminationRequest = await database.prisma.projectTransaction.count({
+      where: { projectId: project.id },
+    });
+    const dispute = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      milestoneId: second.id,
+      kind: "DISPUTE",
+      actorUserId: "team-a-owner",
+      reason: "Cần ghi nhận bất đồng trước khi hai bên kết thúc dự án.",
+      idempotencyKey: "termination-dispute",
+    });
+    const termination = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      kind: "PROJECT_TERMINATION",
+      actorUserId: "business-owner",
+      reason: "Hai bên thống nhất kết thúc dự án.",
+      idempotencyKey: "termination-ledger",
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: termination.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+    });
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id } }),
+      transactionsBeforeTerminationRequest,
+    );
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: termination.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+    });
+    const transactionCountAfterTermination = await database.prisma.projectTransaction.count({
+      where: { projectId: project.id },
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: termination.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+    });
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id } }),
+      transactionCountAfterTermination,
+    );
+    assert.equal(transactionCountAfterTermination, transactionsBeforeTerminationRequest + 2);
+
+    const [transactions, milestones, finalProject, closedDispute] = await Promise.all([
+      database.prisma.projectTransaction.findMany({ where: { projectId: project.id } }),
+      database.prisma.milestone.findMany({ where: { projectId: project.id } }),
+      database.prisma.project.findUniqueOrThrow({ where: { id: project.id } }),
+      database.prisma.projectChangeRequest.findUniqueOrThrow({ where: { id: dispute.id } }),
+    ]);
+    const deposit = transactions.find(({ type }) => type === "DEPOSIT");
+    const releases = transactions.filter(({ type }) => type === "MILESTONE_RELEASE");
+    const refunds = transactions.filter(({ type }) => type === "REFUND");
+    assert.ok(deposit);
+    assert.equal(finalProject.status, "CANCELLED");
+    assert.ok(finalProject.cancelledAt);
+    const [businessNotification, teamNotification, ownerCanReadCancelled, memberCanReadCancelled] =
+      await Promise.all([
+        database.prisma.notification.findUniqueOrThrow({
+          where: { dedupeKey: `project-terminated:${termination.id}:business` },
+        }),
+        database.prisma.notification.findUniqueOrThrow({
+          where: { dedupeKey: `project-terminated:${termination.id}:team` },
+        }),
+        findAccessibleProject(project.id, "team-a-owner", "STUDENT", database.prisma),
+        findAccessibleProject(project.id, "team-a-member", "STUDENT", database.prisma),
+      ]);
+    assert.equal(businessNotification.href, `/business/projects/${project.id}`);
+    assert.equal(teamNotification.href, `/student/projects/${project.id}`);
+    assert.equal(ownerCanReadCancelled?.status, "CANCELLED");
+    assert.equal(memberCanReadCancelled?.status, "CANCELLED");
+    assert.equal(closedDispute.status, "RESOLVED");
+    assert.equal(releases.length, 1);
+    assert.equal(releases[0]?.amount, 4_940_000);
+    assert.equal(releases[0]?.platformFee, 260_000);
+    assert.equal(deposit.businessFee, 1_300_000);
+    assert.equal(refunds.length, 2);
+    assert.equal(refunds.reduce((sum, item) => sum + item.amount, 0), 7_800_000);
+    assert.equal(
+      refunds.find(({ milestoneId }) => milestoneId === second.id)?.amount,
+      6_500_000,
+    );
+    assert.equal(
+      milestones.filter(({ paymentStatus }) => paymentStatus === "ESCROW").length,
+      0,
+    );
+    assert.equal(
+      transactions.filter(({ type }) => type === "REFUND").length,
+      2,
+    );
+    assert.equal(
+      deposit.amount,
+      1_300_000 +
+        releases.reduce((sum, item) => sum + item.amount, 0) +
+        releases.reduce((sum, item) => sum + item.platformFee, 0) +
+        refunds.reduce((sum, item) => sum + item.amount, 0),
+    );
+  });
+
+  it("enforces configured extension and pause limits, blocks milestone actions while paused, and freezes deadlines", async () => {
+    const project = await createFirstVersion(agreementInput("Pause and extension", 1_000_000));
+    await fundProject(project.id);
+    const milestone = await database.prisma.milestone.findFirstOrThrow({
+      where: { projectId: project.id, sortOrder: 0 },
+    });
+    const maxExtensionDate = new Date(
+      milestone.dueAt!.getTime() +
+        projectReminderConfig.extensionMaxDays * 24 * projectReminderHourMs,
+    );
+    await assert.rejects(
+      createProjectChangeRequest(database.prisma, {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        kind: "EXTENSION",
+        actorUserId: "business-owner",
+        reason: "Thử gia hạn vượt ngưỡng.",
+        proposedDueAt: new Date(maxExtensionDate.getTime() + 1),
+      }),
+      /tối đa/i,
+    );
+    const extension = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      milestoneId: milestone.id,
+      kind: "EXTENSION",
+      actorUserId: "business-owner",
+      reason: "Gia hạn trong giới hạn cấu hình.",
+      proposedDueAt: maxExtensionDate,
+      idempotencyKey: "configured-extension",
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: extension.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: extension.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+    });
+    assert.equal(
+      (await database.prisma.milestone.findUniqueOrThrow({ where: { id: milestone.id } }))
+        .dueAt?.getTime(),
+      maxExtensionDate.getTime(),
+    );
+
+    await assert.rejects(
+      createProjectChangeRequest(database.prisma, {
+        projectId: project.id,
+        kind: "PAUSE",
+        actorUserId: "business-owner",
+        reason: "Thử tạm dừng quá ngưỡng.",
+        payload: { days: projectReminderConfig.pauseMaxDays + 1 },
+      }),
+      /tối đa/i,
+    );
+    const pause = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      kind: "PAUSE",
+      actorUserId: "business-owner",
+      reason: "Tạm dừng trong giới hạn cấu hình.",
+      payload: { days: projectReminderConfig.pauseMaxDays },
+      idempotencyKey: "configured-pause",
+      now: new Date("2026-10-31T04:00:00.000Z"),
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: pause.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+      now: new Date("2026-10-31T04:01:00.000Z"),
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: pause.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+      now: new Date("2026-10-31T04:02:00.000Z"),
+    });
+    const paused = await database.prisma.project.findUniqueOrThrow({ where: { id: project.id } });
+    assert.ok(paused.pausedAt);
+    const transactionsBeforeBlockedOperations = await database.prisma.projectTransaction.count({
+      where: { projectId: project.id },
+    });
+    await assert.rejects(
+      updatePaidMilestoneProgress(database.prisma, {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        actorUserId: "team-a-owner",
+        progressPercent: 10,
+        workCompleted: "Không được cập nhật khi đang tạm dừng.",
+        difficulties: "",
+      }),
+      /đang tạm dừng/i,
+    );
+    await assert.rejects(
+      submitPaidMilestone(database.prisma, {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        actorUserId: "team-a-owner",
+        note: "Không được nộp bàn giao khi đang tạm dừng.",
+        links: [],
+      }),
+      /đang tạm dừng/i,
+    );
+    await assert.rejects(
+      acceptPaidMilestone(database.prisma, {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        actorUserId: "business-owner",
+      }),
+      /đang tạm dừng/i,
+    );
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id } }),
+      transactionsBeforeBlockedOperations,
+    );
+
+    const dueAt = new Date("2026-11-01T00:00:00.000Z");
+    const pausedSince = new Date("2026-10-31T12:00:00.000Z");
+    const beforeEffectiveDeadline = new Date("2026-11-02T10:59:59.000Z");
+    const activePauseSeconds =
+      Math.floor((beforeEffectiveDeadline.getTime() - pausedSince.getTime()) / 1000);
+    assert.equal(
+      getPaidMilestoneOverdueStatus(
+        {
+          status: "IN_PROGRESS",
+          acceptanceStatus: "NOT_SUBMITTED",
+          dueAt,
+          responseDueAt: null,
+        },
+        beforeEffectiveDeadline,
+        activePauseSeconds,
+      ).status,
+      null,
+    );
+    const afterEffectiveDeadline = new Date("2026-11-03T00:00:01.000Z");
+    assert.equal(
+      getPaidMilestoneOverdueStatus(
+        {
+          status: "IN_PROGRESS",
+          acceptanceStatus: "NOT_SUBMITTED",
+          dueAt,
+          responseDueAt: null,
+        },
+        afterEffectiveDeadline,
+        Math.floor((new Date("2026-11-02T11:00:00.000Z").getTime() - pausedSince.getTime()) / 1000),
+      ).status,
+      "OVERDUE",
+    );
+
+    const reminderAt = new Date(
+      paused.pausedAt!.getTime() +
+        (projectReminderConfig.pauseMaxDays + 1) * 24 * projectReminderHourMs,
+    );
+    await ensurePendingProjectChangeRequestReminders(project.id, {
+      database: database.prisma,
+      now: reminderAt,
+    });
+    await ensurePendingProjectChangeRequestReminders(project.id, {
+      database: database.prisma,
+      now: reminderAt,
+    });
+    assert.equal(
+      await database.prisma.notification.count({
+        where: { dedupeKey: { startsWith: `project-pause-overdue:${project.id}:` } },
+      }),
+      2,
+    );
+    const resume = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      kind: "RESUME",
+      actorUserId: "team-a-owner",
+      reason: "Hai bên xác nhận tiếp tục.",
+      idempotencyKey: "configured-resume",
+      now: reminderAt,
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: resume.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+      now: new Date(reminderAt.getTime() + 60_000),
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: resume.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+      now: new Date(reminderAt.getTime() + 120_000),
+    });
+    const resumed = await database.prisma.project.findUniqueOrThrow({ where: { id: project.id } });
+    assert.equal(resumed.pausedAt, null);
+    assert.ok(resumed.pausedTotalSeconds >= projectReminderConfig.pauseMaxDays * 24 * 60 * 60);
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id } }),
+      transactionsBeforeBlockedOperations,
+    );
+  });
+
+  it("deduplicates request creation and applies a change only after two distinct approvals", async () => {
+    const project = await createFirstVersion(agreementInput("Concurrent change approval", 1_000_000));
+    await fundProject(project.id);
+    const milestone = await database.prisma.milestone.findFirstOrThrow({
+      where: { projectId: project.id, sortOrder: 0 },
+    });
+    const originalDueAt = milestone.dueAt;
+    const initialTransactions = await database.prisma.projectTransaction.count({
+      where: { projectId: project.id },
+    });
+    const requestInput = {
+      projectId: project.id,
+      milestoneId: milestone.id,
+      kind: "EXTENSION" as const,
+      actorUserId: "business-owner",
+      reason: "Đề nghị gia hạn trong giới hạn.",
+      proposedDueAt: new Date(milestone.dueAt!.getTime() + 5 * 24 * projectReminderHourMs),
+      idempotencyKey: "concurrent-extension",
+    };
+    const [request, duplicate] = await Promise.all([
+      createProjectChangeRequest(database.prisma, requestInput),
+      createProjectChangeRequest(database.prisma, requestInput),
+    ]);
+    assert.equal(request.id, duplicate.id);
+    assert.equal(
+      await database.prisma.projectChangeRequest.count({
+        where: { projectId: project.id, kind: "EXTENSION" },
+      }),
+      1,
+    );
+    const simultaneousApprovals = await Promise.allSettled([
+      respondToProjectChangeRequest(database.prisma, {
+        requestId: request.id,
+        actorUserId: "business-owner",
+        response: "ACCEPT",
+      }),
+      respondToProjectChangeRequest(database.prisma, {
+        requestId: request.id,
+        actorUserId: "business-owner",
+        response: "ACCEPT",
+      }),
+    ]);
+    assert.equal(simultaneousApprovals.filter(({ status }) => status === "fulfilled").length, 1);
+    const oneSided = await database.prisma.projectChangeRequest.findUniqueOrThrow({
+      where: { id: request.id },
+    });
+    assert.equal(oneSided.status, "OPEN");
+    assert.ok(oneSided.businessAcceptedAt);
+    assert.equal(oneSided.teamAcceptedAt, null);
+    assert.equal(
+      (await database.prisma.milestone.findUniqueOrThrow({ where: { id: milestone.id } })).dueAt?.getTime(),
+      originalDueAt?.getTime(),
+    );
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: request.id,
+      actorUserId: "team-a-owner",
+      response: "REJECT",
+    });
+    assert.equal(
+      (await database.prisma.projectChangeRequest.findUniqueOrThrow({ where: { id: request.id } })).status,
+      "REJECTED",
+    );
+    assert.equal(
+      (await database.prisma.milestone.findUniqueOrThrow({ where: { id: milestone.id } })).dueAt?.getTime(),
+      originalDueAt?.getTime(),
+    );
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id } }),
+      initialTransactions,
+    );
+    const pendingReminder = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      kind: "PAUSE",
+      actorUserId: "team-a-owner",
+      reason: "Cần nhắc doanh nghiệp phản hồi.",
+      idempotencyKey: "concurrent-change-reminder",
+      now: new Date("2026-10-01T00:00:00.000Z"),
+    });
+    const reminderClock = new Date("2026-10-05T00:00:00.000Z");
+    await Promise.all([
+      ensurePendingProjectChangeRequestReminders(project.id, {
+        database: database.prisma,
+        now: reminderClock,
+      }),
+      ensurePendingProjectChangeRequestReminders(project.id, {
+        database: database.prisma,
+        now: reminderClock,
+      }),
+    ]);
+    assert.equal(
+      await database.prisma.notification.count({
+        where: {
+          dedupeKey: `project-change-reminder:${pendingReminder.id}:business-owner`,
+        },
+      }),
+      1,
+    );
+  });
+
+  it("keeps Admin read-only except support notes and rejects legacy change requests", async () => {
+    await database.prisma.user.create({
+      data: {
+        id: "project-admin",
+        email: "project-admin@example.com",
+        name: "Project Admin",
+        passwordHash: "test",
+        role: "ADMIN",
+        updatedAt: new Date(),
+      },
+    });
+    const project = await createFirstVersion(agreementInput("Admin permissions", 1_000_000));
+    await fundProject(project.id);
+    const milestone = await database.prisma.milestone.findFirstOrThrow({
+      where: { projectId: project.id, sortOrder: 0 },
+    });
+    const adminRead = await findAccessibleProject(
+      project.id,
+      "project-admin",
+      "ADMIN",
+      database.prisma,
+    );
+    assert.ok(adminRead);
+    const transactionCount = await database.prisma.projectTransaction.count({
+      where: { projectId: project.id },
+    });
+    await assert.rejects(
+      createProjectChangeRequest(database.prisma, {
+        projectId: project.id,
+        kind: "PROJECT_TERMINATION",
+        actorUserId: "project-admin",
+        actorRole: "ADMIN",
+        reason: "Admin cannot terminate.",
+      }),
+      /Admin chỉ được đọc/i,
+    );
+    await assert.rejects(
+      createProjectChangeRequest(database.prisma, {
+        projectId: project.id,
+        kind: "PROJECT_TERMINATION",
+        actorUserId: "team-a-member",
+        reason: "Thành viên thường không được thao tác.",
+      }),
+      /không có quyền/i,
+    );
+    await assert.rejects(
+      respondToProjectChangeRequest(database.prisma, {
+        requestId: "missing-change-request",
+        actorUserId: "project-admin",
+        actorRole: "ADMIN",
+        response: "ACCEPT",
+      }),
+      /Admin chỉ được đọc/i,
+    );
+    await assert.rejects(
+      updatePaidMilestoneProgress(database.prisma, {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        actorUserId: "project-admin",
+        progressPercent: 10,
+        workCompleted: "Admin không được thao tác tiến độ.",
+        difficulties: "",
+      }),
+      /chủ nhóm/i,
+    );
+    await assert.rejects(
+      acceptPaidMilestone(database.prisma, {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        actorUserId: "project-admin",
+      }),
+      /doanh nghiệp sở hữu/i,
+    );
+    assert.throws(() => assertBusinessCanDeposit("ADMIN"), /Chỉ doanh nghiệp/i);
+    await assert.rejects(
+      createProjectSupportNote(database.prisma, {
+        projectId: project.id,
+        adminUserId: "team-a-owner",
+        actorRole: "STUDENT",
+        note: "Không phải Admin.",
+      }),
+      /Chỉ Admin/i,
+    );
+    await createProjectSupportNote(database.prisma, {
+      projectId: project.id,
+      adminUserId: "project-admin",
+      actorRole: "ADMIN",
+      note: "Đã ghi nhận yêu cầu hỗ trợ, không đưa ra kết luận.",
+      milestoneId: milestone.id,
+    });
+    await database.prisma.project.update({
+      where: { id: "agreement-project-b" },
+      data: { legacyTermsExempt: true, status: "IN_PROGRESS" },
+    });
+    await assert.rejects(
+      createProjectChangeRequest(database.prisma, {
+        projectId: "agreement-project-b",
+        kind: "PROJECT_TERMINATION",
+        actorUserId: "team-b-owner",
+        reason: "Luồng mới không áp dụng cho legacy.",
+      }),
+      /Chỉ dự án mới/i,
+    );
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id } }),
+      transactionCount,
+    );
+    assert.equal(
+      await database.prisma.projectSupportNote.count({ where: { projectId: project.id } }),
+      1,
+    );
+  });
+
+  it("handles extension, pause/resume, and dispute change requests with dual approval and deduplicated reminders", async () => {
+    await database.prisma.problem.create({
+      data: {
+        id: "change-request-problem",
+        businessProfileId: "business",
+        title: "Change request flow",
+        slug: "change-request-flow",
+        description: "Mô tả",
+        goal: "Mục tiêu",
+        field: "CNTT",
+        requirements: "Yêu cầu",
+        expectedDuration: "4 tuần",
+        status: "READY_FOR_IMPLEMENTATION",
+        applications: {
+          create: {
+            id: "change-request-application",
+            teamId: teamAId,
+            approach: "Approach change request",
+            estimatedDuration: "4 tuần",
+            status: "SELECTED",
+          },
+        },
+      },
+    });
+    const project = await database.prisma.$transaction((transaction) =>
+      createProjectWithFirstAgreementVersion(transaction, {
+        applicationId: "change-request-application",
+        teamId: teamAId,
+        createdByUserId: "business-owner",
+        input: agreementInput("Change request flow", 1_000_001),
+        team: { ownerId: "team-a-owner", memberships: [] },
+        now: new Date("2026-10-31T00:00:00.000Z"),
+      }),
+    );
+    await fundProject(project.id);
+    const milestone = await database.prisma.milestone.findFirstOrThrow({
+      where: { projectId: project.id, sortOrder: 0 },
+    });
+
+    const extension = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      milestoneId: milestone.id,
+      kind: "EXTENSION",
+      actorUserId: "business-owner",
+      reason: "Cần gia hạn thêm 10 ngày.",
+      payload: { dueAt: "2030-01-31T12:00:00.000Z" },
+      proposedDueAt: new Date("2030-01-31T12:00:00.000Z"),
+      now: new Date("2026-10-31T08:00:00.000Z"),
+    });
+    const createdNotification = await database.prisma.notification.findUniqueOrThrow({
+      where: { dedupeKey: `project-change:${extension.id}:team-a-owner` },
+    });
+    assert.equal(createdNotification.href, `/student/projects/${project.id}`);
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: extension.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+      now: new Date("2026-10-31T08:10:00.000Z"),
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: extension.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+      now: new Date("2026-10-31T08:20:00.000Z"),
+    });
+    const responseNotification = await database.prisma.notification.findUniqueOrThrow({
+      where: { dedupeKey: `project-change-response:${extension.id}:team-a-owner` },
+    });
+    assert.equal(responseNotification.href, `/business/projects/${project.id}`);
+    const extensionState = await database.prisma.projectChangeRequest.findUniqueOrThrow({
+      where: { id: extension.id },
+    });
+    assert.equal(extensionState.status, "ACCEPTED");
+    const updatedMilestone = await database.prisma.milestone.findUniqueOrThrow({
+      where: { id: milestone.id },
+    });
+    assert.equal(updatedMilestone.dueAt?.toISOString(), "2030-01-31T12:00:00.000Z");
+
+    const pause = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      kind: "PAUSE",
+      actorUserId: "team-a-owner",
+      reason: "Cần tạm dừng 3 ngày để xử lý tích hợp.",
+      now: new Date("2026-10-31T09:00:00.000Z"),
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: pause.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+      now: new Date("2026-10-31T09:05:00.000Z"),
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: pause.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+      now: new Date("2026-10-31T09:10:00.000Z"),
+    });
+    const pausedProject = await database.prisma.project.findUniqueOrThrow({
+      where: { id: project.id },
+    });
+    assert.ok(pausedProject.pausedAt);
+
+    const resume = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      kind: "RESUME",
+      actorUserId: "business-owner",
+      reason: "Tiếp tục sau khi tạm dừng.",
+      now: new Date("2026-10-31T12:00:00.000Z"),
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: resume.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+      now: new Date("2026-10-31T12:05:00.000Z"),
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: resume.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+      now: new Date("2026-10-31T12:10:00.000Z"),
+    });
+    const resumedProject = await database.prisma.project.findUniqueOrThrow({
+      where: { id: project.id },
+    });
+    assert.equal(resumedProject.pausedAt, null);
+    assert.ok(resumedProject.pausedTotalSeconds > 0);
+
+    await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      milestoneId: milestone.id,
+      kind: "DISPUTE",
+      actorUserId: "team-a-owner",
+      reason: "Có bất đồng về kết quả mốc hiện tại.",
+      now: new Date("2026-10-31T13:00:00.000Z"),
+    });
+    const disputedImmediately = await database.prisma.milestone.findUniqueOrThrow({
+      where: { id: milestone.id },
+    });
+    assert.equal(disputedImmediately.status, "DISPUTED");
+    const disputeResolution = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      milestoneId: milestone.id,
+      kind: "DISPUTE_RESOLUTION",
+      actorUserId: "business-owner",
+      reason: "Hai bên đã thống nhất phương án xử lý.",
+      now: new Date("2026-10-31T13:02:00.000Z"),
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: disputeResolution.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+      now: new Date("2026-10-31T13:05:00.000Z"),
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: disputeResolution.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+      now: new Date("2026-10-31T13:10:00.000Z"),
+    });
+    const disputedMilestone = await database.prisma.milestone.findUniqueOrThrow({
+      where: { id: milestone.id },
+    });
+    assert.equal(disputedMilestone.status, "NOT_STARTED");
+
+    const reminderProject = await createFirstVersion();
+    await fundProject(reminderProject.id);
+    const openReminderRequest = await createProjectChangeRequest(database.prisma, {
+      projectId: reminderProject.id,
+      kind: "PAUSE",
+      actorUserId: "team-a-owner",
+      reason: "Cần nhắc xác nhận.",
+      now: new Date("2026-10-01T00:00:00.000Z"),
+    });
+    await ensurePendingProjectChangeRequestReminders(reminderProject.id, {
+      database: database.prisma,
+      now: new Date("2026-10-31T00:00:00.000Z"),
+    });
+    await ensurePendingProjectChangeRequestReminders(reminderProject.id, {
+      database: database.prisma,
+      now: new Date("2026-10-31T00:00:00.000Z"),
+    });
+    const reminderNotification = await database.prisma.notification.findUniqueOrThrow({
+      where: {
+        dedupeKey: `project-change-reminder:${openReminderRequest.id}:business-owner`,
+      },
+    });
+    assert.equal(reminderNotification.href, `/business/projects/${reminderProject.id}`);
+  });
+
+  it("rejects termination when all three milestones were already released, including stale requests", async () => {
+    const project = await createFirstVersion({
+      ...agreementInput("Termination without escrow", 13_000_000),
+      milestones: [
+        { title: "Mốc 1", description: "A", acceptanceCriteria: "A", dueAt: "2030-01-15", paymentPercent: 40 },
+        { title: "Mốc 2", description: "B", acceptanceCriteria: "B", dueAt: "2030-02-15", paymentPercent: 50 },
+        { title: "Mốc 3", description: "C", acceptanceCriteria: "C", dueAt: "2030-03-15", paymentPercent: 10 },
+      ],
+    });
+    await fundProject(project.id);
+    const termination = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      kind: "PROJECT_TERMINATION",
+      actorUserId: "business-owner",
+      reason: "Yêu cầu chấm dứt trước khi xử lý hết mốc.",
+      idempotencyKey: "termination-created-before-last-release",
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: termination.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+    });
+    const milestones = await database.prisma.milestone.findMany({
+      where: { projectId: project.id },
+      orderBy: { sortOrder: "asc" },
+    });
+    for (const milestone of milestones) {
+      await updatePaidMilestoneProgress(database.prisma, {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        actorUserId: "team-a-owner",
+        progressPercent: 100,
+        workCompleted: `Đã hoàn thành ${milestone.title}.`,
+        difficulties: "",
+      });
+      await submitPaidMilestone(database.prisma, {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        actorUserId: "team-a-owner",
+        note: `Bàn giao ${milestone.title} hoàn tất.`,
+        links: [],
+      });
+      await acceptPaidMilestone(database.prisma, {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        actorUserId: "business-owner",
+      });
+    }
+
+    const transactionsBeforeRejectedResponse = await database.prisma.projectTransaction.count({
+      where: { projectId: project.id },
+    });
+    const response = await respondToProjectChangeRequest(database.prisma, {
+      requestId: termination.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+    });
+    const [unchangedProject, rejectedRequest] = await Promise.all([
+      database.prisma.project.findUniqueOrThrow({ where: { id: project.id } }),
+      database.prisma.projectChangeRequest.findUniqueOrThrow({ where: { id: termination.id } }),
+    ]);
+    assert.equal(response.status, "REJECTED");
+    assert.equal(unchangedProject.status, "IN_PROGRESS");
+    assert.equal(unchangedProject.finalAcceptanceStatus, "AWAITING_FINAL_ACCEPTANCE");
+    assert.equal(rejectedRequest.status, "REJECTED");
+    assert.match(rejectedRequest.reason, /Không còn mốc chưa giải ngân/);
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id } }),
+      transactionsBeforeRejectedResponse,
+    );
+    assert.equal(
+      await database.prisma.projectTransaction.count({
+        where: { projectId: project.id, type: "REFUND" },
+      }),
+      0,
+    );
+    await assert.rejects(
+      createProjectChangeRequest(database.prisma, {
+        projectId: project.id,
+        kind: "PROJECT_TERMINATION",
+        actorUserId: "business-owner",
+        reason: "Không còn escrow để hoàn.",
+        idempotencyKey: "termination-after-all-releases",
+      }),
+      /Không còn mốc chưa giải ngân/,
+    );
+  });
+
+  it("refunds a not-yet-released third milestone once and preserves the ledger invariant", async () => {
+    const project = await createFirstVersion({
+      ...agreementInput("Refund third milestone", 13_000_000),
+      milestones: [
+        { title: "Mốc 1", description: "A", acceptanceCriteria: "A", dueAt: "2030-01-15", paymentPercent: 40 },
+        { title: "Mốc 2", description: "B", acceptanceCriteria: "B", dueAt: "2030-02-15", paymentPercent: 50 },
+        { title: "Mốc 3", description: "C", acceptanceCriteria: "C", dueAt: "2030-03-15", paymentPercent: 10 },
+      ],
+    });
+    await fundProject(project.id);
+    const milestones = await database.prisma.milestone.findMany({
+      where: { projectId: project.id },
+      orderBy: { sortOrder: "asc" },
+    });
+    const third = milestones[2];
+    assert.ok(third);
+    const cancellation = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      milestoneId: third.id,
+      kind: "MILESTONE_CANCEL",
+      actorUserId: "business-owner",
+      reason: "Hai bên thống nhất không thực hiện mốc 3.",
+      idempotencyKey: "cancel-third-milestone",
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: cancellation.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: cancellation.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+    });
+    const [cancelled, countAfterFirstRefund] = await Promise.all([
+      database.prisma.milestone.findUniqueOrThrow({ where: { id: third.id } }),
+      database.prisma.projectTransaction.count({
+        where: { projectId: project.id, type: "REFUND" },
+      }),
+    ]);
+    assert.equal(cancelled.status, "CANCELLED");
+    assert.equal(cancelled.paymentStatus, "REFUNDED");
+    assert.notEqual(cancelled.paymentStatus, "UNFUNDED");
+    assert.equal(
+      await database.prisma.$transaction((transaction) =>
+        refundUnreleasedMilestones(
+          transaction,
+          project.id,
+          [third.id],
+          `refund:${cancellation.id}`,
+          "team-a-owner",
+        ),
+      ),
+      1_300_000,
+    );
+    assert.equal(
+      await database.prisma.projectTransaction.count({
+        where: { projectId: project.id, type: "REFUND" },
+      }),
+      countAfterFirstRefund,
+    );
+    const transactions = await database.prisma.projectTransaction.findMany({
+      where: { projectId: project.id },
+    });
+    const deposit = transactions.find(({ type }) => type === "DEPOSIT");
+    assert.ok(deposit);
+    const releases = transactions.filter(({ type }) => type === "MILESTONE_RELEASE");
+    const refunds = transactions.filter(({ type }) => type === "REFUND");
+    const escrow = transactions
+      .filter(({ type }) => type === "DEPOSIT")
+      .reduce((sum, item) => sum + item.amount, 0) -
+      (deposit.businessFee ?? 0) -
+      releases.reduce((sum, item) => sum + item.amount + item.platformFee, 0) -
+      refunds.reduce((sum, item) => sum + item.amount, 0);
+    assert.equal(escrow, 11_700_000);
+    assert.equal(
+      deposit.amount,
+      (deposit.businessFee ?? 0) +
+        releases.reduce((sum, item) => sum + item.amount + item.platformFee, 0) +
+        escrow +
+        refunds.reduce((sum, item) => sum + item.amount, 0),
+    );
+  });
+
+  it("allows Admin support to restore a disputed milestone without moving money", async () => {
+    await database.prisma.user.create({
+      data: {
+        id: "dispute-admin",
+        email: "dispute-admin@example.com",
+        name: "Dispute Admin",
+        passwordHash: "test",
+        role: "ADMIN",
+        updatedAt: new Date(),
+      },
+    });
+    const project = await createFirstVersion();
+    await fundProject(project.id);
+    const milestone = await database.prisma.milestone.findFirstOrThrow({
+      where: { projectId: project.id, sortOrder: 0 },
+    });
+    const dispute = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      milestoneId: milestone.id,
+      kind: "DISPUTE",
+      actorUserId: "team-a-owner",
+      reason: "Bất đồng cần hỗ trợ.",
+      idempotencyKey: "admin-dispute-resume",
+    });
+    await assert.rejects(
+      createProjectChangeRequest(database.prisma, {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        kind: "DISPUTE",
+        actorUserId: "business-owner",
+        reason: "Mở bất đồng trùng.",
+        idempotencyKey: "admin-dispute-duplicate",
+      }),
+      /đang trong trạng thái bất đồng/i,
+    );
+    const transactionsBefore = await database.prisma.projectTransaction.count({
+      where: { projectId: project.id },
+    });
+    await assert.rejects(
+      resolveProjectDisputeForAdmin(database.prisma, {
+        projectId: project.id,
+        disputeRequestId: dispute.id,
+        adminUserId: "business-owner",
+        actorRole: "BUSINESS",
+        outcome: "RESUME_WORK",
+        reason: "Không được dùng vai trò doanh nghiệp.",
+      }),
+      /Chỉ Admin/i,
+    );
+    await resolveProjectDisputeForAdmin(database.prisma, {
+      projectId: project.id,
+      disputeRequestId: dispute.id,
+      adminUserId: "dispute-admin",
+      actorRole: "ADMIN",
+      outcome: "RESUME_WORK",
+      reason: "Khuyến nghị hai bên tiếp tục công việc đã thống nhất.",
+    });
+    const [restoredMilestone, resolvedDispute, supportNote] = await Promise.all([
+      database.prisma.milestone.findUniqueOrThrow({ where: { id: milestone.id } }),
+      database.prisma.projectChangeRequest.findUniqueOrThrow({ where: { id: dispute.id } }),
+      database.prisma.projectSupportNote.findFirstOrThrow({
+        where: { projectId: project.id, changeRequestId: dispute.id },
+      }),
+    ]);
+    assert.equal(restoredMilestone.status, "NOT_STARTED");
+    assert.equal(resolvedDispute.status, "RESOLVED");
+    assert.match(supportNote.note, /Tiếp tục thực hiện/);
+    assert.match(supportNote.note, /không kết luận|Khuyến nghị|khuyến nghị/i);
+    assert.equal(
+      await database.prisma.projectTransaction.count({ where: { projectId: project.id } }),
+      transactionsBefore,
+    );
+    assert.equal(
+      await database.prisma.projectTransaction.count({
+        where: { projectId: project.id, type: { in: ["REFUND", "MILESTONE_RELEASE"] } },
+      }),
+      0,
+    );
+  });
+
+  it("pauses milestone states and restores them only after dual-approved resume", async () => {
+    const project = await createFirstVersion();
+    await fundProject(project.id);
+    const milestone = await database.prisma.milestone.findFirstOrThrow({
+      where: { projectId: project.id, sortOrder: 0 },
+    });
+    const pauseAt = new Date("2026-11-01T10:00:00.000Z");
+    const pause = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      kind: "PAUSE",
+      actorUserId: "business-owner",
+      reason: "Tạm dừng theo thỏa thuận.",
+      payload: { days: 2 },
+      idempotencyKey: "pause-restore-state",
+      now: pauseAt,
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: pause.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+      now: pauseAt,
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: pause.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+      now: new Date(pauseAt.getTime() + 1_000),
+    });
+    const pausedMilestone = await database.prisma.milestone.findUniqueOrThrow({
+      where: { id: milestone.id },
+    });
+    assert.equal(pausedMilestone.status, "PAUSED");
+    assert.equal(
+      getPaidMilestoneOverdueStatus(
+        {
+          ...pausedMilestone,
+          dueAt: new Date("2020-01-01T00:00:00.000Z"),
+          responseDueAt: new Date("2020-01-01T00:00:00.000Z"),
+        },
+        new Date("2026-11-02T00:00:00.000Z"),
+      ).status,
+      null,
+    );
+    const resumeAt = new Date(pauseAt.getTime() + 60_000);
+    const resume = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      kind: "RESUME",
+      actorUserId: "team-a-owner",
+      reason: "Tiếp tục công việc.",
+      idempotencyKey: "resume-restore-state",
+      now: resumeAt,
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: resume.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+      now: resumeAt,
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: resume.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+      now: new Date(resumeAt.getTime() + 1_000),
+    });
+    const resumedMilestone = await database.prisma.milestone.findUniqueOrThrow({
+      where: { id: milestone.id },
+    });
+    assert.equal(resumedMilestone.status, "NOT_STARTED");
+    assert.equal(resumedMilestone.pausedAt, null);
+    assert.ok(resumedMilestone.pausedTotalSeconds > 0);
+    await updatePaidMilestoneProgress(database.prisma, {
+      projectId: project.id,
+      milestoneId: milestone.id,
+      actorUserId: "team-a-owner",
+      progressPercent: 10,
+      workCompleted: "Đã tiếp tục sau khi được hai bên xác nhận.",
+      difficulties: "",
+      now: new Date(resumeAt.getTime() + 2_000),
+    });
+  });
+
+  it("rejects changes after termination and leaves final acceptance closed", async () => {
+    const project = await createFirstVersion(agreementInput("Closed project guards", 1_000_000));
+    await fundProject(project.id);
+    const milestones = await database.prisma.milestone.findMany({
+      where: { projectId: project.id },
+      orderBy: { sortOrder: "asc" },
+    });
+    const [first, second] = milestones;
+    assert.ok(first && second);
+    await updatePaidMilestoneProgress(database.prisma, {
+      projectId: project.id,
+      milestoneId: first.id,
+      actorUserId: "team-a-owner",
+      progressPercent: 100,
+      workCompleted: "Đã hoàn thành mốc đầu.",
+      difficulties: "",
+    });
+    await submitPaidMilestone(database.prisma, {
+      projectId: project.id,
+      milestoneId: first.id,
+      actorUserId: "team-a-owner",
+      note: "Bàn giao mốc đầu để nghiệm thu.",
+      links: [],
+    });
+    await acceptPaidMilestone(database.prisma, {
+      projectId: project.id,
+      milestoneId: first.id,
+      actorUserId: "business-owner",
+    });
+    const termination = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      kind: "PROJECT_TERMINATION",
+      actorUserId: "business-owner",
+      reason: "Hai bên đồng ý kết thúc.",
+      idempotencyKey: "termination-closed-guards",
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: termination.id,
+      actorUserId: "business-owner",
+      response: "ACCEPT",
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: termination.id,
+      actorUserId: "team-a-owner",
+      response: "ACCEPT",
+    });
+    const cancelled = await database.prisma.project.findUniqueOrThrow({
+      where: { id: project.id },
+    });
+    assert.equal(cancelled.status, "CANCELLED");
+    assert.equal(cancelled.finalAcceptanceStatus, "NOT_REQUESTED");
+    assert.throws(() => assertProjectActionable(cancelled), /đã kết thúc/i);
+    await assert.rejects(
+      recordProjectDeposit(database.prisma, { projectId: project.id }),
+      /đã kết thúc/i,
+    );
+    await assert.rejects(
+      updatePaidMilestoneProgress(database.prisma, {
+        projectId: project.id,
+        milestoneId: second.id,
+        actorUserId: "team-a-owner",
+        progressPercent: 10,
+        workCompleted: "Không được cập nhật sau chấm dứt.",
+        difficulties: "",
+      }),
+      /đã kết thúc/i,
+    );
+    await assert.rejects(
+      acceptProjectFinalCompletion(database.prisma, {
+        projectId: project.id,
+        actorUserId: "business-owner",
+      }),
+      /đã kết thúc/i,
+    );
+    await assert.rejects(
+      createProjectChangeRequest(database.prisma, {
+        projectId: project.id,
+        kind: "PROJECT_TERMINATION",
+        actorUserId: "team-a-owner",
+        reason: "Yêu cầu sau khi đã chấm dứt.",
+        idempotencyKey: "termination-after-termination",
+      }),
+      /đã kết thúc/i,
+    );
+  });
+
+  it("applies simultaneous termination approvals only once and refunds the live escrow", async () => {
+    const project = await createFirstVersion(agreementInput("Concurrent termination", 1_000_000));
+    await fundProject(project.id);
+    const termination = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      kind: "PROJECT_TERMINATION",
+      actorUserId: "business-owner",
+      reason: "Hai bên đồng ý chấm dứt dự án.",
+      idempotencyKey: "concurrent-termination-approval",
+    });
+    const responses = await Promise.all([
+      respondToProjectChangeRequest(database.prisma, {
+        requestId: termination.id,
+        actorUserId: "business-owner",
+        response: "ACCEPT",
+      }),
+      respondToProjectChangeRequest(database.prisma, {
+        requestId: termination.id,
+        actorUserId: "team-a-owner",
+        response: "ACCEPT",
+      }),
+    ]);
+    assert.ok(responses.some(({ status }) => status === "ACCEPTED"));
+    const [closedProject, finalRequest, refunds, deposit] = await Promise.all([
+      database.prisma.project.findUniqueOrThrow({ where: { id: project.id } }),
+      database.prisma.projectChangeRequest.findUniqueOrThrow({ where: { id: termination.id } }),
+      database.prisma.projectTransaction.findMany({
+        where: { projectId: project.id, type: "REFUND" },
+      }),
+      database.prisma.projectTransaction.findFirstOrThrow({
+        where: { projectId: project.id, type: "DEPOSIT" },
+      }),
+    ]);
+    assert.equal(closedProject.status, "CANCELLED");
+    assert.equal(closedProject.finalAcceptanceStatus, "NOT_REQUESTED");
+    assert.equal(finalRequest.status, "ACCEPTED");
+    assert.equal(refunds.length, 2);
+    assert.equal(refunds.reduce((sum, item) => sum + item.amount, 0), 1_000_000);
+    assert.equal(deposit.status, "REFUNDED");
+    assert.equal(
+      await database.prisma.projectWorkflowEvent.count({
+        where: {
+          projectId: project.id,
+          eventType: "PROJECT_CHANGE_ACCEPTED_PROJECT_TERMINATION",
+        },
+      }),
+      1,
+    );
+    const transactions = await database.prisma.projectTransaction.findMany({
+      where: { projectId: project.id },
+    });
+    assert.equal(
+      deposit.amount,
+      (deposit.businessFee ?? 0) +
+        transactions
+          .filter(({ type }) => type === "MILESTONE_RELEASE")
+          .reduce((sum, item) => sum + item.amount + item.platformFee, 0) +
+        refunds.reduce((sum, item) => sum + item.amount, 0),
+    );
+  });
+
+  it("keeps the milestone due date unchanged when an extension is rejected", async () => {
+    const project = await createFirstVersion();
+    await fundProject(project.id);
+    const milestone = await database.prisma.milestone.findFirstOrThrow({
+      where: { projectId: project.id, sortOrder: 0 },
+    });
+    const dueAt = milestone.dueAt;
+    const extension = await createProjectChangeRequest(database.prisma, {
+      projectId: project.id,
+      milestoneId: milestone.id,
+      kind: "EXTENSION",
+      actorUserId: "business-owner",
+      reason: "Đề nghị gia hạn thời gian thực hiện.",
+      proposedDueAt: new Date("2030-01-20T12:00:00.000Z"),
+      idempotencyKey: "rejected-extension",
+    });
+    await respondToProjectChangeRequest(database.prisma, {
+      requestId: extension.id,
+      actorUserId: "team-a-owner",
+      response: "REJECT",
+    });
+    const [unchangedMilestone, rejectedRequest] = await Promise.all([
+      database.prisma.milestone.findUniqueOrThrow({ where: { id: milestone.id } }),
+      database.prisma.projectChangeRequest.findUniqueOrThrow({ where: { id: extension.id } }),
+    ]);
+    assert.equal(unchangedMilestone.dueAt?.getTime(), dueAt?.getTime());
+    assert.equal(rejectedRequest.status, "REJECTED");
   });
 });

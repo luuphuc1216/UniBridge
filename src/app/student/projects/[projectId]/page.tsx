@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { ProjectDetailView } from "@/components/projects/project-detail-view";
 import { findAccessibleProject } from "@/lib/project-access";
 import { ensurePaidMilestoneReminders } from "@/lib/project-milestone-workflow";
+import { ensurePendingProjectChangeRequestReminders } from "@/lib/project-change-requests";
 import { prisma } from "@/lib/prisma";
 import { getProjectReviewState } from "@/lib/reputation-data";
 import { canRespondForTeam } from "@/lib/team-permissions";
@@ -20,6 +21,11 @@ export default async function StudentProjectPage({
   const project = await findAccessibleProject(projectId, session.user.id, session.user.role);
   if (!project) notFound();
   await ensurePaidMilestoneReminders(project.id, { database: prisma });
+  try {
+    await ensurePendingProjectChangeRequestReminders(project.id, { database: prisma });
+  } catch (error) {
+    console.error("Không thể tạo thông báo nhắc yêu cầu thay đổi dự án:", error);
+  }
   const reviewState =
     project.status === "COMPLETED"
       ? await getProjectReviewState(project.id, "TEAM_TO_BUSINESS", project.completedAt)

@@ -5,6 +5,7 @@ import {
 } from "@/lib/project-config";
 import { calculateProjectFinancialBreakdown } from "@/lib/project-money";
 import { canRespondForTeam } from "@/lib/team-permissions";
+import { getProjectNotificationHref } from "@/lib/project-notification-links";
 
 export type AgreementMilestoneSnapshot = {
   title: string;
@@ -496,7 +497,7 @@ export async function respondToLegacyProjectAgreement(
         userId: businessUserId,
         title: "Nhóm đề nghị chỉnh sửa thỏa thuận",
         message: `Nhóm gửi đề nghị chỉnh sửa cho dự án “${project.title}”.`,
-        href: `/business/projects/${projectId}`,
+        href: getProjectNotificationHref("BUSINESS", projectId),
         createdAt: now,
       },
     });
@@ -552,14 +553,14 @@ export async function respondToLegacyProjectAgreement(
             userId: businessUserId,
             title: "Hai bên đã đồng ý thỏa thuận",
             message: `Thỏa thuận dự án “${project.title}” đã được xác nhận. Có thể nạp tiền giả lập.`,
-            href: `/business/projects/${projectId}`,
+            href: getProjectNotificationHref("BUSINESS", projectId),
             createdAt: now,
           },
           ...teamUserIds.map((userId) => ({
             userId,
             title: "Hai bên đã đồng ý thỏa thuận",
             message: `Thỏa thuận dự án “${project.title}” đã được xác nhận.`,
-            href: `/student/projects/${projectId}`,
+            href: getProjectNotificationHref("STUDENT", projectId),
             createdAt: now,
           })),
         ],
@@ -572,9 +573,7 @@ export async function respondToLegacyProjectAgreement(
         userId,
         title: "Đối tác đã đồng ý thỏa thuận",
         message: `Một bên đã xác nhận phiên bản ${project.agreementRevision} của dự án “${project.title}”.`,
-        href: role === "BUSINESS"
-          ? `/student/projects/${projectId}`
-          : `/business/projects/${projectId}`,
+        href: getProjectNotificationHref(role === "BUSINESS" ? "STUDENT" : "BUSINESS", projectId),
         createdAt: now,
       })),
     });
@@ -730,7 +729,7 @@ export async function respondToProjectAgreementVersion(
         dedupeKey: `agreement-response:${projectId}:v${versionNumber}:business`,
         title: "Nhóm đề nghị chỉnh sửa thỏa thuận",
         message: `Nhóm gửi đề nghị chỉnh sửa cho phiên bản ${versionNumber} của dự án “${project.title}”.`,
-        href: `/business/projects/${projectId}`,
+        href: getProjectNotificationHref("BUSINESS", projectId),
         createdAt: now,
       },
     });
@@ -817,7 +816,7 @@ export async function respondToProjectAgreementVersion(
       dedupeKey: `agreement-response:${projectId}:v${versionNumber}:business`,
       title: "Nhóm đã xác nhận thỏa thuận",
       message: `Nhóm đã xác nhận phiên bản ${versionNumber} của dự án “${project.title}”.`,
-      href: `/business/projects/${projectId}`,
+      href: getProjectNotificationHref("BUSINESS", projectId),
       createdAt: now,
     },
   });
@@ -827,7 +826,7 @@ export async function respondToProjectAgreementVersion(
       dedupeKey: `agreement-awaiting-payment:${projectId}:v${versionNumber}:business`,
       title: "Hai bên đã xác nhận thỏa thuận",
       message: `Phiên bản ${versionNumber} của dự án “${project.title}” đã được hai bên xác nhận. Có thể nạp tiền giả lập.`,
-      href: `/business/projects/${projectId}`,
+      href: getProjectNotificationHref("BUSINESS", projectId),
       createdAt: now,
     },
     ...teamUserIds.map((userId) => ({
@@ -835,7 +834,7 @@ export async function respondToProjectAgreementVersion(
       dedupeKey: `agreement-awaiting-payment:${projectId}:v${versionNumber}:${userId}`,
       title: "Hai bên đã xác nhận thỏa thuận",
       message: `Phiên bản ${versionNumber} của dự án “${project.title}” đã được hai bên xác nhận.`,
-      href: `/student/projects/${projectId}`,
+      href: getProjectNotificationHref("STUDENT", projectId),
       createdAt: now,
     })),
   ];
@@ -874,7 +873,7 @@ export async function createAgreementVersionNotifications(
       dedupeKey: `agreement-version:${projectId}:v${versionNumber}:${userId}`,
       title: "Doanh nghiệp gửi phiên bản thỏa thuận mới",
       message: `Vui lòng xem và phản hồi phiên bản ${versionNumber} của dự án “${title}”.`,
-      href: `/student/projects/${projectId}`,
+      href: getProjectNotificationHref("STUDENT", projectId),
       createdAt: now,
     })),
   });

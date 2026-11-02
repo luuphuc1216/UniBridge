@@ -6,6 +6,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { findAccessibleProject, getProjectTeamUserIds } from "@/lib/project-access";
 import { reputationConfig, type ReviewDirection } from "@/lib/reputation-config";
 import { prisma } from "@/lib/prisma";
+import { getProjectNotificationHref } from "@/lib/project-notification-links";
 
 export type ReviewActionState = {
   error: string | null;
@@ -124,10 +125,10 @@ export async function submitProjectReviewAction(
           userId,
           title: "Có đánh giá mới",
           message: `Một bên đã gửi đánh giá cho dự án “${project.title}”. Nội dung chỉ hiển thị khi cả hai bên đã gửi hoặc hết thời hạn chờ.`,
-          href:
-            direction === "BUSINESS_TO_TEAM"
-              ? `/student/projects/${projectId}`
-              : `/business/projects/${projectId}`,
+          href: getProjectNotificationHref(
+            direction === "BUSINESS_TO_TEAM" ? "STUDENT" : "BUSINESS",
+            projectId,
+          ),
         })),
       });
     });

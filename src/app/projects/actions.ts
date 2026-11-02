@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import {
@@ -33,8 +34,18 @@ import {
   staleAgreementMessage,
   type AgreementVersionInput,
 } from "@/lib/project-agreements";
+import {
+  createProjectChangeRequest,
+  createProjectSupportNote,
+  respondToProjectChangeRequest,
+  resolveProjectDisputeForAdmin,
+  type ProjectChangeKind,
+  type ProjectChangeRequestResponse,
+} from "@/lib/project-change-requests";
 import { prisma } from "@/lib/prisma";
 import { findAuthorizedWorkspace } from "@/lib/workspace-access";
+import { getProjectNotificationHref } from "@/lib/project-notification-links";
+import { assertProjectActionable } from "@/lib/project-milestone-workflow";
 
 export type ProjectActionState = {
   error: string | null;
@@ -212,7 +223,9 @@ function revalidateProject(projectId?: string, problemId?: string) {
   if (projectId) {
     revalidatePath(`/business/projects/${projectId}`);
     revalidatePath(`/student/projects/${projectId}`);
+    revalidatePath(`/admin/projects/${projectId}`);
   }
+
   if (problemId) {
     revalidatePath(`/business/problems/${problemId}`);
     revalidatePath(`/business/problems/${problemId}/workspace`);
@@ -244,6 +257,144 @@ async function requireProject(projectId: string) {
   );
   if (!project) throw new Error("Không tìm thấy dự án hoặc bạn không có quyền truy cập.");
   return { session, project };
+}
+
+const projectChangeKinds: ProjectChangeKind[] = [
+  "EXTENSION",
+  "PAUSE",
+  "RESUME",
+  "MILESTONE_CANCEL",
+  "DISPUTE",
+  "DISPUTE_RESOLUTION",
+  "PROJECT_TERMINATION",
+];
+
+export async function createProjectChangeRequestAction(
+  _previousState: ProjectActionState,
+  formData: FormData,
+): Promise<ProjectActionState> {
+  const projectId = readText(formData, "projectId");
+  try {
+    const { session, project } = await requireProject(projectId);
+    assertProjectActionable(project);
+    const rawKind = readText(formData, "kind");
+    if (!projectChangeKinds.includes(rawKind as ProjectChangeKind)) {
+      throw new Error("Loại yêu cầu không hợp lệ.");
+    }
+    const dueAtValue = readText(formData, "dueAt");
+    const daysValue = readText(formData, "days");
+    const dueAt = dueAtValue ? new Date(dueAtValue) : null;
+    if (dueAt && !Number.isFinite(dueAt.getTime())) throw new Error("Hạn mới không hợp lệ.");
+    const days = daysValue ? Number(daysValue) : undefined;
+    if (days !== undefined && !Number.isInteger(days)) throw new Error("Số ngày không hợp lệ.");
+    await createProjectChangeRequest(prisma, {
+      projectId,
+      kind: rawKind as ProjectChangeKind,
+      actorUserId: session.user.id,
+      actorRole: session.user.role,
+      reason: readText(formData, "reason"),
+      milestoneId: readText(formData, "milestoneId") || null,
+      proposedDueAt: dueAt,
+      payload: {
+        ...(dueAt ? { dueAt: dueAt.toISOString() } : {}),
+        ...(days !== undefined ? { days } : {}),
+      },
+      idempotencyKey: readText(formData, "idempotencyKey") || randomUUID(),
+    });
+    revalidateProject(projectId, project.application.problem.id);
+    return { error: null, success: "Đã gửi yêu cầu thay đổi để bên còn lại xác nhận.", projectId };
+  } catch (error) {
+    return getActionError(error, "Tạo yêu cầu thay đổi dự án");
+  }
+}
+
+export async function respondToProjectChangeRequestAction(
+  _previousState: ProjectActionState,
+  formData: FormData,
+): Promise<ProjectActionState> {
+  const projectId = readText(formData, "projectId");
+  try {
+    const { session, project } = await requireProject(projectId);
+    assertProjectActionable(project);
+    const response = readText(formData, "response");
+    if (response !== "ACCEPT" && response !== "REJECT") {
+      throw new Error("Phản hồi yêu cầu không hợp lệ.");
+    }
+    const result = await respondToProjectChangeRequest(prisma, {
+      requestId: readText(formData, "requestId"),
+      actorUserId: session.user.id,
+      actorRole: session.user.role,
+      response: response as ProjectChangeRequestResponse,
+    });
+    revalidateProject(projectId, project.application.problem.id);
+    if (result.status === "REJECTED") {
+      return {
+        error: "Không còn mốc chưa giải ngân; yêu cầu chấm dứt đã bị từ chối.",
+        projectId,
+      };
+    }
+    return { error: null, success: "Đã ghi nhận phản hồi yêu cầu thay đổi.", projectId };
+  } catch (error) {
+    return getActionError(error, "Phản hồi yêu cầu thay đổi dự án");
+  }
+}
+
+export async function addProjectSupportNoteAction(
+  _previousState: ProjectActionState,
+  formData: FormData,
+): Promise<ProjectActionState> {
+  const projectId = readText(formData, "projectId");
+  try {
+    const session = await auth();
+    if (!session?.user || session.user.role !== "ADMIN") {
+      throw new Error("Chỉ Admin mới có thể ghi chú hỗ trợ.");
+    }
+    const project = await findAccessibleProject(projectId, session.user.id, session.user.role);
+    if (!project) throw new Error("Không tìm thấy dự án.");
+    await createProjectSupportNote(prisma, {
+      projectId,
+      adminUserId: session.user.id,
+      actorRole: session.user.role,
+      note: readText(formData, "note"),
+      milestoneId: readText(formData, "milestoneId") || undefined,
+      changeRequestId: readText(formData, "changeRequestId") || undefined,
+    });
+    revalidatePath(`/admin/projects/${projectId}`);
+    return { error: null, success: "Đã lưu ghi chú hỗ trợ.", projectId };
+  } catch (error) {
+    return getActionError(error, "Ghi chú hỗ trợ dự án");
+  }
+}
+
+export async function resolveProjectDisputeForAdminAction(
+  _previousState: ProjectActionState,
+  formData: FormData,
+): Promise<ProjectActionState> {
+  const projectId = readText(formData, "projectId");
+  try {
+    const session = await auth();
+    if (!session?.user || session.user.role !== "ADMIN") {
+      throw new Error("Chỉ Admin mới có thể hỗ trợ bất đồng.");
+    }
+    const project = await findAccessibleProject(projectId, session.user.id, session.user.role);
+    if (!project) throw new Error("Không tìm thấy dự án.");
+    const outcome = readText(formData, "outcome");
+    if (outcome !== "RESUME_WORK" && outcome !== "GUIDE_TERMINATION") {
+      throw new Error("Kết quả hỗ trợ bất đồng không hợp lệ.");
+    }
+    await resolveProjectDisputeForAdmin(prisma, {
+      projectId,
+      disputeRequestId: readText(formData, "disputeRequestId"),
+      adminUserId: session.user.id,
+      actorRole: session.user.role,
+      outcome,
+      reason: readText(formData, "reason"),
+    });
+    revalidateProject(projectId, project.application.problem.id);
+    return { error: null, success: "Đã lưu kết quả hỗ trợ bất đồng.", projectId };
+  } catch (error) {
+    return getActionError(error, "Hỗ trợ bất đồng dự án");
+  }
 }
 
 function projectRecipients(project: {
@@ -396,7 +547,7 @@ export async function saveAgreementAction(
           userId,
           title: existing ? "Doanh nghiệp đã cập nhật thỏa thuận" : "Doanh nghiệp đề nghị thỏa thuận dự án",
           message: `Vui lòng xem và phản hồi thỏa thuận dự án “${input.title}”.`,
-          href: `/student/projects/${savedProjectId}`,
+          href: getProjectNotificationHref("STUDENT", savedProjectId),
         })),
       });
       return { id: savedProjectId, versioned: false };
@@ -431,6 +582,7 @@ export async function respondAgreementAction(
 
   try {
     const { session, project } = await requireProject(projectId);
+    assertProjectActionable(project);
     const responseMode = getAgreementResponseMode({
       legacyTermsExempt: project.legacyTermsExempt,
       role: session.user.role,
@@ -499,6 +651,7 @@ export async function cancelProjectAction(
   const projectId = readText(formData, "projectId");
   try {
     const { session, project } = await requireProject(projectId);
+    assertProjectActionable(project);
     if (!["AGREEING", "AWAITING_PAYMENT"].includes(project.status)) {
       throw new Error("Chỉ có thể hủy dự án khi đang thỏa thuận hoặc chờ nạp tiền.");
     }
@@ -524,10 +677,10 @@ export async function cancelProjectAction(
           userId,
           title: "Dự án đã bị hủy",
           message: `Dự án “${project.title}” đã bị hủy trước khi bắt đầu.`,
-          href:
-            session.user.role === "BUSINESS"
-              ? `/student/projects/${projectId}`
-              : `/business/projects/${projectId}`,
+          href: getProjectNotificationHref(
+            session.user.role === "BUSINESS" ? "STUDENT" : "BUSINESS",
+            projectId,
+          ),
         })),
       });
     });
@@ -546,6 +699,7 @@ export async function depositProjectAction(
   let authorizedBusiness = false;
   try {
     const { session, project } = await requireProject(projectId);
+    assertProjectActionable(project);
     assertBusinessCanDeposit(session.user.role);
     authorizedBusiness = true;
     const result = await recordProjectDeposit(prisma, { projectId });
@@ -580,6 +734,7 @@ export async function updateMilestoneProgressAction(
   const progressNote = readText(formData, "progressNote");
   try {
     const { session, project } = await requireProject(projectId);
+    assertProjectActionable(project);
     if (!project.legacyTermsExempt) {
       await updatePaidMilestoneProgress(prisma, {
         projectId,
@@ -637,6 +792,7 @@ export async function requestMilestoneRevisionAction(
   }
   try {
     const { session, project } = await requireProject(projectId);
+    assertProjectActionable(project);
     if (!project.legacyTermsExempt) {
       if (session.user.role !== "BUSINESS") {
         throw new Error("Chỉ doanh nghiệp sở hữu mới có thể phản hồi Milestone.");
@@ -676,7 +832,7 @@ export async function requestMilestoneRevisionAction(
           userId,
           title: "Doanh nghiệp yêu cầu chỉnh sửa Milestone",
           message: `Milestone “${milestone.title}” cần được điều chỉnh trong phạm vi đã thỏa thuận.`,
-          href: `/student/projects/${projectId}`,
+          href: getProjectNotificationHref("STUDENT", projectId),
         })),
       });
     });
@@ -696,6 +852,7 @@ export async function acceptMilestoneAction(
   let authorizedBusiness = false;
   try {
     const { session, project } = await requireProject(projectId);
+    assertProjectActionable(project);
     if (session.user.role !== "BUSINESS") {
       throw new Error("Chỉ doanh nghiệp sở hữu dự án mới có thể nghiệm thu.");
     }
@@ -747,6 +904,7 @@ export async function acceptProjectFinalCompletionAction(
   const projectId = readText(formData, "projectId");
   try {
     const { session, project } = await requireProject(projectId);
+    assertProjectActionable(project);
     if (session.user.role !== "BUSINESS") {
       throw new Error("Chỉ doanh nghiệp sở hữu dự án mới có thể xác nhận hoàn tất.");
     }

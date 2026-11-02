@@ -13,6 +13,7 @@ import {
   projectReminderHourMs,
 } from "@/lib/project-reminder-config";
 import { canRespondForTeam } from "@/lib/team-permissions";
+import { getProjectNotificationHref } from "@/lib/project-notification-links";
 
 type WorkflowTransaction = Prisma.TransactionClient;
 
@@ -22,10 +23,35 @@ const acceptanceStatuses = [
   "NEEDS_REVISION",
   "ACCEPTED",
 ] as const;
-const paymentStatuses = ["UNFUNDED", "ESCROW", "RELEASED"] as const;
+const paymentStatuses = ["UNFUNDED", "ESCROW", "RELEASED", "REFUNDED"] as const;
 
 type AcceptanceStatus = (typeof acceptanceStatuses)[number];
 type PaymentStatus = (typeof paymentStatuses)[number];
+
+export function assertProjectActionable(project: { status: string }): void {
+  if (project.status === "CANCELLED" || project.status === "COMPLETED") {
+    throw new Error("Dự án đã kết thúc; không thể thực hiện thao tác này.");
+  }
+}
+
+export function assertMilestoneMoneyActionable(
+  milestone: { status: string; paymentStatus: string },
+  project: { status: string; pausedAt: Date | null },
+): void {
+  assertProjectActionable(project);
+  if (project.pausedAt) {
+    throw new Error("Dự án đang tạm dừng; chưa thể nghiệm thu hoặc giải ngân.");
+  }
+  if (milestone.status === "DISPUTED") {
+    throw new Error("Milestone đang có bất đồng; chưa thể nghiệm thu hoặc giải ngân.");
+  }
+  if (milestone.status === "CANCELLED" || milestone.paymentStatus === "REFUNDED") {
+    throw new Error("Milestone đã bị hủy hoặc hoàn tiền.");
+  }
+  if (milestone.paymentStatus === "RELEASED") {
+    throw new Error("Milestone đã giải ngân.");
+  }
+}
 
 export type PaidMilestoneState = {
   status: string;
@@ -42,7 +68,8 @@ function assertPaidState(
     !paymentStatuses.includes(paymentStatus as PaymentStatus) ||
     (paymentStatus === "UNFUNDED" && acceptanceStatus !== "NOT_SUBMITTED") ||
     (paymentStatus === "RELEASED" && acceptanceStatus !== "ACCEPTED") ||
-    (paymentStatus === "ESCROW" && acceptanceStatus === "ACCEPTED")
+    (paymentStatus === "ESCROW" && acceptanceStatus === "ACCEPTED") ||
+    (paymentStatus === "REFUNDED" && acceptanceStatus !== "NOT_SUBMITTED")
   ) {
     throw new Error("Trạng thái nghiệm thu và thanh toán Milestone không hợp lệ.");
   }
@@ -54,6 +81,7 @@ export function derivePaidMilestoneStatus(
   started: boolean,
 ): string {
   assertPaidState(acceptanceStatus, paymentStatus);
+  if (paymentStatus === "REFUNDED") return "CANCELLED";
   if (acceptanceStatus === "AWAITING_ACCEPTANCE") return "AWAITING_ACCEPTANCE";
   if (acceptanceStatus === "NEEDS_REVISION") return "NEEDS_REVISION";
   if (acceptanceStatus === "ACCEPTED") return "ACCEPTED";
@@ -100,7 +128,7 @@ export async function transitionPaidMilestone(
   }
 }
 
-type WorkflowDatabase = Pick<PrismaClient, "$transaction" | "projectTransaction">;
+type WorkflowDatabase = Pick<PrismaClient, "$transaction" | "project" | "projectTransaction">;
 
 async function getProjectForMilestoneAction(
   transaction: WorkflowTransaction,
@@ -139,11 +167,15 @@ async function getProjectForMilestoneAction(
   });
   if (!milestone) throw new Error("Không tìm thấy Milestone trong dự án.");
   const project = milestone.project;
+  assertProjectActionable(project);
   if (project.legacyTermsExempt) {
     throw new Error("Quy trình Milestone mới không áp dụng cho dự án legacy.");
   }
   if (project.status !== "IN_PROGRESS") {
     throw new Error("Dự án chưa được nạp tiền hoặc không còn đang thực hiện.");
+  }
+  if (project.pausedAt) {
+    throw new Error("Dự án đang tạm dừng; chưa thể cập nhật tiến độ, nộp hoặc nghiệm thu Milestone.");
   }
   const escrow = await transaction.projectTransaction.findFirst({
     where: { projectId, type: "DEPOSIT", status: "ESCROW" },
@@ -156,12 +188,20 @@ async function getProjectForMilestoneAction(
     currentIndex < 0 ||
     orderedMilestones
       .slice(0, currentIndex)
-      .some(({ acceptanceStatus }) => acceptanceStatus !== "ACCEPTED")
+      .some(
+        ({ acceptanceStatus, paymentStatus, status }) =>
+          acceptanceStatus !== "ACCEPTED" &&
+          !(status === "CANCELLED" && paymentStatus === "REFUNDED") &&
+          status !== "DISPUTED",
+      )
   ) {
     throw new Error("Cần xử lý Milestone trước đó theo đúng thứ tự.");
   }
   const firstPending = orderedMilestones.find(
-    ({ acceptanceStatus }) => acceptanceStatus !== "ACCEPTED",
+    ({ acceptanceStatus, paymentStatus, status }) =>
+      acceptanceStatus !== "ACCEPTED" &&
+      !(status === "CANCELLED" && paymentStatus === "REFUNDED") &&
+      status !== "DISPUTED",
   );
   if (firstPending?.id !== milestoneId) {
     throw new Error("Chỉ có thể thao tác với Milestone đang mở theo thứ tự.");
@@ -204,6 +244,7 @@ export async function updatePaidMilestoneProgress(
     if (!canRespondForTeam(project.team.ownerId, actorUserId)) {
       throw new Error("Chỉ chủ nhóm của dự án mới có thể cập nhật tiến độ.");
     }
+    assertProjectActionable(project);
     if (
       !["PENDING", "NOT_STARTED", "IN_PROGRESS", "NEEDS_REVISION"].includes(milestone.status) ||
       milestone.acceptanceStatus === "AWAITING_ACCEPTANCE"
@@ -287,6 +328,7 @@ export async function submitPaidMilestone(
     if (!canRespondForTeam(project.team.ownerId, actorUserId)) {
       throw new Error("Chỉ chủ nhóm của dự án mới có thể nộp kết quả.");
     }
+    assertProjectActionable(project);
     if (
       !["IN_PROGRESS", "NEEDS_REVISION"].includes(milestone.status) ||
       milestone.acceptanceStatus === "AWAITING_ACCEPTANCE"
@@ -344,7 +386,7 @@ export async function submitPaidMilestone(
         dedupeKey: `milestone-submitted:${submission.id}:business`,
         title: "Nhóm đã nộp kết quả Milestone",
         message: `Nhóm đã nộp kết quả cho “${milestone.title}” của dự án “${project.title}”.`,
-        href: `/business/projects/${projectId}`,
+        href: getProjectNotificationHref("BUSINESS", projectId),
         createdAt: now,
       },
     });
@@ -357,7 +399,7 @@ export async function submitPaidMilestone(
         dedupeKey: `milestone-submitted:${submission.id}:${userId}`,
         title: "Nhóm đã nộp kết quả Milestone",
         message: `Đã lưu lần nộp kết quả mới cho “${milestone.title}”.`,
-        href: `/student/projects/${projectId}`,
+        href: getProjectNotificationHref("STUDENT", projectId),
         createdAt: now,
       })),
     });
@@ -392,6 +434,7 @@ export async function requestPaidMilestoneRevision(
     if (project.application.problem.businessProfile.userId !== actorUserId) {
       throw new Error("Chỉ doanh nghiệp sở hữu mới có thể phản hồi Milestone.");
     }
+    assertProjectActionable(project);
     if (milestone.acceptanceStatus !== "AWAITING_ACCEPTANCE") {
       throw new Error("Chỉ có thể yêu cầu chỉnh sửa kết quả đang chờ nghiệm thu.");
     }
@@ -445,7 +488,7 @@ export async function requestPaidMilestoneRevision(
         dedupeKey: `milestone-revision:${milestoneId}:${milestone.revisionCount + 1}:${userId}`,
         title: "Doanh nghiệp yêu cầu chỉnh sửa Milestone",
         message: `Milestone “${milestone.title}” cần được điều chỉnh trong phạm vi đã thỏa thuận.`,
-        href: `/student/projects/${projectId}`,
+        href: getProjectNotificationHref("STUDENT", projectId),
         createdAt: now,
       })),
     });
@@ -467,6 +510,12 @@ export async function acceptPaidMilestone(
   },
 ): Promise<{ alreadyAccepted: boolean; finalAcceptancePending: boolean }> {
   try {
+    const projectBeforeTransaction = await database.project.findUnique({
+      where: { id: projectId },
+      select: { status: true },
+    });
+    if (!projectBeforeTransaction) throw new Error("Không tìm thấy dự án.");
+    assertProjectActionable(projectBeforeTransaction);
     const existingBeforeTransaction = await database.projectTransaction.findUnique({
       where: { idempotencyKey: `release:${milestoneId}` },
       select: { id: true },
@@ -483,6 +532,8 @@ export async function acceptPaidMilestone(
       if (project.application.problem.businessProfile.userId !== actorUserId) {
         throw new Error("Chỉ doanh nghiệp sở hữu dự án mới có thể nghiệm thu.");
       }
+      assertProjectActionable(project);
+      assertMilestoneMoneyActionable(milestone, project);
       if (milestone.acceptanceStatus !== "AWAITING_ACCEPTANCE") {
         throw new Error("Milestone chưa được nộp hoặc đã được xử lý.");
       }
@@ -543,8 +594,10 @@ export async function acceptPaidMilestone(
         },
       });
       const allAccepted = orderedMilestones.every(
-        ({ id, acceptanceStatus }) =>
-          id === milestoneId || acceptanceStatus === "ACCEPTED",
+        ({ id, acceptanceStatus, paymentStatus, status }) =>
+          id === milestoneId ||
+          acceptanceStatus === "ACCEPTED" ||
+          (status === "CANCELLED" && paymentStatus === "REFUNDED"),
       );
       const recipients = getProjectTeamUserIds(project.team);
       if (allAccepted) {
@@ -581,7 +634,7 @@ export async function acceptPaidMilestone(
               dedupeKey: `final-acceptance-requested:${projectId}:business`,
               title: "Dự án chờ nghiệm thu cuối cùng",
               message: `Tất cả Milestone của “${project.title}” đã được nghiệm thu. Vui lòng xác nhận hoàn tất dự án.`,
-              href: `/business/projects/${projectId}`,
+              href: getProjectNotificationHref("BUSINESS", projectId),
               createdAt: now,
             },
             ...recipients.map((userId) => ({
@@ -589,18 +642,20 @@ export async function acceptPaidMilestone(
               dedupeKey: `final-acceptance-requested:${projectId}:${userId}`,
               title: "Dự án chờ nghiệm thu cuối cùng",
               message: `Tất cả Milestone của “${project.title}” đã được nghiệm thu; đang chờ doanh nghiệp xác nhận cuối cùng.`,
-              href: `/student/projects/${projectId}`,
+              href: getProjectNotificationHref("STUDENT", projectId),
               createdAt: now,
             })),
           ],
         });
       } else {
         const nextMilestone = orderedMilestones.find(
-          ({ sortOrder, acceptanceStatus }) =>
-            sortOrder > milestone.sortOrder && acceptanceStatus !== "ACCEPTED",
+          ({ sortOrder, acceptanceStatus, paymentStatus, status }) =>
+            sortOrder > milestone.sortOrder &&
+            acceptanceStatus !== "ACCEPTED" &&
+            !(status === "CANCELLED" && paymentStatus === "REFUNDED") &&
+            status !== "DISPUTED",
         );
-        if (!nextMilestone) throw new Error("Thứ tự Milestone không hợp lệ.");
-        if (nextMilestone.acceptanceStatus === "NOT_SUBMITTED") {
+        if (nextMilestone?.acceptanceStatus === "NOT_SUBMITTED") {
           await transitionPaidMilestone(transaction, {
             projectId,
             milestone: nextMilestone,
@@ -634,7 +689,7 @@ export async function acceptPaidMilestone(
               dedupeKey: `milestone-accepted:${milestoneId}:business`,
               title: "Đã nghiệm thu Milestone",
               message: `Milestone “${milestone.title}” đã được nghiệm thu và ghi nhận giải ngân giả lập.`,
-              href: `/business/projects/${projectId}`,
+              href: getProjectNotificationHref("BUSINESS", projectId),
               createdAt: now,
             },
             ...recipients.map((userId) => ({
@@ -642,7 +697,7 @@ export async function acceptPaidMilestone(
               dedupeKey: `milestone-accepted:${milestoneId}:${userId}`,
               title: "Milestone được nghiệm thu",
               message: `Milestone “${milestone.title}” đã được nghiệm thu; Milestone tiếp theo đang mở.`,
-              href: `/student/projects/${projectId}`,
+              href: getProjectNotificationHref("STUDENT", projectId),
               createdAt: now,
             })),
           ],
@@ -669,6 +724,12 @@ export async function acceptLegacyMilestone(
   }: { projectId: string; milestoneId: string; now?: Date },
 ): Promise<{ alreadyAccepted: boolean }> {
   const releaseKey = `release:${milestoneId}`;
+  const projectBeforeTransaction = await database.project.findUnique({
+    where: { id: projectId },
+    select: { status: true },
+  });
+  if (!projectBeforeTransaction) throw new Error("Không tìm thấy dự án.");
+  assertProjectActionable(projectBeforeTransaction);
   const existingRelease = await database.projectTransaction.findUnique({
     where: { idempotencyKey: releaseKey },
     select: { id: true },
@@ -798,14 +859,14 @@ export async function acceptLegacyMilestone(
               userId: current.application.problem.businessProfile.userId,
               title: "Dự án hoàn tất — hãy đánh giá đối tác",
               message: `Tất cả Milestone của dự án “${current.title}” đã được nghiệm thu. Hãy gửi đánh giá hợp tác trên UniBridge.`,
-              href: `/business/projects/${projectId}`,
+              href: getProjectNotificationHref("BUSINESS", projectId),
               createdAt: now,
             },
             ...recipients.map((userId) => ({
               userId,
               title: "Dự án hoàn tất — hãy đánh giá đối tác",
               message: `Tất cả Milestone của dự án “${current.title}” đã được nghiệm thu. Hãy gửi đánh giá hợp tác trên UniBridge.`,
-              href: `/student/projects/${projectId}`,
+              href: getProjectNotificationHref("STUDENT", projectId),
               createdAt: now,
             })),
           ],
@@ -826,14 +887,14 @@ export async function acceptLegacyMilestone(
               userId: current.application.problem.businessProfile.userId,
               title: "Đã nghiệm thu Milestone",
               message: `Milestone “${milestone.title}” đã được nghiệm thu; đã ghi nhận phần giải ngân giả lập.`,
-              href: `/business/projects/${projectId}`,
+              href: getProjectNotificationHref("BUSINESS", projectId),
               createdAt: now,
             },
             ...recipients.map((userId) => ({
               userId,
               title: "Milestone được nghiệm thu",
               message: `Milestone “${milestone.title}” đã được nghiệm thu; Milestone tiếp theo đã mở.`,
-              href: `/student/projects/${projectId}`,
+              href: getProjectNotificationHref("STUDENT", projectId),
               createdAt: now,
             })),
           ],
@@ -895,13 +956,20 @@ export async function acceptProjectFinalCompletion(
     if (project.status === "COMPLETED" && project.finalAcceptedAt) {
       return { alreadyCompleted: true };
     }
+    assertProjectActionable(project);
+    if (project.pausedAt) {
+      throw new Error("Dự án đang tạm dừng; chưa thể nghiệm thu cuối cùng.");
+    }
     if (
       project.status !== "IN_PROGRESS" ||
       project.finalAcceptanceStatus !== "AWAITING_FINAL_ACCEPTANCE" ||
       project.milestones.length === 0 ||
       project.milestones.some(
-        ({ acceptanceStatus, paymentStatus }) =>
-          acceptanceStatus !== "ACCEPTED" || paymentStatus !== "RELEASED",
+        ({ acceptanceStatus, paymentStatus, status }) =>
+          !(
+            (acceptanceStatus === "ACCEPTED" && paymentStatus === "RELEASED") ||
+            (status === "CANCELLED" && paymentStatus === "REFUNDED")
+          ),
       )
     ) {
       throw new Error("Dự án chưa đủ điều kiện nghiệm thu cuối cùng.");
@@ -951,7 +1019,7 @@ export async function acceptProjectFinalCompletion(
           dedupeKey: `project-final-accepted:${projectId}:business`,
           title: "Dự án đã hoàn tất",
           message: `Bạn đã xác nhận hoàn tất dự án “${project.title}”.`,
-          href: `/business/projects/${projectId}`,
+          href: getProjectNotificationHref("BUSINESS", projectId),
           createdAt: now,
         },
         ...teamUserIds.map((userId) => ({
@@ -959,7 +1027,7 @@ export async function acceptProjectFinalCompletion(
           dedupeKey: `project-final-accepted:${projectId}:${userId}`,
           title: "Dự án đã hoàn tất",
           message: `Doanh nghiệp đã xác nhận hoàn tất dự án “${project.title}”.`,
-          href: `/student/projects/${projectId}`,
+          href: getProjectNotificationHref("STUDENT", projectId),
           createdAt: now,
         })),
       ],
@@ -980,18 +1048,28 @@ export function getPaidMilestoneOverdueStatus(
     responseDueAt: Date | null;
   },
   now: Date,
+  pausedSeconds = 0,
 ): PaidMilestoneOverdue {
+  if (milestone.status === "PAUSED" || milestone.status === "DISPUTED") {
+    return { status: null };
+  }
+  const effectiveDueAt = milestone.dueAt
+    ? new Date(milestone.dueAt.getTime() + pausedSeconds * 1000)
+    : null;
+  const effectiveResponseDueAt = milestone.responseDueAt
+    ? new Date(milestone.responseDueAt.getTime() + pausedSeconds * 1000)
+    : null;
   if (
     ["NOT_STARTED", "IN_PROGRESS", "NEEDS_REVISION"].includes(milestone.status) &&
-    milestone.dueAt &&
-    now.getTime() > milestone.dueAt.getTime()
+    effectiveDueAt &&
+    now.getTime() > effectiveDueAt.getTime()
   ) {
     return { status: "OVERDUE" };
   }
   if (
     milestone.acceptanceStatus === "AWAITING_ACCEPTANCE" &&
-    milestone.responseDueAt &&
-    now.getTime() >= milestone.responseDueAt.getTime()
+    effectiveResponseDueAt &&
+    now.getTime() >= effectiveResponseDueAt.getTime()
   ) {
     return { status: "AWAITING_RESPONSE_OVERDUE" };
   }
@@ -1027,9 +1105,14 @@ export async function ensurePaidMilestoneReminders(
   });
   if (!project) return;
   const now = clock.now();
+  const pausedSeconds =
+    project.pausedTotalSeconds +
+    (project.pausedAt
+      ? Math.max(0, Math.floor((now.getTime() - project.pausedAt.getTime()) / 1000))
+      : 0);
   const teamUserIds = getProjectTeamUserIds(project.team);
   for (const milestone of project.milestones) {
-    const overdue = getPaidMilestoneOverdueStatus(milestone, now).status;
+    const overdue = getPaidMilestoneOverdueStatus(milestone, now, pausedSeconds).status;
     if (!overdue) continue;
     const isResponseOverdue = overdue === "AWAITING_RESPONSE_OVERDUE";
     const recipients = isResponseOverdue
@@ -1045,9 +1128,7 @@ export async function ensurePaidMilestoneReminders(
         message: isResponseOverdue
           ? `Milestone “${milestone.title}” của dự án “${project.title}” đang chờ doanh nghiệp phản hồi.`
           : `Milestone “${milestone.title}” của dự án “${project.title}” đã quá hạn nộp.`,
-        href: isResponseOverdue
-          ? `/business/projects/${projectId}`
-          : `/student/projects/${projectId}`,
+        href: getProjectNotificationHref(isResponseOverdue ? "BUSINESS" : "STUDENT", projectId),
         createdAt: now,
       };
       try {
