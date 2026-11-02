@@ -8,7 +8,7 @@ export async function findAccessibleProject(
   role: string,
   database?: ProjectAccessDatabase,
 ) {
-  if (role !== "BUSINESS" && role !== "STUDENT") {
+  if (role !== "BUSINESS" && role !== "STUDENT" && role !== "ADMIN") {
     return null;
   }
 
@@ -17,16 +17,18 @@ export async function findAccessibleProject(
   return projectDatabase.project.findFirst({
     where: {
       id: projectId,
-      ...(role === "BUSINESS"
-        ? { application: { problem: { businessProfile: { userId } } } }
-        : {
-            team: {
-              OR: [
-                { ownerId: userId },
-                { memberships: { some: { studentProfile: { userId } } } },
-              ],
-            },
-          }),
+      ...(role === "ADMIN"
+        ? {}
+        : role === "BUSINESS"
+          ? { application: { problem: { businessProfile: { userId } } } }
+          : {
+              team: {
+                OR: [
+                  { ownerId: userId },
+                  { memberships: { some: { studentProfile: { userId } } } },
+                ],
+              },
+            }),
     },
     include: {
       application: {
@@ -77,9 +79,8 @@ export async function findAccessibleProject(
         take: 1,
       },
       changeRequests: {
-        where: { kind: "AGREEMENT_REVISION" },
         orderBy: { createdAt: "desc" },
-        take: 1,
+        include: { milestone: { select: { id: true, title: true } } },
       },
     },
   });

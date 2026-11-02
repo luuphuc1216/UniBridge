@@ -14,6 +14,7 @@ import {
   parseMilestoneSubmissionLinks,
   validateMilestoneSubmission,
 } from "@/lib/milestone-submission-validation";
+import { getProjectNotificationHref } from "@/lib/project-notification-links";
 
 export async function POST(
   request: Request,
@@ -198,7 +199,7 @@ export async function POST(
             userId: businessUserId,
             title: "Nhóm đã nộp kết quả Milestone",
             message: `Nhóm đã nộp kết quả cho “${current.title}” của dự án “${current.project.title}”.`,
-            href: `/business/projects/${project.id}`,
+            href: getProjectNotificationHref("BUSINESS", project.id),
           },
           ...teamUserIds
             .filter((userId) => userId !== session.user.id)
@@ -206,7 +207,7 @@ export async function POST(
               userId,
               title: "Nhóm đã nộp kết quả Milestone",
               message: `Đã lưu lần nộp kết quả mới cho “${current.title}”.`,
-              href: `/student/projects/${project.id}`,
+              href: getProjectNotificationHref("STUDENT", project.id),
             })),
         ],
       });

@@ -14,7 +14,11 @@ import {
   type AgreementSnapshot,
 } from "@/lib/project-agreements";
 import { getProjectTeamUserIds } from "@/lib/project-access";
-import { transitionPaidMilestone } from "@/lib/project-milestone-workflow";
+import {
+  assertProjectActionable,
+  transitionPaidMilestone,
+} from "@/lib/project-milestone-workflow";
+import { getProjectNotificationHref } from "@/lib/project-notification-links";
 
 type DepositDatabase = Pick<PrismaClient, "$transaction" | "projectTransaction">;
 
@@ -53,13 +57,6 @@ export async function recordProjectDeposit(
   });
   try {
     return await database.$transaction(async (transaction) => {
-      const existing = await transaction.projectTransaction.findFirst({
-        where: { projectId, type: "DEPOSIT" },
-      });
-      if (existing) {
-        return alreadyDepositedResult(existing.amount, existing.platformFeeBasisPoints);
-      }
-
       const project = await transaction.project.findUnique({
         where: { id: projectId },
         include: {
@@ -84,7 +81,15 @@ export async function recordProjectDeposit(
           },
         },
       });
-      if (!project || project.status !== "AWAITING_PAYMENT") {
+      if (!project) throw new Error("Không tìm thấy dự án cần nạp tiền.");
+      assertProjectActionable(project);
+      const existing = await transaction.projectTransaction.findFirst({
+        where: { projectId, type: "DEPOSIT" },
+      });
+      if (existing) {
+        return alreadyDepositedResult(existing.amount, existing.platformFeeBasisPoints);
+      }
+      if (project.status !== "AWAITING_PAYMENT") {
         throw new Error("Dự án chưa được hai bên đồng ý hoặc đã nạp tiền.");
       }
 
@@ -229,14 +234,14 @@ export async function recordProjectDeposit(
             userId: project.application.problem.businessProfile.userId,
             title: "Đã nạp tiền vào escrow giả lập",
             message: `Khoản nạp ${breakdown.totalDeposit.toLocaleString("vi-VN")} ₫ cho dự án “${project.title}” đã được ghi nhận giả lập.`,
-            href: `/business/projects/${projectId}`,
+            href: getProjectNotificationHref("BUSINESS", projectId),
             createdAt: now,
           },
           ...recipients.map((userId) => ({
             userId,
             title: "Doanh nghiệp đã nạp tiền",
             message: `Dự án “${project.title}” đã bắt đầu. Milestone đầu tiên đang mở.`,
-            href: `/student/projects/${projectId}`,
+            href: getProjectNotificationHref("STUDENT", projectId),
             createdAt: now,
           })),
         ],

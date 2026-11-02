@@ -11,6 +11,7 @@ import {
 import { AgreementForm, type AgreementFormValues } from "@/components/projects/agreement-form";
 import { MilestoneSubmissionForm } from "@/components/projects/milestone-submission-form";
 import { ProjectActionForm } from "@/components/projects/project-action-form";
+import { ProjectChangeRequestPanel } from "@/components/projects/project-change-request-panel";
 import { ProjectReviewSection } from "@/components/projects/project-review-section";
 import {
   businessFeeRate,
@@ -24,6 +25,7 @@ import {
 import { readAgreementSnapshot, type AgreementSnapshot } from "@/lib/project-agreements";
 import { getStoredMilestoneSubmissionLinks } from "@/lib/milestone-submission-validation";
 import { getPaidMilestoneOverdueStatus } from "@/lib/project-milestone-workflow";
+import { getEffectiveProjectPauseSeconds } from "@/lib/project-change-requests";
 import type { findAccessibleProject } from "@/lib/project-access";
 import type { ProjectReviewState } from "@/lib/reputation-data";
 
@@ -43,6 +45,8 @@ const acceptanceStatusLabels: Record<string, string> = {
   AWAITING_ACCEPTANCE: "Chờ nghiệm thu",
   NEEDS_REVISION: "Cần chỉnh sửa",
   ACCEPTED: "Đã nghiệm thu",
+  DISPUTED: "Có bất đồng - Chờ xử lý",
+  CANCELLED: "Đã hủy",
 };
 
 const milestoneStatusLabels: Record<string, string> = {
@@ -56,12 +60,16 @@ const milestoneStatusLabels: Record<string, string> = {
   SUBMITTED: "Chờ nghiệm thu",
   ACCEPTED: "Đã nghiệm thu",
   REVISION_REQUESTED: "Cần chỉnh sửa",
+  PAUSED: "Tạm dừng",
+  DISPUTED: "Có bất đồng - Chờ xử lý",
+  CANCELLED: "Đã hủy",
 };
 
 const paymentStatusLabels: Record<string, string> = {
   UNFUNDED: "Chưa nạp",
   ESCROW: "Đang giữ trong escrow",
   RELEASED: "Đã giải ngân giả lập",
+  REFUNDED: "Đã hoàn lại",
 };
 
 function formatCurrency(amount: number): string {
@@ -123,8 +131,12 @@ function getPaymentSummary(project: ProjectDetailData) {
   const releases = project.transactions.filter(
     (transaction) => transaction.type === "MILESTONE_RELEASE",
   );
+  const refunds = project.transactions.filter(
+    (transaction) => transaction.type === "REFUND",
+  );
   const deposited = deposits.reduce((sum, transaction) => sum + transaction.amount, 0);
   const paidOut = releases.reduce((sum, transaction) => sum + transaction.amount, 0);
+  const refunded = refunds.reduce((sum, transaction) => sum + transaction.amount, 0);
   const collectedBusinessFees = deposits.reduce(
     (sum, transaction) =>
       transaction.businessFeeBasisPoints !== null &&
@@ -140,7 +152,8 @@ function getPaymentSummary(project: ProjectDetailData) {
     deposited,
     paidOut,
     fees,
-    escrow: Math.max(0, deposited - paidOut - fees),
+    refunded,
+    escrow: Math.max(0, deposited - paidOut - fees - refunded),
     deposit: deposits[0],
   };
 }
@@ -153,19 +166,28 @@ export function ProjectDetailView({
   canRespondForTeam = false,
 }: {
   project: ProjectDetailData;
-  role: "BUSINESS" | "STUDENT";
+  role: "BUSINESS" | "STUDENT" | "ADMIN";
   applicationId?: string;
   reviewState: ProjectReviewState | null;
   canRespondForTeam?: boolean;
 }) {
   const isBusiness = role === "BUSINESS";
+  const isAdmin = role === "ADMIN";
   const latestAgreementVersion = project.agreementVersions[0];
+  const latestAgreementRevision = project.changeRequests.find(
+    ({ kind }) => kind === "AGREEMENT_REVISION",
+  );
   const agreementSnapshot =
     latestAgreementVersion && !project.legacyTermsExempt
       ? readAgreementSnapshot(latestAgreementVersion)
       : undefined;
   const agreementTitle = agreementSnapshot?.title ?? project.title;
   const currentDate = new Date();
+  const effectivePauseSeconds = getEffectiveProjectPauseSeconds(
+    project.pausedAt,
+    project.pausedTotalSeconds,
+    currentDate,
+  );
   const summary = getPaymentSummary(project);
   const canEditAgreement =
     isBusiness &&
@@ -173,7 +195,7 @@ export function ProjectDetailView({
       ? ["AGREEING", "AWAITING_PAYMENT"].includes(project.status)
       : project.status === "AGREEING") &&
     project.transactions.every((transaction) => transaction.type !== "DEPOSIT");
-  const canCancel = ["AGREEING", "AWAITING_PAYMENT"].includes(project.status);
+  const canCancel = isBusiness && ["AGREEING", "AWAITING_PAYMENT"].includes(project.status);
   const isLegacyDeposit =
     summary.deposit !== undefined &&
     (summary.deposit.businessFeeBasisPoints === null ||
@@ -203,7 +225,7 @@ export function ProjectDetailView({
     <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-10">
       <Link
         className="text-sm font-semibold text-primary hover:underline"
-        href={isBusiness ? "/business/projects" : "/student/projects"}
+        href={isAdmin ? "/admin" : isBusiness ? "/business/projects" : "/student/projects"}
       >
         ← Dự án
       </Link>
@@ -279,11 +301,12 @@ export function ProjectDetailView({
         </section>
       )}
 
-      <section className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {[
           ["Giá trị dự án", formatCurrency(paymentBreakdown.totalAmount), ""],
           ["Đã nạp vào escrow", formatCurrency(summary.deposited), ""],
           ["Đã giải ngân cho nhóm", formatCurrency(summary.paidOut), ""],
+          ["Đã hoàn lại cho doanh nghiệp", formatCurrency(summary.refunded), ""],
           [
             "Tổng phí nền tảng đã ghi nhận",
             formatCurrency(summary.fees),
@@ -310,6 +333,11 @@ export function ProjectDetailView({
           <p className="mt-1 text-xs text-muted-foreground">
             Giá trị các mốc chưa giải ngân.
           </p>
+          {summary.refunded > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Đã hoàn lại {formatCurrency(summary.refunded)}; phụ phí doanh nghiệp 10% không hoàn.
+            </p>
+          )}
         </div>
         <p className="text-xl font-bold">{formatCurrency(summary.escrow)}</p>
       </section>
@@ -323,9 +351,9 @@ export function ProjectDetailView({
                 Đề nghị chỉnh sửa từ nhóm: {project.revisionNote}
               </p>
             )}
-            {!project.legacyTermsExempt && project.changeRequests[0]?.status === "OPEN" && (
+            {!project.legacyTermsExempt && latestAgreementRevision?.status === "OPEN" && (
               <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
-                Đề nghị chỉnh sửa từ nhóm: {project.changeRequests[0].reason}
+                Đề nghị chỉnh sửa từ nhóm: {latestAgreementRevision.reason}
               </p>
             )}
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -397,7 +425,7 @@ export function ProjectDetailView({
               </div>
             ) : null}
 
-            {project.legacyTermsExempt && project.status === "AGREEING" && (
+            {project.legacyTermsExempt && project.status === "AGREEING" && !isAdmin && (
               <div className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2">
                 {project.revisionNote ? (
                   <p className="text-sm text-amber-900">
@@ -414,7 +442,7 @@ export function ProjectDetailView({
                     hiddenFields={{ projectId: project.id, response: "ACCEPT" }}
                   />
                 )}
-                {!isBusiness && (
+                {!isBusiness && !isAdmin && (
                   <ProjectActionForm
                     action={respondAgreementAction}
                     buttonClassName="rounded-lg border border-amber-400 px-4 py-2.5 text-sm font-semibold text-amber-900 disabled:opacity-60"
@@ -434,6 +462,7 @@ export function ProjectDetailView({
             )}
             {!project.legacyTermsExempt &&
               project.status === "AGREEING" &&
+              !isAdmin &&
               latestAgreementVersion?.status === "PENDING_TEAM" && (
                 <div className="mt-5 grid gap-4 border-t border-border pt-5 sm:grid-cols-2">
                   {canRespondForTeam ? (
@@ -475,6 +504,21 @@ export function ProjectDetailView({
               )}
           </section>
 
+          {!project.legacyTermsExempt && (
+            <ProjectChangeRequestPanel
+              canManage={
+                !isAdmin &&
+                project.status !== "CANCELLED" &&
+                project.status !== "COMPLETED" &&
+                (isBusiness || canRespondForTeam)
+              }
+              milestones={project.milestones.map(({ id, title, status }) => ({ id, title, status }))}
+              projectId={project.id}
+              requests={project.changeRequests}
+              role={isBusiness ? "BUSINESS" : "STUDENT"}
+            />
+          )}
+
           {canEditAgreement && applicationId && (
             <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
               <h2 className="text-lg font-semibold">
@@ -498,6 +542,11 @@ export function ProjectDetailView({
 
           <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
             <h2 className="text-lg font-semibold">Milestone và nghiệm thu</h2>
+            {!project.legacyTermsExempt && project.pausedAt && (
+              <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                Dự án đang tạm dừng. Tiến độ, bàn giao, nghiệm thu và giải ngân đang bị khóa.
+              </p>
+            )}
             <ol className="mt-4 space-y-4">
               {project.status === "AGREEING" && agreementSnapshot
                 ? agreementSnapshot.milestones.map((milestone, index) => {
@@ -538,16 +587,24 @@ export function ProjectDetailView({
                 const allocation = paymentBreakdown.milestones[index];
                   const overdue = project.legacyTermsExempt
                     ? null
-                    : getPaidMilestoneOverdueStatus(milestone, currentDate).status;
+                    : getPaidMilestoneOverdueStatus(
+                        milestone,
+                        currentDate,
+                        effectivePauseSeconds,
+                      ).status;
                   const currentOpenMilestone = project.legacyTermsExempt
                     ? project.milestones.find(({ status }) =>
                         ["IN_PROGRESS", "SUBMITTED", "REVISION_REQUESTED"].includes(status),
                       )
                     : project.milestones.find(
-                        ({ acceptanceStatus }) => acceptanceStatus !== "ACCEPTED",
+                        ({ acceptanceStatus, paymentStatus, status }) =>
+                          acceptanceStatus !== "ACCEPTED" &&
+                          !(status === "CANCELLED" && paymentStatus === "REFUNDED") &&
+                          status !== "DISPUTED",
                       );
                   const isCurrent =
                     project.status === "IN_PROGRESS" &&
+                    !project.pausedAt &&
                     currentOpenMilestone?.id === milestone.id;
                   const displayStatus =
                     overdue ??
@@ -587,7 +644,13 @@ export function ProjectDetailView({
                       <strong>Tiêu chí nghiệm thu:</strong> {milestone.acceptanceCriteria}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-                      <span>Hạn: {formatDate(milestone.dueAt)}</span>
+                      <span>
+                        Hạn: {formatDate(
+                          !project.legacyTermsExempt && milestone.dueAt
+                            ? new Date(milestone.dueAt.getTime() + effectivePauseSeconds * 1000)
+                            : milestone.dueAt,
+                        )}
+                      </span>
                       <span>Thanh toán: {milestone.paymentPercent}%</span>
                       <span>Giá trị Milestone: {formatCurrency(allocation?.grossAmount ?? milestone.amount ?? 0)}</span>
                       {isLegacyDeposit ? (
@@ -802,12 +865,15 @@ export function ProjectDetailView({
         </div>
 
         <aside className="space-y-4">
-          {!project.legacyTermsExempt && project.finalAcceptanceStatus !== "NOT_REQUESTED" && (
+          {!project.legacyTermsExempt &&
+            project.status !== "CANCELLED" &&
+            project.status !== "COMPLETED" &&
+            project.finalAcceptanceStatus !== "NOT_REQUESTED" && (
             <section className="rounded-2xl border border-primary/30 bg-card p-5">
               <h2 className="font-semibold">Nghiệm thu cuối cùng</h2>
               <p className="mt-2 text-sm text-muted-foreground">
                 {project.finalAcceptanceStatus === "AWAITING_FINAL_ACCEPTANCE"
-                  ? "Tất cả Milestone đã được nghiệm thu. Đang chờ doanh nghiệp xác nhận hoàn tất dự án."
+                  ? "Tất cả Milestone đã được nghiệm thu hoặc hủy và hoàn tiền. Đang chờ doanh nghiệp xác nhận hoàn tất dự án."
                   : project.finalAcceptanceStatus === "ACCEPTED"
                     ? `Đã xác nhận hoàn tất${project.finalAcceptedAt ? ` lúc ${formatDateTime(project.finalAcceptedAt)}` : ""}.`
                     : project.finalAcceptanceStatus}
@@ -886,9 +952,20 @@ export function ProjectDetailView({
                           <p className="text-sm font-semibold">
                             {transaction.type === "DEPOSIT"
                               ? "Nạp vào escrow"
-                              : `Giải ngân Milestone${releasedMilestone ? `: ${releasedMilestone.title}` : ""}`}
+                              : transaction.type === "REFUND"
+                                ? `Hoàn lại doanh nghiệp${releasedMilestone ? `: ${releasedMilestone.title}` : ""}`
+                                : `Giải ngân Milestone${releasedMilestone ? `: ${releasedMilestone.title}` : ""}`}
                           </p>
-                          {transactionUsesLegacyFees ? (
+                          {transaction.type === "REFUND" ? (
+                            <>
+                              <p className="mt-1 text-sm font-semibold">
+                                Số tiền hoàn: {formatCurrency(transaction.amount)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Không hoàn phụ phí doanh nghiệp đã ghi nhận; không phát sinh phí nhóm.
+                              </p>
+                            </>
+                          ) : transactionUsesLegacyFees ? (
                             <>
                               <p className="mt-1 text-sm">
                                 {transaction.type === "DEPOSIT" ? "Tổng nạp" : "Phần nhóm nhận"}:{" "}
@@ -937,7 +1014,13 @@ export function ProjectDetailView({
                             </>
                           )}
                           <p className="text-xs text-muted-foreground">
-                            {transaction.status === "ESCROW" ? "Đang giữ trong escrow giả lập" : "Đã ghi nhận"}
+                            {transaction.status === "ESCROW"
+                              ? "Đang giữ trong escrow giả lập"
+                              : transaction.status === "SETTLED"
+                                ? "Đã đối soát"
+                                : transaction.type === "REFUND"
+                                  ? "Đã hoàn trong mô phỏng"
+                                  : "Đã ghi nhận"}
                             {transaction.paidAt ? ` · ${formatDateTime(transaction.paidAt)}` : ""}
                           </p>
                         </>
@@ -951,7 +1034,7 @@ export function ProjectDetailView({
           {project.status === "COMPLETED" && (
             <>
               <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900">
-                Tất cả Milestone đã được nghiệm thu. Dự án và bài toán đã hoàn thành.
+                Tất cả Milestone đã được nghiệm thu hoặc hủy và hoàn tiền. Dự án và bài toán đã hoàn thành.
               </p>
               {reviewState && (
                 <ProjectReviewSection
