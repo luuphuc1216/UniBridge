@@ -6,6 +6,8 @@ import {
 } from "@/lib/business-attachments/config";
 import { validateAttachment } from "@/lib/business-attachments/validation";
 import { findAccessibleProject, getProjectTeamUserIds } from "@/lib/project-access";
+import { canRespondForTeam } from "@/lib/team-permissions";
+import { submitPaidMilestone } from "@/lib/project-milestone-workflow";
 import { prisma } from "@/lib/prisma";
 import { attachmentStorage } from "@/lib/storage";
 import {
@@ -39,12 +41,34 @@ export async function POST(
   }
 
   const activeMilestone = project.milestones.find(({ id }) => id === milestoneId);
+  if (!project.legacyTermsExempt) {
+    if (!canRespondForTeam(project.team.ownerId, session.user.id)) {
+      return Response.json({ error: "Chỉ chủ nhóm của dự án mới có thể nộp kết quả." }, { status: 403 });
+    }
+    if (
+      !activeMilestone ||
+      !["IN_PROGRESS", "NEEDS_REVISION"].includes(activeMilestone.status) ||
+      activeMilestone.acceptanceStatus === "AWAITING_ACCEPTANCE" ||
+      activeMilestone.paymentStatus !== "ESCROW" ||
+      project.milestones
+        .filter(({ sortOrder }) => sortOrder < activeMilestone.sortOrder)
+        .some(({ acceptanceStatus }) => acceptanceStatus !== "ACCEPTED") ||
+      project.milestones.find(
+        ({ acceptanceStatus }) => acceptanceStatus !== "ACCEPTED",
+      )?.id !== milestoneId
+    ) {
+      return Response.json({ error: "Milestone này chưa mở để nộp kết quả." }, { status: 409 });
+    }
+  }
   if (
-    !activeMilestone ||
-    !["IN_PROGRESS", "REVISION_REQUESTED"].includes(activeMilestone.status) ||
-    project.milestones
-      .filter(({ sortOrder }) => sortOrder < activeMilestone.sortOrder)
-      .some(({ status }) => status !== "ACCEPTED")
+    project.legacyTermsExempt &&
+    (
+      !activeMilestone ||
+      !["IN_PROGRESS", "REVISION_REQUESTED"].includes(activeMilestone.status) ||
+      project.milestones
+        .filter(({ sortOrder }) => sortOrder < activeMilestone.sortOrder)
+        .some(({ status }) => status !== "ACCEPTED")
+    )
   ) {
     return Response.json({ error: "Milestone này chưa mở để nộp kết quả." }, { status: 409 });
   }
@@ -78,6 +102,28 @@ export async function POST(
       const storageKey = randomUUID();
       storedKeys.push(storageKey);
       await attachmentStorage.save(storageKey, file.content);
+    }
+
+    if (!project.legacyTermsExempt) {
+      const submissionFiles = validatedFiles.map((file, index) => {
+        const storageKey = storedKeys[index];
+        if (!storageKey) throw new Error("Không thể liên kết tệp bàn giao đã tải lên.");
+        return {
+          originalName: file.originalName,
+          contentType: file.contentType,
+          sizeBytes: file.sizeBytes,
+          storageKey,
+        };
+      });
+      await submitPaidMilestone(prisma, {
+        projectId: project.id,
+        milestoneId,
+        actorUserId: session.user.id,
+        note,
+        links,
+        files: submissionFiles,
+      });
+      return Response.json({ success: "Đã nộp kết quả Milestone." });
     }
 
     await prisma.$transaction(async (transaction) => {

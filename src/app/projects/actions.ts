@@ -4,12 +4,10 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import {
   businessFeeRate,
-  legacyPlatformFeeRate,
   studentFeeRate,
 } from "@/lib/project-config";
 import { findAccessibleProject, getProjectTeamUserIds } from "@/lib/project-access";
 import {
-  calculateLegacyProjectFinancialBreakdown,
   calculateProjectFinancialBreakdown,
   getMilestoneReleaseIdempotencyKey,
   shouldRecordMilestoneRelease,
@@ -18,6 +16,13 @@ import {
   assertBusinessCanDeposit,
   recordProjectDeposit,
 } from "@/lib/project-deposits";
+import {
+  acceptLegacyMilestone,
+  acceptPaidMilestone,
+  acceptProjectFinalCompletion,
+  requestPaidMilestoneRevision,
+  updatePaidMilestoneProgress,
+} from "@/lib/project-milestone-workflow";
 import {
   createProjectWithFirstAgreementVersion,
   getAgreementResponseMode,
@@ -573,12 +578,23 @@ export async function updateMilestoneProgressAction(
   const projectId = readText(formData, "projectId");
   const milestoneId = readText(formData, "milestoneId");
   const progressNote = readText(formData, "progressNote");
-  if (!progressNote || progressNote.length > 4000) {
-    return { error: "Cập nhật tiến độ cần có nội dung, tối đa 4.000 ký tự." };
-  }
-
   try {
     const { session, project } = await requireProject(projectId);
+    if (!project.legacyTermsExempt) {
+      await updatePaidMilestoneProgress(prisma, {
+        projectId,
+        milestoneId,
+        actorUserId: session.user.id,
+        progressPercent: Number(readText(formData, "progressPercent")),
+        workCompleted: readText(formData, "workCompleted"),
+        difficulties: readText(formData, "difficulties"),
+      });
+      revalidateProject(projectId, project.application.problem.id);
+      return { error: null, success: "Đã cập nhật tiến độ Milestone." };
+    }
+    if (!progressNote || progressNote.length > 4000) {
+      return { error: "Cập nhật tiến độ cần có nội dung, tối đa 4.000 ký tự." };
+    }
     if (session.user.role !== "STUDENT" || project.status !== "IN_PROGRESS") {
       throw new Error("Chỉ nhóm được chọn mới có thể cập nhật tiến độ dự án đang thực hiện.");
     }
@@ -621,6 +637,19 @@ export async function requestMilestoneRevisionAction(
   }
   try {
     const { session, project } = await requireProject(projectId);
+    if (!project.legacyTermsExempt) {
+      if (session.user.role !== "BUSINESS") {
+        throw new Error("Chỉ doanh nghiệp sở hữu mới có thể phản hồi Milestone.");
+      }
+      await requestPaidMilestoneRevision(prisma, {
+        projectId,
+        milestoneId,
+        actorUserId: session.user.id,
+        feedback,
+      });
+      revalidateProject(projectId, project.application.problem.id);
+      return { error: null, success: "Đã gửi yêu cầu chỉnh sửa cho nhóm." };
+    }
     if (session.user.role !== "BUSINESS" || project.status !== "IN_PROGRESS") {
       throw new Error("Chỉ doanh nghiệp sở hữu mới có thể phản hồi Milestone.");
     }
@@ -671,160 +700,30 @@ export async function acceptMilestoneAction(
       throw new Error("Chỉ doanh nghiệp sở hữu dự án mới có thể nghiệm thu.");
     }
     authorizedBusiness = true;
-    const milestone = project.milestones.find(({ id }) => id === milestoneId);
-    if (!milestone) throw new Error("Không tìm thấy Milestone.");
-    const releaseKey = getMilestoneReleaseIdempotencyKey(milestoneId);
-    await prisma.$transaction(async (transaction) => {
-      const existingRelease = await transaction.projectTransaction.findUnique({
-        where: { idempotencyKey: releaseKey },
+    if (!project.legacyTermsExempt) {
+      const result = await acceptPaidMilestone(prisma, {
+        projectId,
+        milestoneId,
+        actorUserId: session.user.id,
       });
-      if (!shouldRecordMilestoneRelease(existingRelease)) return;
-
-      const current = await transaction.project.findUnique({
-        where: { id: projectId },
-        include: {
-          milestones: { orderBy: { sortOrder: "asc" } },
-          transactions: { where: { type: "DEPOSIT", status: "ESCROW" } },
-        },
-      });
-      if (!current || current.status !== "IN_PROGRESS") {
-        throw new Error("Dự án hiện không thể nghiệm thu Milestone.");
-      }
-      const currentMilestone = current.milestones.find(({ id }) => id === milestoneId);
-      if (!currentMilestone || currentMilestone.status !== "SUBMITTED") {
-        throw new Error("Milestone chưa được nộp hoặc đã được xử lý.");
-      }
-      if (
-        current.milestones
-          .filter(({ sortOrder }) => sortOrder < currentMilestone.sortOrder)
-          .some(({ status }) => status !== "ACCEPTED")
-      ) {
-        throw new Error("Cần nghiệm thu Milestone trước đó theo đúng thứ tự.");
-      }
-      const deposit = current.transactions[0];
-      if (!deposit) throw new Error("Không tìm thấy khoản nạp escrow.");
-      const usesLegacyFees =
-        deposit.businessFeeBasisPoints === null ||
-        deposit.studentFeeBasisPoints === null;
-      const breakdown =
-        deposit.businessFeeBasisPoints === null ||
-        deposit.studentFeeBasisPoints === null
-          ? calculateLegacyProjectFinancialBreakdown(
-            current.totalAmount,
-            current.milestones.map(({ paymentPercent }) => paymentPercent),
-            legacyPlatformFeeRate,
-            )
-          : calculateProjectFinancialBreakdown(
-            current.totalAmount,
-            current.milestones.map(({ paymentPercent }) => paymentPercent),
-            deposit.businessFeeBasisPoints,
-            deposit.studentFeeBasisPoints,
-            );
-      const allocation = breakdown.milestones[currentMilestone.sortOrder];
-      if (!allocation) throw new Error("Không tính được phần tiền của Milestone.");
-
-      const accepted = await transaction.milestone.updateMany({
-        where: { id: milestoneId, projectId, status: "SUBMITTED" },
-        data: { status: "ACCEPTED", acceptedAt: new Date() },
-      });
-      if (accepted.count !== 1) throw new Error("Milestone đã được nghiệm thu trước đó.");
-
-      await transaction.projectTransaction.create({
-        data: {
-          projectId,
-          milestoneId,
-          idempotencyKey: releaseKey,
-          type: "MILESTONE_RELEASE",
-          amount: allocation.teamAmount,
-          platformFee: usesLegacyFees ? allocation.platformFee : allocation.studentFee,
-          platformFeeBasisPoints: usesLegacyFees
-            ? breakdown.platformFeeBasisPoints
-            : deposit.studentFeeBasisPoints ?? studentFeeRate,
-          businessFeeBasisPoints: usesLegacyFees
-            ? null
-            : deposit.businessFeeBasisPoints,
-          studentFeeBasisPoints: usesLegacyFees
-            ? null
-            : deposit.studentFeeBasisPoints,
-          businessFee: usesLegacyFees ? null : allocation.businessFee,
-          status: "RELEASED",
-          paidAt: new Date(),
-        },
-      });
-
-      const allAccepted = current.milestones.every(
-        ({ id, status }) => id === milestoneId || status === "ACCEPTED",
-      );
-      const recipients = projectRecipients(project);
-      if (allAccepted) {
-        const escrowClosed = await transaction.projectTransaction.updateMany({
-          where: {
-            id: deposit.id,
-            type: "DEPOSIT",
-            status: "ESCROW",
-          },
-          data: { status: "RELEASED" },
-        });
-        const completed = await transaction.project.updateMany({
-          where: { id: projectId, status: "IN_PROGRESS" },
-          data: { status: "COMPLETED", completedAt: new Date() },
-        });
-        const problemCompleted = await transaction.problem.updateMany({
-          where: {
-            id: project.application.problem.id,
-            status: "READY_FOR_IMPLEMENTATION",
-          },
-          data: { status: "COMPLETED" },
-        });
-        if (escrowClosed.count !== 1 || completed.count !== 1 || problemCompleted.count !== 1) {
-          throw new Error("Không thể hoàn tất đồng bộ dự án và bài toán.");
-        }
-        await transaction.notification.createMany({
-          data: [
-            {
-              userId: recipients.businessUserId,
-              title: "Dự án hoàn tất — hãy đánh giá đối tác",
-              message: `Tất cả Milestone của dự án “${project.title}” đã được nghiệm thu. Hãy gửi đánh giá hợp tác trên UniBridge.`,
-              href: `/business/projects/${projectId}`,
-            },
-            ...recipients.teamUserIds.map((userId) => ({
-              userId,
-              title: "Dự án hoàn tất — hãy đánh giá đối tác",
-              message: `Tất cả Milestone của dự án “${project.title}” đã được nghiệm thu. Hãy gửi đánh giá hợp tác trên UniBridge.`,
-              href: `/student/projects/${projectId}`,
-            })),
-          ],
-        });
-      } else {
-        const nextMilestone = current.milestones.find(
-          ({ sortOrder }) => sortOrder > currentMilestone.sortOrder,
-        );
-        if (!nextMilestone) throw new Error("Thứ tự Milestone không hợp lệ.");
-        const opened = await transaction.milestone.updateMany({
-          where: { id: nextMilestone.id, status: "PENDING" },
-          data: { status: "IN_PROGRESS" },
-        });
-        if (opened.count !== 1) throw new Error("Không thể mở Milestone kế tiếp.");
-        await transaction.notification.createMany({
-          data: [
-            {
-              userId: recipients.businessUserId,
-              title: "Đã nghiệm thu Milestone",
-              message: `Milestone “${currentMilestone.title}” đã được nghiệm thu; đã ghi nhận phần giải ngân giả lập.`,
-              href: `/business/projects/${projectId}`,
-            },
-            ...recipients.teamUserIds.map((userId) => ({
-              userId,
-              title: "Milestone được nghiệm thu",
-              message: `Milestone “${currentMilestone.title}” đã được nghiệm thu; Milestone tiếp theo đã mở.`,
-              href: `/student/projects/${projectId}`,
-            })),
-          ],
-        });
-      }
-    });
+      revalidateProject(projectId, project.application.problem.id);
+      return {
+        error: null,
+        success: result.alreadyAccepted
+          ? "Milestone này đã được nghiệm thu và giải ngân trước đó."
+          : result.finalAcceptancePending
+            ? "Đã nghiệm thu Milestone. Dự án đang chờ nghiệm thu cuối cùng."
+            : "Đã nghiệm thu Milestone và ghi nhận giải ngân giả lập.",
+      };
+    }
+    const result = await acceptLegacyMilestone(prisma, { projectId, milestoneId });
     revalidateProject(projectId, project.application.problem.id);
-    return { error: null, success: "Đã nghiệm thu Milestone và ghi nhận giải ngân giả lập." };
+    return {
+      error: null,
+      success: result.alreadyAccepted
+        ? "Milestone này đã được nghiệm thu và giải ngân trước đó."
+        : "Đã nghiệm thu Milestone và ghi nhận giải ngân giả lập.",
+    };
   } catch (error) {
     if (authorizedBusiness) {
       const existingRelease = await prisma.projectTransaction.findUnique({
@@ -836,6 +735,36 @@ export async function acceptMilestoneAction(
         return { error: null, success: "Milestone này đã được nghiệm thu và giải ngân trước đó." };
       }
     }
+
     return getActionError(error, "Nghiệm thu Milestone");
+  }
+}
+
+export async function acceptProjectFinalCompletionAction(
+  _previousState: ProjectActionState,
+  formData: FormData,
+): Promise<ProjectActionState> {
+  const projectId = readText(formData, "projectId");
+  try {
+    const { session, project } = await requireProject(projectId);
+    if (session.user.role !== "BUSINESS") {
+      throw new Error("Chỉ doanh nghiệp sở hữu dự án mới có thể xác nhận hoàn tất.");
+    }
+    if (project.legacyTermsExempt) {
+      throw new Error("Dự án legacy giữ nguyên luồng nghiệm thu hiện tại.");
+    }
+    const result = await acceptProjectFinalCompletion(prisma, {
+      projectId,
+      actorUserId: session.user.id,
+    });
+    revalidateProject(projectId, project.application.problem.id);
+    return {
+      error: null,
+      success: result.alreadyCompleted
+        ? "Dự án đã được xác nhận hoàn tất trước đó."
+        : "Đã xác nhận nghiệm thu cuối cùng. Dự án đã hoàn tất.",
+    };
+  } catch (error) {
+    return getActionError(error, "Nghiệm thu cuối cùng");
   }
 }

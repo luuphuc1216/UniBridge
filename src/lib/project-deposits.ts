@@ -14,6 +14,7 @@ import {
   type AgreementSnapshot,
 } from "@/lib/project-agreements";
 import { getProjectTeamUserIds } from "@/lib/project-access";
+import { transitionPaidMilestone } from "@/lib/project-milestone-workflow";
 
 type DepositDatabase = Pick<PrismaClient, "$transaction" | "projectTransaction">;
 
@@ -176,11 +177,35 @@ export async function recordProjectDeposit(
       if (changed.count !== 1) throw new Error("Dự án đã được nạp tiền.");
       const firstMilestone = project.milestones[0];
       if (!firstMilestone) throw new Error("Dự án chưa có Milestone.");
-      const opened = await transaction.milestone.updateMany({
-        where: { id: firstMilestone.id, projectId, status: "PENDING" },
-        data: { status: "IN_PROGRESS" },
-      });
-      if (opened.count !== 1) throw new Error("Không thể mở Milestone đầu tiên.");
+      if (acceptedSnapshot) {
+        for (const milestone of project.milestones) {
+          await transitionPaidMilestone(transaction, {
+            projectId,
+            milestone,
+            acceptanceStatus: "NOT_SUBMITTED",
+            paymentStatus: "ESCROW",
+            started: false,
+          });
+        }
+        await transaction.projectWorkflowEvent.create({
+          data: {
+            projectId,
+            actorUserId: project.application.problem.businessProfile.userId,
+            eventType: "PROJECT_DEPOSIT_RECORDED",
+            fromStatus: "AWAITING_PAYMENT",
+            toStatus: "IN_PROGRESS",
+            detailsJson: JSON.stringify({ transactionId: idempotencyKey }),
+            idempotencyKey: `project-deposit:${projectId}`,
+            createdAt: now,
+          },
+        });
+      } else {
+        const opened = await transaction.milestone.updateMany({
+          where: { id: firstMilestone.id, projectId, status: "PENDING" },
+          data: { status: "IN_PROGRESS" },
+        });
+        if (opened.count !== 1) throw new Error("Không thể mở Milestone đầu tiên.");
+      }
 
       await transaction.projectTransaction.create({
         data: {

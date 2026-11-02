@@ -56,6 +56,10 @@ export async function findAccessibleProject(
       milestones: {
         orderBy: { sortOrder: "asc" },
         include: {
+          progressUpdates: {
+            orderBy: { createdAt: "desc" },
+            include: { createdBy: { select: { name: true } } },
+          },
           submissions: {
             orderBy: { createdAt: "desc" },
             include: {

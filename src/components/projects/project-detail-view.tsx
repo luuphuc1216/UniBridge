@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  acceptProjectFinalCompletionAction,
   acceptMilestoneAction,
   cancelProjectAction,
   depositProjectAction,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/project-money";
 import { readAgreementSnapshot, type AgreementSnapshot } from "@/lib/project-agreements";
 import { getStoredMilestoneSubmissionLinks } from "@/lib/milestone-submission-validation";
+import { getPaidMilestoneOverdueStatus } from "@/lib/project-milestone-workflow";
 import type { findAccessibleProject } from "@/lib/project-access";
 import type { ProjectReviewState } from "@/lib/reputation-data";
 
@@ -36,13 +38,30 @@ const projectStatusLabels: Record<string, string> = {
   COMPLETED: "Đã hoàn thành",
   CANCELLED: "Đã hủy",
 };
+const acceptanceStatusLabels: Record<string, string> = {
+  NOT_SUBMITTED: "Chưa nộp",
+  AWAITING_ACCEPTANCE: "Chờ nghiệm thu",
+  NEEDS_REVISION: "Cần chỉnh sửa",
+  ACCEPTED: "Đã nghiệm thu",
+};
 
 const milestoneStatusLabels: Record<string, string> = {
+  NOT_STARTED: "Chưa bắt đầu",
   PENDING: "Chưa mở",
   IN_PROGRESS: "Đang thực hiện",
+  AWAITING_ACCEPTANCE: "Chờ nghiệm thu",
+  NEEDS_REVISION: "Cần chỉnh sửa",
+  OVERDUE: "Quá hạn",
+  AWAITING_RESPONSE_OVERDUE: "Chờ xử lý quá hạn phản hồi",
   SUBMITTED: "Chờ nghiệm thu",
   ACCEPTED: "Đã nghiệm thu",
   REVISION_REQUESTED: "Cần chỉnh sửa",
+};
+
+const paymentStatusLabels: Record<string, string> = {
+  UNFUNDED: "Chưa nạp",
+  ESCROW: "Đang giữ trong escrow",
+  RELEASED: "Đã giải ngân giả lập",
 };
 
 function formatCurrency(amount: number): string {
@@ -146,6 +165,7 @@ export function ProjectDetailView({
       ? readAgreementSnapshot(latestAgreementVersion)
       : undefined;
   const agreementTitle = agreementSnapshot?.title ?? project.title;
+  const currentDate = new Date();
   const summary = getPaymentSummary(project);
   const canEditAgreement =
     isBusiness &&
@@ -261,14 +281,21 @@ export function ProjectDetailView({
 
       <section className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Giá trị dự án", formatCurrency(paymentBreakdown.totalAmount)],
-          ["Đã nạp vào escrow", formatCurrency(summary.deposited)],
-          ["Đã giải ngân cho nhóm", formatCurrency(summary.paidOut)],
-          ["Tổng phí nền tảng đã ghi nhận", formatCurrency(summary.fees)],
-        ].map(([label, value]) => (
+          ["Giá trị dự án", formatCurrency(paymentBreakdown.totalAmount), ""],
+          ["Đã nạp vào escrow", formatCurrency(summary.deposited), ""],
+          ["Đã giải ngân cho nhóm", formatCurrency(summary.paidOut), ""],
+          [
+            "Tổng phí nền tảng đã ghi nhận",
+            formatCurrency(summary.fees),
+            "Gồm phụ phí doanh nghiệp 10% ghi nhận lúc nạp và phí nhóm 5% ghi nhận khi giải ngân.",
+          ],
+        ].map(([label, value, description]) => (
           <article className="rounded-xl border border-border bg-card p-4" key={label}>
             <p className="text-sm text-muted-foreground">{label}</p>
             <p className="mt-1 text-lg font-bold">{value}</p>
+            {description && (
+              <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+            )}
           </article>
         ))}
       </section>
@@ -279,6 +306,9 @@ export function ProjectDetailView({
             {isLegacyDeposit
               ? "Áp dụng phí cũ 15% · Giữ nguyên đến khi dự án hoàn tất."
               : `Phụ phí doanh nghiệp ${(paymentBreakdown.businessFeeBasisPoints ?? 0) / 100}% · Phí nhóm ${(paymentBreakdown.studentFeeBasisPoints ?? 0) / 100}% · Tỷ lệ được chụp tại thời điểm nạp.`}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Giá trị các mốc chưa giải ngân.
           </p>
         </div>
         <p className="text-xl font-bold">{formatCurrency(summary.escrow)}</p>
@@ -506,10 +536,42 @@ export function ProjectDetailView({
                   })
                 : project.milestones.map((milestone, index) => {
                 const allocation = paymentBreakdown.milestones[index];
-                const isCurrent =
-                  project.status === "IN_PROGRESS" &&
-                  ["IN_PROGRESS", "SUBMITTED", "REVISION_REQUESTED"].includes(milestone.status);
-                return (
+                  const overdue = project.legacyTermsExempt
+                    ? null
+                    : getPaidMilestoneOverdueStatus(milestone, currentDate).status;
+                  const currentOpenMilestone = project.legacyTermsExempt
+                    ? project.milestones.find(({ status }) =>
+                        ["IN_PROGRESS", "SUBMITTED", "REVISION_REQUESTED"].includes(status),
+                      )
+                    : project.milestones.find(
+                        ({ acceptanceStatus }) => acceptanceStatus !== "ACCEPTED",
+                      );
+                  const isCurrent =
+                    project.status === "IN_PROGRESS" &&
+                    currentOpenMilestone?.id === milestone.id;
+                  const displayStatus =
+                    overdue ??
+                    (!project.legacyTermsExempt && milestone.status === "PENDING"
+                      ? "NOT_STARTED"
+                      : milestone.status);
+                  const hasMilestoneRelease = project.transactions.some(
+                    (transaction) =>
+                      transaction.type === "MILESTONE_RELEASE" &&
+                      transaction.milestoneId === milestone.id,
+                  );
+                  const displayPaymentStatus =
+                    !project.legacyTermsExempt && hasMilestoneRelease
+                      ? "RELEASED"
+                      : !project.legacyTermsExempt &&
+                          milestone.paymentStatus === "UNFUNDED" &&
+                          project.transactions.some(
+                            (transaction) =>
+                              transaction.type === "DEPOSIT" &&
+                              transaction.status === "ESCROW",
+                          )
+                        ? "ESCROW"
+                        : milestone.paymentStatus;
+                  return (
                   <li className="rounded-xl border border-border p-4" key={milestone.id}>
                     <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
                       <div>
@@ -517,7 +579,7 @@ export function ProjectDetailView({
                         <h3 className="mt-1 font-semibold">{milestone.title}</h3>
                       </div>
                       <span className="w-fit rounded-full bg-muted px-3 py-1 text-xs font-semibold">
-                        {milestoneStatusLabels[milestone.status] ?? milestone.status}
+                        {milestoneStatusLabels[displayStatus] ?? displayStatus}
                       </span>
                     </div>
                     <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{milestone.description}</p>
@@ -537,11 +599,63 @@ export function ProjectDetailView({
                         </>
                       )}
                       <span>Nhóm nhận ròng: {formatCurrency(allocation?.teamAmount ?? 0)}</span>
+                      {!project.legacyTermsExempt && (
+                        <>
+                          <span>
+                            Tiến độ: {milestone.progressPercent}%
+                          </span>
+                          <span>
+                            Thanh toán: {paymentStatusLabels[displayPaymentStatus] ?? displayPaymentStatus}
+                          </span>
+                          <span>
+                            Chỉnh sửa: {milestone.revisionCount}
+                            {agreementSnapshot
+                              ? `/${agreementSnapshot.maxMilestoneRevisions}`
+                              : ""}
+                          </span>
+                        </>
+                      )}
                     </div>
+                    {!project.legacyTermsExempt && (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Nghiệm thu: {acceptanceStatusLabels[milestone.acceptanceStatus] ?? milestone.acceptanceStatus}
+                      </p>
+                    )}
+                    {milestone.workCompleted && (
+                      <p className="mt-3 whitespace-pre-wrap rounded-lg bg-muted/60 p-3 text-sm">
+                        <strong>Công việc đã làm:</strong> {milestone.workCompleted}
+                      </p>
+                    )}
+                    {milestone.difficulties && (
+                      <p className="mt-2 whitespace-pre-wrap rounded-lg bg-muted/60 p-3 text-sm">
+                        <strong>Khó khăn:</strong> {milestone.difficulties}
+                      </p>
+                    )}
                     {milestone.progressNote && (
                       <p className="mt-3 rounded-lg bg-muted/60 p-3 text-sm">
                         <strong>Cập nhật tiến độ:</strong> {milestone.progressNote}
                       </p>
+                    )}
+                    {milestone.progressUpdates.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        <h4 className="text-sm font-semibold">Lịch sử tiến độ</h4>
+                        {milestone.progressUpdates.map((update) => (
+                          <article className="rounded-lg bg-muted/50 p-3" key={update.id}>
+                            <p className="text-xs text-muted-foreground">
+                              {update.createdBy.name} · {formatDateTime(update.createdAt)} ·{" "}
+                              {update.progressPercent}%
+                            </p>
+                            <p className="mt-1 whitespace-pre-wrap text-sm">
+                              {update.workCompleted}
+                            </p>
+                            {update.difficulties && (
+                              <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                                Khó khăn: {update.difficulties}
+                              </p>
+                            )}
+                          </article>
+                        ))}
+                      </div>
                     )}
                     {milestone.revisionFeedback && (
                       <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
@@ -595,7 +709,10 @@ export function ProjectDetailView({
                       </div>
                     )}
 
-                    {isCurrent && !isBusiness && ["IN_PROGRESS", "REVISION_REQUESTED"].includes(milestone.status) && (
+                    {isCurrent && !isBusiness && canRespondForTeam &&
+                      (project.legacyTermsExempt
+                        ? ["IN_PROGRESS", "REVISION_REQUESTED"].includes(milestone.status)
+                        : ["PENDING", "NOT_STARTED", "IN_PROGRESS", "NEEDS_REVISION"].includes(milestone.status)) && (
                       <>
                         <ProjectActionForm
                           action={updateMilestoneProgressAction}
@@ -603,18 +720,58 @@ export function ProjectDetailView({
                           buttonLabel="Cập nhật tiến độ"
                           hiddenFields={{ projectId: project.id, milestoneId: milestone.id }}
                         >
-                          <textarea
-                            className="min-h-20 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
-                            maxLength={4000}
-                            name="progressNote"
-                            placeholder="Cập nhật tình hình thực hiện"
-                            required
-                          />
+                          {project.legacyTermsExempt ? (
+                            <textarea
+                              className="min-h-20 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                              maxLength={4000}
+                              name="progressNote"
+                              placeholder="Cập nhật tình hình thực hiện"
+                              required
+                            />
+                          ) : (
+                            <>
+                              <label className="block text-sm font-medium">
+                                Tiến độ (%)
+                                <input
+                                  className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2.5"
+                                  max={100}
+                                  min={0}
+                                  name="progressPercent"
+                                  required
+                                  type="number"
+                                />
+                              </label>
+                              <label className="block text-sm font-medium">
+                                Công việc đã làm
+                                <textarea
+                                  className="mt-1.5 min-h-20 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                                  maxLength={10_000}
+                                  name="workCompleted"
+                                  required
+                                />
+                              </label>
+                              <label className="block text-sm font-medium">
+                                Khó khăn
+                                <textarea
+                                  className="mt-1.5 min-h-16 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                                  maxLength={4_000}
+                                  name="difficulties"
+                                />
+                              </label>
+                            </>
+                          )}
                         </ProjectActionForm>
-                        <MilestoneSubmissionForm milestoneId={milestone.id} />
+                        {(project.legacyTermsExempt
+                          ? ["IN_PROGRESS", "REVISION_REQUESTED"].includes(milestone.status)
+                          : ["IN_PROGRESS", "NEEDS_REVISION"].includes(milestone.status)) && (
+                          <MilestoneSubmissionForm milestoneId={milestone.id} />
+                        )}
                       </>
                     )}
-                    {isCurrent && isBusiness && milestone.status === "SUBMITTED" && (
+                    {isCurrent && isBusiness &&
+                      (project.legacyTermsExempt
+                        ? milestone.status === "SUBMITTED"
+                        : milestone.acceptanceStatus === "AWAITING_ACCEPTANCE") && (
                       <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
                         <ProjectActionForm
                           action={acceptMilestoneAction}
@@ -645,6 +802,28 @@ export function ProjectDetailView({
         </div>
 
         <aside className="space-y-4">
+          {!project.legacyTermsExempt && project.finalAcceptanceStatus !== "NOT_REQUESTED" && (
+            <section className="rounded-2xl border border-primary/30 bg-card p-5">
+              <h2 className="font-semibold">Nghiệm thu cuối cùng</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {project.finalAcceptanceStatus === "AWAITING_FINAL_ACCEPTANCE"
+                  ? "Tất cả Milestone đã được nghiệm thu. Đang chờ doanh nghiệp xác nhận hoàn tất dự án."
+                  : project.finalAcceptanceStatus === "ACCEPTED"
+                    ? `Đã xác nhận hoàn tất${project.finalAcceptedAt ? ` lúc ${formatDateTime(project.finalAcceptedAt)}` : ""}.`
+                    : project.finalAcceptanceStatus}
+              </p>
+              {isBusiness &&
+                project.finalAcceptanceStatus === "AWAITING_FINAL_ACCEPTANCE" && (
+                  <div className="mt-4">
+                    <ProjectActionForm
+                      action={acceptProjectFinalCompletionAction}
+                      buttonLabel="Xác nhận hoàn tất dự án"
+                      hiddenFields={{ projectId: project.id }}
+                    />
+                  </div>
+                )}
+            </section>
+          )}
           {project.status === "AWAITING_PAYMENT" && isBusiness && (
             <section className="rounded-2xl border border-primary/30 bg-card p-5">
               <h2 className="font-semibold">Nạp tiền vào escrow</h2>
