@@ -256,6 +256,7 @@ export async function getTeamReviewPage(
   const where = {
     reviewedTeamId: teamId,
     direction: businessToTeam,
+    hiddenByAdmin: false,
     project: visibleReviewFilter(now, teamToBusiness),
   };
   const totalCount = await prisma.review.count({ where });
@@ -310,6 +311,7 @@ export async function getBusinessReviewPage(
   const where = {
     reviewedBusinessProfileId: businessProfileId,
     direction: teamToBusiness,
+    hiddenByAdmin: false,
     project: visibleReviewFilter(now, businessToTeam),
   };
   const totalCount = await prisma.review.count({ where });
@@ -376,7 +378,11 @@ export async function getProjectReviewState(
   }
 
   const reviews = await prisma.review.findMany({
-    where: { projectId, direction: { in: [businessToTeam, teamToBusiness] } },
+    where: {
+      projectId,
+      direction: { in: [businessToTeam, teamToBusiness] },
+      hiddenByAdmin: false,
+    },
     orderBy: { createdAt: "asc" },
     select: {
       id: true,

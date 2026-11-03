@@ -34,7 +34,9 @@ export async function AdminNavigation() {
     <RoleNavigation
       links={[
         { href: "/admin", label: "Tổng quan" },
+        { href: "/admin/accounts", label: "Tài khoản" },
         { href: "/admin/problems", label: "Duyệt bài toán" },
+        { href: "/admin/reports", label: "Báo cáo vi phạm" },
         { href: "/admin/prototype-handoffs", label: "Kiểm tra bàn giao Prototype" },
       ]}
       tools={

@@ -43,6 +43,11 @@ async function LoginContent({ searchParams }: LoginPageProps) {
           Tiếp tục kết nối doanh nghiệp với những ý tưởng sinh viên.
         </p>
         <LoginForm callbackUrl={params.callbackUrl} />
+        <p className="mt-4 text-center text-sm">
+          <Link className="font-semibold text-primary hover:underline" href="/quen-mat-khau">
+            Quên mật khẩu?
+          </Link>
+        </p>
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Chưa có tài khoản?{" "}
           <Link className="font-semibold text-primary hover:underline" href="/dang-ky">

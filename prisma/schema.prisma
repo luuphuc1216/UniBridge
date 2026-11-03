@@ -13,6 +13,11 @@ model User {
   name                              String
   passwordHash                      String
   role                              String                      @default("STUDENT")
+  accountStatus                     String                      @default("ACTIVE")
+  authVersion                       Int                         @default(0)
+  lastLoginAt                       DateTime?
+  lockedAt                          DateTime?
+  lockReason                        String?
   createdAt                         DateTime                    @default(now())
   updatedAt                         DateTime                    @updatedAt
   businessProfile                   BusinessProfile?
@@ -41,6 +46,69 @@ model User {
   requestedProjectChanges           ProjectChangeRequest[]
   projectWorkflowEvents             ProjectWorkflowEvent[]
   projectSupportNotes               ProjectSupportNote[]
+  auditLogs                         AuditLog[]                  @relation("AuditLogActor")
+  reports                           Report[]                    @relation("ReportReporter")
+  handledReports                    Report[]                    @relation("ReportHandler")
+  passwordResetTokens               PasswordResetToken[]
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  targetType String
+  targetId   String
+  metadata   String   @default("{}")
+  createdAt  DateTime @default(now())
+  actor      User     @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([action, createdAt])
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId, createdAt])
+}
+
+model RateLimitBucket {
+  key             String   @id
+  count           Int      @default(0)
+  windowStartedAt DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@index([windowStartedAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model Report {
+  id               String    @id @default(cuid())
+  reporterId       String
+  handlerId        String?
+  targetType       String
+  targetId         String
+  snapshot         String
+  reason           String
+  status           String    @default("NEW")
+  resolutionReason String?
+  contentHidden    Boolean   @default(false)
+  openKey          String?   @unique
+  handledAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  reporter         User      @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  handler          User?     @relation("ReportHandler", fields: [handlerId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId, createdAt])
 }
 
 model BusinessProfile {
@@ -83,6 +151,7 @@ model StudentTeam {
   relevantProducts String                  @default("")
   achievements     String                  @default("")
   interests        String                  @default("")
+  hiddenByAdmin    Boolean                 @default(false)
   ratingAverage    Float                   @default(0)
   ratingCount      Int                     @default(0)
   createdAt        DateTime                @default(now())
@@ -141,6 +210,7 @@ model Problem {
   budgetMin                     Int?
   budgetMax                     Int?
   status                        String                  @default("PENDING_REVIEW")
+  hiddenByAdmin                 Boolean                 @default(false)
   reviewNote                    String?
   submittedAt                   DateTime?
   approvedAt                    DateTime?
@@ -394,6 +464,7 @@ model WorkspaceMessage {
   applicationId String?
   senderId      String
   content       String
+  hiddenByAdmin Boolean      @default(false)
   createdAt     DateTime     @default(now())
   problem       Problem      @relation(fields: [problemId], references: [id], onDelete: Cascade)
   application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
@@ -764,6 +835,7 @@ model Review {
   rating                    Float
   criteriaScores            String           @default("{}")
   content                   String
+  hiddenByAdmin             Boolean          @default(false)
   createdAt                 DateTime         @default(now())
   project                   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   reviewer                  User             @relation(fields: [reviewerId], references: [id], onDelete: Cascade)

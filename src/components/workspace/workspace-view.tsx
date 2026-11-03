@@ -31,6 +31,7 @@ import {
   proposalTypeOptions,
 } from "@/lib/workspace";
 import { FilePicker } from "@/components/uploads/file-picker";
+import { ReportContentButton } from "@/components/reports/report-content-button";
 import { canOpenPaidImplementationAgreement } from "@/lib/agreement-access";
 import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
 import type { WorkspacePrototypeOverdueStatus } from "@/lib/prototype-reminders";
@@ -936,6 +937,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
                   <time dateTime={message.createdAt.toISOString()}>{dateLabel(message.createdAt)}</time>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{message.content}</p>
+                <ReportContentButton targetType="MESSAGE" targetId={message.id} />
               </li>
             )) : (
               <li className="rounded-xl border border-dashed border-border p-5 text-center text-sm text-muted-foreground">

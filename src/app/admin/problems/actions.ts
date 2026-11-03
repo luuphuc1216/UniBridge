@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { requireAdmin } from "@/lib/admin-access";
+import { writeAuditLog } from "@/lib/audit-log";
 import { prisma } from "@/lib/prisma";
 import {
   getProblemReviewTransition,
@@ -33,10 +34,7 @@ export async function reviewProblemAction(
   _previousState: ReviewActionState,
   formData: FormData,
 ): Promise<ReviewActionState> {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") {
-    return { error: "Bạn không có quyền thực hiện thao tác này." };
-  }
+  const { userId } = await requireAdmin();
 
   const problemId = getText(formData, "problemId");
   const decision = getText(formData, "decision");
@@ -80,7 +78,7 @@ export async function reviewProblemAction(
         where: { id: problem.id, status: PROBLEM_REVIEWABLE_STATUS },
         data: {
           status: nextStatus,
-          reviewedById: session.user.id,
+          reviewedById: userId,
           reviewNote: approved ? null : reviewNote,
           approvedAt: approved ? now : null,
           ...(approved && !problem.firstApprovedAt ? { firstApprovedAt: now } : {}),
@@ -109,6 +107,17 @@ export async function reviewProblemAction(
               : `Bài toán “${problem.title}” cần được chỉnh sửa: ${reviewNote}`,
           href: `/business/problems/${problem.id}`,
         },
+      });
+      await writeAuditLog(transaction, {
+        actorId: userId,
+        action: approved
+          ? "PROBLEM_APPROVED"
+          : rejected
+            ? "PROBLEM_REJECTED"
+            : "PROBLEM_REVISION_REQUESTED",
+        targetType: "Problem",
+        targetId: problem.id,
+        metadata: { status: nextStatus },
       });
       return true;
     });

@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
-import { isAdminRole } from "@/lib/admin-access";
+import { requireAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { reviewProposalHandoff } from "@/lib/proposal-handoff";
 
@@ -26,10 +25,7 @@ export async function reviewProposalHandoffAction(
   _previousState: ProposalHandoffActionState,
   formData: FormData,
 ): Promise<ProposalHandoffActionState> {
-  const session = await auth();
-  if (!session?.user || !isAdminRole(session.user.role)) {
-    return { error: "Chỉ quản trị viên mới được kiểm tra bàn giao Proposal." };
-  }
+  const { userId } = await requireAdmin();
 
   const attemptId = readText(formData, "attemptId");
   const decision = readText(formData, "decision");
@@ -41,8 +37,8 @@ export async function reviewProposalHandoffAction(
     await prisma.$transaction((transaction) =>
       reviewProposalHandoff(transaction, {
         attemptId,
-        reviewerId: session.user.id,
-        reviewerRole: session.user.role,
+        reviewerId: userId,
+        reviewerRole: "ADMIN",
         decision,
         filesOrLinksComplete: readBoolean(formData, "filesOrLinksComplete"),
         withinTrialBriefScope: readBoolean(formData, "withinTrialBriefScope"),

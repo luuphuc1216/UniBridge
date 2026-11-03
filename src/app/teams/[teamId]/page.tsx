@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { ReputationSummary } from "@/components/reputation/reputation-summary";
 import { ReviewList, TeamHistory } from "@/components/reputation/review-list";
+import { ReportContentButton } from "@/components/reports/report-content-button";
 import { prisma } from "@/lib/prisma";
 import {
   getTeamHistory,
@@ -22,7 +23,7 @@ export default async function TeamProfilePage({
   if (!session?.user) redirect("/dang-nhap");
   const [{ teamId }, { page }] = await Promise.all([params, searchParams]);
   const team = await prisma.studentTeam.findFirst({
-    where: { OR: [{ id: teamId }, { slug: teamId }] },
+    where: { hiddenByAdmin: false, OR: [{ id: teamId }, { slug: teamId }] },
     select: {
       id: true,
       name: true,
@@ -89,6 +90,7 @@ export default async function TeamProfilePage({
             ))}
           </ul>
         </section>
+        <ReportContentButton targetType="TEAM" targetId={team.id} />
       </header>
       <ReputationSummary reputation={reputation} />
       <ReviewList basePath={`/teams/${team.id}`} reviewPage={reviewPage} />

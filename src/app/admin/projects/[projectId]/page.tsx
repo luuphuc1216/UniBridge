@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { auth } from "@/auth";
 import { ProjectActionForm } from "@/components/projects/project-action-form";
 import { ProjectDetailView } from "@/components/projects/project-detail-view";
 import {
@@ -7,6 +6,7 @@ import {
   resolveProjectDisputeForAdminAction,
 } from "@/app/projects/actions";
 import { findAccessibleProject } from "@/lib/project-access";
+import { requireAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 
 export const instant = false;
@@ -16,10 +16,9 @@ export default async function AdminProjectPage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") notFound();
+  const { userId } = await requireAdmin();
   const { projectId } = await params;
-  const project = await findAccessibleProject(projectId, session.user.id, session.user.role);
+  const project = await findAccessibleProject(projectId, userId, "ADMIN");
   if (!project) notFound();
   const supportNotes = await prisma.projectSupportNote.findMany({
     where: { projectId },
