@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReviewPage, TeamHistoryEntry } from "@/lib/reputation-data";
 import { reputationConfig } from "@/lib/reputation-config";
+import { ReportContentButton } from "@/components/reports/report-content-button";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(date);
@@ -79,6 +80,7 @@ export function ReviewList({
                 ))}
               </dl>
               <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{review.content}</p>
+              <ReportContentButton targetType="REVIEW" targetId={review.id} />
             </li>
           ))}
         </ul>

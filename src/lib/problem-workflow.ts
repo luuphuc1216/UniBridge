@@ -23,6 +23,7 @@ export const PROBLEM_REVIEWABLE_STATUS = "PENDING_REVIEW";
 export function getStudentDiscoverableProblemWhere(): Prisma.ProblemWhereInput {
   return {
     status: { in: [...STUDENT_DISCOVERABLE_PROBLEM_STATUSES] },
+    hiddenByAdmin: false,
     applications: { none: { status: "SELECTED" } },
   };
 }
@@ -32,6 +33,7 @@ export function getStudentRecommendationProblemWhere(
 ): Prisma.ProblemWhereInput {
   return {
     status: { in: [...PROBLEM_ACCEPTING_APPLICATION_STATUSES] },
+    hiddenByAdmin: false,
     AND: [
       { applications: { none: { status: "SELECTED" } } },
       {

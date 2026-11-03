@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
+import { writeAuditLog } from "@/lib/audit-log";
 import { canRespondForTeam } from "@/lib/team-permissions";
 import {
   projectReminderConfig,
@@ -1340,7 +1341,7 @@ export async function ensurePendingProjectChangeRequestReminders(
 }
 
 export async function createProjectSupportNote(
-  database: Pick<PrismaClient, "project" | "milestone" | "projectChangeRequest" | "projectSupportNote">,
+  database: Pick<PrismaClient, "$transaction">,
   {
     projectId,
     adminUserId,
@@ -1363,34 +1364,44 @@ export async function createProjectSupportNote(
   if (!note.trim() || note.length > 4_000) {
     throw new Error("Ghi chú hỗ trợ bắt buộc và tối đa 4.000 ký tự.");
   }
-  const project = await database.project.findUnique({
-    where: { id: projectId },
-    select: { id: true },
-  });
-  if (!project) throw new Error("Không tìm thấy dự án.");
-  if (milestoneId) {
-    const milestone = await database.milestone.findFirst({
-      where: { id: milestoneId, projectId },
+  return database.$transaction(async (transaction) => {
+    const project = await transaction.project.findUnique({
+      where: { id: projectId },
       select: { id: true },
     });
-    if (!milestone) throw new Error("Milestone không thuộc dự án.");
-  }
-  if (changeRequestId) {
-    const request = await database.projectChangeRequest.findFirst({
-      where: { id: changeRequestId, projectId },
-      select: { id: true },
+    if (!project) throw new Error("Không tìm thấy dự án.");
+    if (milestoneId) {
+      const milestone = await transaction.milestone.findFirst({
+        where: { id: milestoneId, projectId },
+        select: { id: true },
+      });
+      if (!milestone) throw new Error("Milestone không thuộc dự án.");
+    }
+    if (changeRequestId) {
+      const request = await transaction.projectChangeRequest.findFirst({
+        where: { id: changeRequestId, projectId },
+        select: { id: true },
+      });
+      if (!request) throw new Error("Yêu cầu thay đổi không thuộc dự án.");
+    }
+    const supportNote = await transaction.projectSupportNote.create({
+      data: {
+        projectId,
+        adminUserId,
+        note: note.trim(),
+        milestoneId: milestoneId ?? null,
+        changeRequestId: changeRequestId ?? null,
+        createdAt: now,
+      },
     });
-    if (!request) throw new Error("Yêu cầu thay đổi không thuộc dự án.");
-  }
-  return database.projectSupportNote.create({
-    data: {
-      projectId,
-      adminUserId,
-      note: note.trim(),
-      milestoneId: milestoneId ?? null,
-      changeRequestId: changeRequestId ?? null,
-      createdAt: now,
-    },
+    await writeAuditLog(transaction, {
+      actorId: adminUserId,
+      action: "PROJECT_SUPPORT_NOTE_ADDED",
+      targetType: "Project",
+      targetId: projectId,
+      metadata: { supportNoteId: supportNote.id },
+    });
+    return supportNote;
   });
 }
 
@@ -1505,6 +1516,13 @@ export async function resolveProjectDisputeForAdmin(
         idempotencyKey: `admin-dispute-support:${disputeRequestId}:${outcome}`,
         createdAt: now,
       },
+    });
+    await writeAuditLog(transaction, {
+      actorId: adminUserId,
+      action: `PROJECT_DISPUTE_SUPPORT_${outcome}`,
+      targetType: "Project",
+      targetId: projectId,
+      metadata: { disputeRequestId, restoredStatus },
     });
     return { outcome };
   });

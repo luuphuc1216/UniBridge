@@ -11,6 +11,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
+    "db:seed-admin-safety": "tsx prisma/seed-admin-safety.ts",
     "db:studio": "prisma studio",
     "jobs:expire": "tsx src/jobs/expire-invitations.ts",
     "test": "tsx --test src/lib/*.test.ts"

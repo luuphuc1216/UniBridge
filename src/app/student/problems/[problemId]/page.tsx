@@ -4,6 +4,7 @@ import { ApplicationForm } from "@/components/student/application-form";
 import { ApplicationWithdrawButton } from "@/components/student/application-withdraw-button";
 import { InvitationResponse } from "@/components/student/invitation-response";
 import { SavedProblemButton } from "@/components/student/saved-problem-button";
+import { ReportContentButton } from "@/components/reports/report-content-button";
 import { requireStudent } from "@/lib/student-access";
 import { getOwnedTeam, getTeamForUser } from "@/lib/student-team";
 import { prisma } from "@/lib/prisma";
@@ -54,6 +55,7 @@ export default async function StudentProblemDetailPage({
       id: problemId,
       OR: [
         {
+          hiddenByAdmin: false,
           status: { in: [...STUDENT_DISCOVERABLE_PROBLEM_STATUSES, "REJECTED"] },
         },
         {
@@ -130,6 +132,9 @@ export default async function StudentProblemDetailPage({
       <p className="mt-2 text-sm text-muted-foreground">
         {problem.businessProfile.companyName} · {problem.businessProfile.industry}
       </p>
+      {!problem.hiddenByAdmin && (
+        <ReportContentButton targetType="PROBLEM" targetId={problem.id} />
+      )}
       {workspaceStatusLabels[problem.status] && (
         <span className="mt-3 inline-flex rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
           {getPrototypeProblemStatusLabel(problem)}

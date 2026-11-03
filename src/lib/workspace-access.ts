@@ -1,5 +1,4 @@
 import type { PrismaClient } from "@/generated/prisma/client";
-import { prisma } from "@/lib/prisma";
 import {
   isWorkspaceMessageWritableApplicationStatus,
 } from "@/lib/problem-workflow";
@@ -14,9 +13,10 @@ export async function findAuthorizedWorkspace(
   userId: string,
   role: string,
   applicationId?: string,
-  database: WorkspaceDatabase = prisma,
+  database?: WorkspaceDatabase,
 ) {
-  const application = await database.application.findFirst({
+  const workspaceDatabase = database ?? (await import("@/lib/prisma")).prisma;
+  const application = await workspaceDatabase.application.findFirst({
     where: {
       ...(applicationId ? { id: applicationId } : { problemId }),
       problem: {
@@ -56,7 +56,7 @@ export async function findAuthorizedWorkspace(
 
   const pendingApplication =
     !application && !applicationId && role === "STUDENT"
-      ? await database.application.findFirst({
+      ? await workspaceDatabase.application.findFirst({
           where: {
             problemId,
             status: "PENDING_CONFIRMATION",
@@ -87,7 +87,7 @@ export async function findAuthorizedWorkspace(
   const resolvedApplication = application ?? pendingApplication;
   if (!resolvedApplication) return null;
 
-  const problem = await database.problem.findFirst({
+  const problem = await workspaceDatabase.problem.findFirst({
     where: {
       id: resolvedApplication.problemId,
     },
@@ -122,7 +122,7 @@ export async function findAuthorizedWorkspace(
     workspaceApplication.status === "SELECTED";
   const hideUnapprovedHandoffs = role === "BUSINESS" && !problem.prototypeLegacy;
   const proposals = canReadApplicationProposals
-    ? await database.proposal.findMany({
+    ? await workspaceDatabase.proposal.findMany({
         where: {
           applicationId: workspaceApplication.id,
           ...(hideUnapprovedHandoffs ? { handoffStatus: "APPROVED" } : {}),
@@ -151,7 +151,7 @@ export async function findAuthorizedWorkspace(
     : [];
   const trialBriefVersions =
     workspaceApplication.status === "SELECTED" || role === "BUSINESS"
-      ? await database.trialBriefVersion.findMany({
+      ? await workspaceDatabase.trialBriefVersion.findMany({
           where: { problemId: problem.id },
           orderBy: { version: "desc" },
           include: {
@@ -162,8 +162,9 @@ export async function findAuthorizedWorkspace(
           },
         })
       : [];
-  const workspaceMessages = await database.workspaceMessage.findMany({
+  const workspaceMessages = await workspaceDatabase.workspaceMessage.findMany({
     where: {
+      hiddenByAdmin: false,
       problemId,
       OR: [{ applicationId: workspaceApplication.id }, { applicationId: null }],
     },

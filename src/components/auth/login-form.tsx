@@ -28,7 +28,11 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
       });
 
       if (!result || result.error) {
-        setError("Email hoặc mật khẩu không chính xác.");
+        setError(
+          result?.code === "account-locked"
+            ? "Tài khoản của bạn đang bị khóa. Vui lòng liên hệ quản trị viên."
+            : "Email hoặc mật khẩu không chính xác.",
+        );
         return;
       }
 

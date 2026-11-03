@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
+import { requireAdmin } from "@/lib/admin-access";
 import {
   businessFeeRate,
   studentFeeRate,
@@ -343,18 +344,15 @@ export async function addProjectSupportNoteAction(
   _previousState: ProjectActionState,
   formData: FormData,
 ): Promise<ProjectActionState> {
+  const { userId } = await requireAdmin();
   const projectId = readText(formData, "projectId");
   try {
-    const session = await auth();
-    if (!session?.user || session.user.role !== "ADMIN") {
-      throw new Error("Chỉ Admin mới có thể ghi chú hỗ trợ.");
-    }
-    const project = await findAccessibleProject(projectId, session.user.id, session.user.role);
+    const project = await findAccessibleProject(projectId, userId, "ADMIN");
     if (!project) throw new Error("Không tìm thấy dự án.");
     await createProjectSupportNote(prisma, {
       projectId,
-      adminUserId: session.user.id,
-      actorRole: session.user.role,
+      adminUserId: userId,
+      actorRole: "ADMIN",
       note: readText(formData, "note"),
       milestoneId: readText(formData, "milestoneId") || undefined,
       changeRequestId: readText(formData, "changeRequestId") || undefined,
@@ -370,13 +368,10 @@ export async function resolveProjectDisputeForAdminAction(
   _previousState: ProjectActionState,
   formData: FormData,
 ): Promise<ProjectActionState> {
+  const { userId } = await requireAdmin();
   const projectId = readText(formData, "projectId");
   try {
-    const session = await auth();
-    if (!session?.user || session.user.role !== "ADMIN") {
-      throw new Error("Chỉ Admin mới có thể hỗ trợ bất đồng.");
-    }
-    const project = await findAccessibleProject(projectId, session.user.id, session.user.role);
+    const project = await findAccessibleProject(projectId, userId, "ADMIN");
     if (!project) throw new Error("Không tìm thấy dự án.");
     const outcome = readText(formData, "outcome");
     if (outcome !== "RESUME_WORK" && outcome !== "GUIDE_TERMINATION") {
@@ -385,8 +380,8 @@ export async function resolveProjectDisputeForAdminAction(
     await resolveProjectDisputeForAdmin(prisma, {
       projectId,
       disputeRequestId: readText(formData, "disputeRequestId"),
-      adminUserId: session.user.id,
-      actorRole: session.user.role,
+      adminUserId: userId,
+      actorRole: "ADMIN",
       outcome,
       reason: readText(formData, "reason"),
     });
