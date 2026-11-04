@@ -10,6 +10,7 @@ const validEnvironment = {
   EMAIL_PROVIDER: "resend",
   RESEND_API_KEY: "test-key",
   EMAIL_FROM: "UniBridge <no-reply@unibridge.id.vn>",
+  UPLOADS_DIR: "/srv/unibridge/uploads",
 };
 
 describe("production environment validation", () => {
@@ -27,6 +28,7 @@ describe("production environment validation", () => {
       "AUTH_URL",
       "AUTH_TRUST_HOST",
       "EMAIL_PROVIDER",
+      "UPLOADS_DIR",
     ] as const) {
       const environment = { ...validEnvironment };
       delete environment[name];
@@ -42,6 +44,15 @@ describe("production environment validation", () => {
         ),
       );
     }
+  });
+
+  it("rejects a relative uploads directory", () => {
+    assert.ok(
+      validateProductionEnvironment({
+        ...validEnvironment,
+        UPLOADS_DIR: "uploads",
+      }).errors.includes("UPLOADS_DIR"),
+    );
   });
 
   it("rejects a short or sample authentication secret", () => {

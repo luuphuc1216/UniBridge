@@ -30,6 +30,10 @@ export function validateProductionEnvironment(env) {
     errors.push("AUTH_SECRET");
   }
 
+  if (!env.UPLOADS_DIR || !isAbsolute(env.UPLOADS_DIR)) {
+    errors.push("UPLOADS_DIR");
+  }
+
   try {
     if (new URL(env.AUTH_URL ?? "").protocol !== "https:") {
       errors.push("AUTH_URL");
