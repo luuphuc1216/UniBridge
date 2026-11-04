@@ -17,6 +17,31 @@ const sqliteCheck = spawnSync("sh", ["-c", "command -v sqlite3"], {
 });
 const sqlitePath = sqliteCheck.status === 0 ? sqliteCheck.stdout.trim() : "";
 const scriptsDirectory = path.resolve(process.cwd(), "scripts");
+const ptyRunner = `
+import os
+import pty
+import select
+import sys
+
+child, terminal = pty.fork()
+if child == 0:
+    os.execvpe("sh", ["sh", sys.argv[1], sys.argv[2], "--apply"], os.environ)
+
+os.write(terminal, sys.stdin.buffer.read())
+output = bytearray()
+while True:
+    ready, _, _ = select.select([terminal], [], [], 0.1)
+    if ready:
+        try:
+            output.extend(os.read(terminal, 4096))
+        except OSError:
+            break
+    finished, status = os.waitpid(child, os.WNOHANG)
+    if finished:
+        break
+sys.stdout.buffer.write(output)
+sys.exit(os.waitstatus_to_exitcode(status))
+`;
 let temporaryRoot: string;
 
 async function createFixture(label: string) {
@@ -263,6 +288,72 @@ describe(
       assert.notEqual(apply.status, 0);
       assert.match(apply.stderr, /interactive terminal/);
       assert.deepEqual(await readFile(fixture.database), originalDatabase);
+    });
+
+    it("moves SQLite sidecars with the old database before applying a restore", async () => {
+      const fixture = await createFixture("restore-sidecars");
+      const backupResult = runBackup(fixture);
+      assert.equal(backupResult.status, 0, backupResult.stderr);
+      const [backupName] = await getBackupDirectories(fixture.backups);
+      assert.ok(backupName);
+      const backupPath = path.join(fixture.backups, backupName);
+      const environment = {
+        ...backupEnvironment(fixture),
+        RESTORE_STAGING_DIR: path.join(fixture.root, "apply-staging"),
+        RESTORE_SCRIPT: path.join(scriptsDirectory, "restore.sh"),
+        BACKUP_PATH: backupPath,
+      };
+      const wrapperDirectory = path.join(fixture.root, "bin");
+      await mkdir(wrapperDirectory);
+      for (const command of ["fuser", "lsof"]) {
+        await writeFile(path.join(wrapperDirectory, command), "#!/bin/sh\nexit 1\n", {
+          mode: 0o700,
+        });
+      }
+      const ptyEnvironment: NodeJS.ProcessEnv = {
+        ...environment,
+        PATH: `${wrapperDirectory}:${process.env.PATH ?? ""}`,
+      };
+      await writeFile(`${fixture.database}-wal`, "fake WAL sidecar");
+      await writeFile(`${fixture.database}-shm`, "fake SHM sidecar");
+
+      const applied = spawnSync(
+        "python3",
+        ["-c", ptyRunner, environment.RESTORE_SCRIPT, backupPath],
+        {
+          encoding: "utf8",
+          env: ptyEnvironment,
+          input: `${backupName}\n${backupName}\n`,
+        },
+      );
+      assert.equal(applied.status, 0, `${applied.stdout}\n${applied.stderr}`);
+
+      const preRestoreDirectory = (await readdir(fixture.root)).find((name) =>
+        name.startsWith(`${path.basename(fixture.database)}.pre-restore-`),
+      );
+      assert.ok(preRestoreDirectory);
+      const savedFiles = await readdir(path.join(fixture.root, preRestoreDirectory));
+      assert.deepEqual(savedFiles.sort(), [
+        "app.sqlite",
+        "app.sqlite-shm",
+        "app.sqlite-wal",
+      ]);
+      assert.equal(
+        await readFile(path.join(fixture.root, preRestoreDirectory, "app.sqlite-wal"), "utf8"),
+        "fake WAL sidecar",
+      );
+      assert.equal(
+        await readFile(path.join(fixture.root, preRestoreDirectory, "app.sqlite-shm"), "utf8"),
+        "fake SHM sidecar",
+      );
+      await assert.rejects(readFile(`${fixture.database}-wal`));
+      await assert.rejects(readFile(`${fixture.database}-shm`));
+      assert.equal(
+        execFileSync(sqlitePath, [fixture.database, "PRAGMA integrity_check;"])
+          .toString()
+          .trim(),
+        "ok",
+      );
     });
   },
 );

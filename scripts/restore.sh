@@ -142,11 +142,11 @@ uploads_parent=$(dirname "$UPLOADS_DIR")
 [ -d "$db_parent" ] && [ -d "$uploads_parent" ] ||
   fail "database and uploads parent directories must exist"
 timestamp=$(date -u '+%Y%m%dT%H%M%SZ')
-old_db=$DB_PATH.before-restore-$timestamp
+pre_restore_dir=$DB_PATH.pre-restore-$timestamp
 old_uploads=$UPLOADS_DIR.before-restore-$timestamp
 new_db=$DB_PATH.restore-new-$$
 new_uploads=$UPLOADS_DIR.restore-new-$$
-[ ! -e "$old_db" ] && [ ! -e "$old_uploads" ] &&
+[ ! -e "$pre_restore_dir" ] && [ ! -e "$old_uploads" ] &&
   [ ! -e "$new_db" ] && [ ! -e "$new_uploads" ] ||
   fail "restore destination already exists"
 cp "$RESTORE_STAGING_DIR/db" "$new_db"
@@ -154,30 +154,60 @@ cp -R "$RESTORE_STAGING_DIR/uploads" "$new_uploads"
 chmod 600 "$new_db"
 chmod 700 "$new_uploads"
 
-db_saved=0
+restore_saved_database() {
+  for suffix in "" -wal -shm -journal; do
+    saved_file=$pre_restore_dir/$(basename "$DB_PATH")$suffix
+    if [ -e "$saved_file" ]; then
+      mv "$saved_file" "$DB_PATH$suffix" || return 1
+    fi
+  done
+}
+
+mkdir -m 700 "$pre_restore_dir" || fail "cannot create pre-restore directory"
+for suffix in "" -wal -shm -journal; do
+  current_file=$DB_PATH$suffix
+  if [ -e "$current_file" ] &&
+    ! mv "$current_file" "$pre_restore_dir/$(basename "$current_file")"; then
+    restore_saved_database ||
+      fail "cannot preserve the current database; recover its files from $pre_restore_dir"
+    rmdir "$pre_restore_dir" 2>/dev/null || true
+    fail "cannot preserve the current database"
+  fi
+done
+
 uploads_saved=0
-if [ -e "$DB_PATH" ]; then
-  mv "$DB_PATH" "$old_db" || fail "cannot preserve the current database"
-  db_saved=1
-fi
 if [ -e "$UPLOADS_DIR" ]; then
   if ! mv "$UPLOADS_DIR" "$old_uploads"; then
-    [ "$db_saved" -eq 0 ] || mv "$old_db" "$DB_PATH"
+    restore_saved_database ||
+      fail "cannot restore the previous database; recover its files from $pre_restore_dir"
+    rmdir "$pre_restore_dir" 2>/dev/null || true
     fail "cannot preserve the current uploads directory"
   fi
   uploads_saved=1
 fi
 if ! mv "$new_db" "$DB_PATH"; then
-  [ "$db_saved" -eq 0 ] || mv "$old_db" "$DB_PATH"
+  restore_saved_database ||
+    fail "cannot restore the previous database; recover its files from $pre_restore_dir"
+  rmdir "$pre_restore_dir" 2>/dev/null || true
   [ "$uploads_saved" -eq 0 ] || mv "$old_uploads" "$UPLOADS_DIR"
   fail "cannot install the restored database"
 fi
 if ! mv "$new_uploads" "$UPLOADS_DIR"; then
   rm -f "$DB_PATH"
-  [ "$db_saved" -eq 0 ] || mv "$old_db" "$DB_PATH"
+  restore_saved_database ||
+    fail "cannot restore the previous database; recover its files from $pre_restore_dir"
+  rmdir "$pre_restore_dir" 2>/dev/null || true
   [ "$uploads_saved" -eq 0 ] || mv "$old_uploads" "$UPLOADS_DIR"
   fail "cannot install the restored uploads directory"
 fi
 
+if ! integrity=$(sqlite3 "$DB_PATH" "PRAGMA integrity_check;" 2>/dev/null) ||
+  [ "$integrity" != "ok" ]; then
+  log "ERROR: restored database integrity check failed; previous database and sidecars are preserved in $pre_restore_dir" >&2
+  printf 'To recover, move the failed database aside and move the database and any -wal, -shm, or -journal files from "%s" back beside "%s".\n' \
+    "$pre_restore_dir" "$DB_PATH" >&2
+  exit 1
+fi
+
 STAGE_CREATED=0
-log "Restore applied; previous data was preserved with .before-restore-$timestamp suffixes"
+log "Restore applied; previous database and sidecars are in $pre_restore_dir and previous uploads are in $old_uploads"
