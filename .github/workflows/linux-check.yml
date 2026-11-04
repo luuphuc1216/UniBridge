@@ -1,0 +1,85 @@
+name: linux-check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [chore/deployment-readiness]
+
+env:
+  DATABASE_URL: file:/tmp/ci-unibridge.db
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Phiên bản công cụ
+        run: |
+          node -v
+          npm -v
+          gcc --version | head -1
+          python3 --version
+
+      - name: Cài đặt đầy đủ
+        run: npm ci
+
+      - name: Kiểm tra install-scripts
+        run: npm install-scripts ls
+
+      - name: Chỉ còn một bản better-sqlite3
+        run: npm ls better-sqlite3 --all
+
+      - name: Native binding nạp qua adapter
+        run: |
+          node -e "
+          const p = require.resolve('better-sqlite3', { paths: [require.resolve('@prisma/adapter-better-sqlite3')] });
+          console.log('resolved:', p);
+          const Database = require(p);
+          const db = new Database(':memory:');
+          console.log(db.prepare('select sqlite_version() as v').get());
+          "
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Test
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+  ignore-scripts-must-fail:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Cài với --ignore-scripts
+        run: npm ci --ignore-scripts
+
+      - name: Mở DB phải lỗi vì thiếu native binding
+        run: |
+          if node -e "
+          const p = require.resolve('better-sqlite3', { paths: [require.resolve('@prisma/adapter-better-sqlite3')] });
+          const Database = require(p);
+          new Database(':memory:');
+          "; then
+            echo "Bất ngờ: mở được DB khi bỏ qua script. Cần xem lại allowScripts."
+            exit 1
+          else
+            echo "Đúng kỳ vọng: thiếu binding khi --ignore-scripts."
+          fi
