@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "prebuild": "prisma generate",
-    "start": "next start",
+    "start": "node scripts/validate-production-env.mjs && next start -H 127.0.0.1",
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
