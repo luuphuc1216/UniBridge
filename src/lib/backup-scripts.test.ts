@@ -149,6 +149,39 @@ describe(
       );
     });
 
+    it("fails on a locked database within the busy timeout and keeps old backups", async () => {
+      const fixture = await createFixture("database-lock");
+      const oldBackup = path.join(fixture.backups, "backup-old");
+      await mkdir(oldBackup);
+      await writeFile(path.join(oldBackup, "marker"), "preserve");
+
+      const lockHolder = spawn(sqlitePath, [fixture.database], {
+        stdio: ["pipe", "ignore", "pipe"],
+      });
+      lockHolder.stdin.write("BEGIN EXCLUSIVE;\n");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      const startedAt = Date.now();
+      const result = runBackup(fixture, { BACKUP_TIMEOUT_SECONDS: "10" });
+      const elapsedSeconds = (Date.now() - startedAt) / 1000;
+
+      lockHolder.kill("SIGTERM");
+      await new Promise<void>((resolve) => lockHolder.once("close", () => resolve()));
+
+      assert.notEqual(result.status, 0);
+      assert.ok(elapsedSeconds >= 5 && elapsedSeconds <= 10, `${elapsedSeconds}s`);
+      assert.match(result.stderr, /SQLite backup failed|SQLite backup timed out/);
+      assert.deepEqual(await getBackupDirectories(fixture.backups), ["backup-old"]);
+      assert.equal(
+        await readFile(path.join(oldBackup, "marker"), "utf8"),
+        "preserve",
+      );
+      assert.deepEqual(
+        (await readdir(fixture.backups)).filter((name) => name.startsWith(".backup-tmp-")),
+        [],
+      );
+    });
+
     it("skips a concurrent backup while the mkdir lock is held", async () => {
       const fixture = await createFixture("locking");
       const wrapperDirectory = path.join(fixture.root, "bin");

@@ -24,6 +24,7 @@ DB_PATH=${DB_PATH:-}
 UPLOADS_DIR=${UPLOADS_DIR:-}
 BACKUP_DIR=${BACKUP_DIR:-}
 KEEP=${KEEP:-14}
+BACKUP_TIMEOUT_SECONDS=${BACKUP_TIMEOUT_SECONDS:-300}
 
 [ -n "$DB_PATH" ] || fail "DB_PATH is required"
 [ -n "$UPLOADS_DIR" ] || fail "UPLOADS_DIR is required"
@@ -35,6 +36,11 @@ case "$KEEP" in
   ''|*[!0-9]*) fail "KEEP must be a positive integer" ;;
 esac
 [ "$KEEP" -gt 0 ] || fail "KEEP must be a positive integer"
+case "$BACKUP_TIMEOUT_SECONDS" in
+  ''|*[!0-9]*) fail "BACKUP_TIMEOUT_SECONDS must be a positive integer" ;;
+esac
+[ "$BACKUP_TIMEOUT_SECONDS" -gt 0 ] ||
+  fail "BACKUP_TIMEOUT_SECONDS must be a positive integer"
 [ -f "$DB_PATH" ] || fail "database file does not exist"
 [ -d "$UPLOADS_DIR" ] || fail "uploads directory does not exist"
 
@@ -84,6 +90,14 @@ printf '%s\n' "$$" > "$LOCK_DIR/owner"
 chmod 600 "$LOCK_DIR/owner"
 
 command -v sqlite3 >/dev/null 2>&1 || fail "sqlite3 CLI is required"
+TIMEOUT_COMMAND=
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_COMMAND=$(command -v timeout)
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_COMMAND=$(command -v gtimeout)
+else
+  log "WARNING: timeout/gtimeout unavailable; SQLite busy timeout is the only backup wait limit"
+fi
 if command -v shasum >/dev/null 2>&1; then
   checksum() { shasum -a 256 "$1" | awk '{print $1}'; }
 elif command -v sha256sum >/dev/null 2>&1; then
@@ -97,7 +111,24 @@ mkdir -m 700 "$TEMP_DIR" || fail "cannot create temporary backup directory"
 
 database_path=$TEMP_DIR/db
 sqlite_path=$(printf '%s' "$database_path" | sed "s/'/''/g")
-sqlite3 "$DB_PATH" ".backup '$sqlite_path'" || fail "SQLite backup failed"
+if [ -n "$TIMEOUT_COMMAND" ]; then
+  if "$TIMEOUT_COMMAND" "$BACKUP_TIMEOUT_SECONDS" sqlite3 "$DB_PATH" \
+    ".timeout 5000" ".backup '$sqlite_path'"; then
+    :
+  else
+    backup_status=$?
+    rm -f "$database_path"
+    if [ "$backup_status" -eq 124 ] || [ "$backup_status" -eq 137 ]; then
+      fail "SQLite backup timed out after BACKUP_TIMEOUT_SECONDS"
+    fi
+    fail "SQLite backup failed (database may be busy or locked)"
+  fi
+elif sqlite3 "$DB_PATH" ".timeout 5000" ".backup '$sqlite_path'"; then
+  :
+else
+  rm -f "$database_path"
+  fail "SQLite backup failed (database may be busy or locked)"
+fi
 integrity=$(sqlite3 "$database_path" "PRAGMA integrity_check;" 2>/dev/null) ||
   fail "SQLite integrity check failed"
 [ "$integrity" = "ok" ] || fail "SQLite integrity check did not return ok"
