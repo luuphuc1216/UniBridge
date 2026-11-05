@@ -30,7 +30,9 @@
 
 ## Bước 6 — Business Dashboard
 
-- Chưa làm.
+- Đã làm: Làm rõ hero, hạn mức còn lại, quản lý bài toán và CTA đăng bài toán.
+- Đã làm: Giữ nguyên truy vấn credit, notification/reminder và điều kiện hiển thị hết hạn mức.
+- Chưa làm: Không thêm metric giả về bài toán/dự án vì dashboard hiện chưa truy vấn các số liệu đó.
 
 ## Bước 7 — Admin Dashboard
 
