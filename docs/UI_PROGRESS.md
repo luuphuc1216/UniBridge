@@ -42,7 +42,11 @@
 
 ## Bước 8 — Module nghiệp vụ
 
-- Chưa làm.
+- Đã làm: Cải thiện presentation cho khám phá bài toán, danh sách bài toán doanh nghiệp, biểu đồ Admin, workspace Prototype/Đề xuất giải pháp và các form/danh sách mốc công việc.
+- Đã làm: Đổi các nhãn UI đã duyệt: Bài toán, Nhóm sinh viên, mốc công việc, Bản thử nghiệm (Prototype), Đề xuất giải pháp, khoản đặt cọc/hoàn tiền mô phỏng.
+- Đã làm: Bỏ hiển thị cứng `15%` khỏi các màn hình giao dịch, thay bằng “phí nền tảng theo luồng cũ”; không đổi dữ liệu/enum.
+- Chưa làm: Một số thông báo lỗi/action/API nội bộ vẫn dùng “Milestone”, “Proposal” hoặc “legacy”; cần rà soát riêng vì nằm trong logic/action và không tự đổi trong UI-only scope.
+- Điểm bất thường: Không thêm truy vấn, server action, route hoặc field; build/lint vẫn đạt.
 
 ## Bước 9 — Responsive, accessibility và rà soát
 

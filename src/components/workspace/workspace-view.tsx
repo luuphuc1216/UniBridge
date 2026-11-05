@@ -455,7 +455,7 @@ function ProposalForm({
           name="type"
           required
         >
-          <option value="">Chọn loại Prototype / Proposal</option>
+          <option value="">Chọn loại Bản thử nghiệm (Prototype) / Đề xuất giải pháp</option>
           {proposalTypeOptions.map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
@@ -594,7 +594,7 @@ function PrototypeEvaluationForm({
       <input name="problemId" type="hidden" value={problemId} />
       <input name="applicationId" type="hidden" value={applicationId} />
       <input name="proposalId" type="hidden" value={proposalId} />
-      <h4 className="font-semibold">Đánh giá Prototype theo thang điểm 1–5</h4>
+      <h4 className="font-semibold">Đánh giá Bản thử nghiệm (Prototype) theo thang điểm 1–5</h4>
       <p className="text-sm text-muted-foreground">
         Bắt buộc chấm đủ 7 tiêu chí và ghi nhận xét cho mọi kết quả.
       </p>
@@ -637,7 +637,7 @@ function PrototypeEvaluationForm({
           name="decision"
           required
         >
-          <option value="ACCEPTED">Chấp nhận Prototype</option>
+          <option value="ACCEPTED">Chấp nhận Bản thử nghiệm (Prototype)</option>
           {canRequestRevision && (
             <option value="REVISION_REQUESTED">Yêu cầu chỉnh sửa</option>
           )}
@@ -858,7 +858,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
 
       {readonly ? (
         <p className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-          Quy trình Prototype / Solution Proposal đã kết thúc. Không thể gửi thêm tin nhắn hoặc Proposal tại đây;
+          Quy trình Bản thử nghiệm (Prototype) / Đề xuất giải pháp đã kết thúc. Không thể gửi thêm tin nhắn hoặc đề xuất tại đây;
           lịch sử vẫn được xem. Thỏa thuận và Milestone được quản lý trong trang dự án.
         </p>
       ) : null}
@@ -897,7 +897,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
             {problem.status === "COMPLETED" ? "Paid Implementation đã hoàn tất" : "Sẵn sàng sang Paid Implementation"}
           </h2>
           <p className="mt-1 text-sm text-emerald-900">
-            Thỏa thuận, thanh toán giả lập và tiến độ theo Milestone được quản lý riêng trong trang dự án.
+            Thỏa thuận, thanh toán mô phỏng và tiến độ theo mốc công việc được quản lý riêng trong trang dự án.
           </p>
           {data.project ? (
             <Link
@@ -954,7 +954,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-          <h2 className="text-lg font-semibold">Prototype / Solution Proposal</h2>
+          <h2 className="text-lg font-semibold">Bản thử nghiệm (Prototype) / Đề xuất giải pháp</h2>
           {proposals.length === 0 ? (
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               {isBusiness && !problem.prototypeLegacy && problem.status !== "EVALUATING"

@@ -37,7 +37,7 @@ export default async function BusinessProblemsPage() {
   });
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+    <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-primary">Khu vực doanh nghiệp</p>
@@ -47,7 +47,7 @@ export default async function BusinessProblemsPage() {
           </p>
         </div>
         <Link
-          className="rounded-xl bg-primary px-5 py-3 text-center text-sm font-semibold text-primary-foreground hover:opacity-90"
+          className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 py-3 text-center text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           href="/business/problems/new"
         >
           Đăng bài toán mới
@@ -55,7 +55,7 @@ export default async function BusinessProblemsPage() {
       </div>
 
       {problems.length === 0 ? (
-        <section className="mt-8 rounded-2xl border border-dashed border-border bg-card p-8 text-center sm:p-12">
+        <section className="mt-8 rounded-[2rem] border border-dashed border-border bg-card p-8 text-center sm:p-12">
           <h2 className="text-lg font-semibold">Bạn chưa đăng bài toán nào</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             Tạo bản nháp hoặc gửi bài toán để bắt đầu kết nối với các nhóm sinh viên.
@@ -65,7 +65,7 @@ export default async function BusinessProblemsPage() {
         <div className="mt-8 grid gap-4">
           {problems.map((problem) => (
             <article
-              className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6"
+              className="rounded-2xl border border-border bg-card p-5 shadow-sm transition-shadow [@media(hover:hover)]:hover:shadow-md sm:p-6"
               key={problem.id}
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

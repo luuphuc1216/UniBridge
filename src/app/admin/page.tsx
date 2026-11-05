@@ -16,7 +16,7 @@ const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
 });
 
 const reportTargetLabels: Record<string, string> = {
-  PROBLEM: "Problem",
+  PROBLEM: "Bài toán",
   TEAM: "Hồ sơ nhóm",
   MESSAGE: "Tin nhắn",
   REVIEW: "Đánh giá",
@@ -95,9 +95,9 @@ export default async function AdminDashboard() {
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Tài khoản doanh nghiệp" value={metrics.businessAccounts} />
         <MetricCard label="Tài khoản sinh viên" value={metrics.studentAccounts} />
-        <MetricCard label="Nhóm sinh viên (Team)" value={metrics.teams} />
-        <MetricCard label="Problem chờ duyệt" value={metrics.pendingProblems} />
-        <MetricCard label="Problem đang mở" value={metrics.openProblems} />
+        <MetricCard label="Nhóm sinh viên" value={metrics.teams} />
+        <MetricCard label="Bài toán chờ duyệt" value={metrics.pendingProblems} />
+        <MetricCard label="Bài toán đang mở" value={metrics.openProblems} />
         <MetricCard label="Dự án đang thực hiện" value={metrics.ongoingProjects} />
         <MetricCard label="Dự án đã hoàn tất" value={metrics.completedProjects} />
         <MetricCard label="Báo cáo chưa xử lý" value={metrics.openReports} />
@@ -106,8 +106,8 @@ export default async function AdminDashboard() {
       <section className="mt-8 rounded-2xl border border-border bg-card p-5 sm:p-7">
         <h2 className="text-xl font-bold">Giao dịch và doanh thu</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <MetricCard label="Tổng giá trị DEPOSIT" value={formatCurrency(metrics.depositValue)} />
-          <MetricCard label="Tổng REFUND (hiển thị riêng)" value={formatCurrency(metrics.refundValue)} />
+          <MetricCard label="Tổng khoản đặt cọc mô phỏng" value={formatCurrency(metrics.depositValue)} />
+          <MetricCard label="Tổng hoàn tiền mô phỏng (hiển thị riêng)" value={formatCurrency(metrics.refundValue)} />
           <MetricCard label="Phụ phí doanh nghiệp 10%" value={formatCurrency(metrics.projectFees.business)} />
           <MetricCard label="Phí nhóm sinh viên 5%" value={formatCurrency(metrics.projectFees.student)} />
           <MetricCard label="Phí nền tảng (dự kiến)" value={formatCurrency(metrics.projectFees.legacy)} />

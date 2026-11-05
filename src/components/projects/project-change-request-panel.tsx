@@ -26,10 +26,10 @@ type ProjectChangeRequestItem = {
 type MilestoneItem = { id: string; title: string; status: string };
 
 const changeKindLabels: Record<string, string> = {
-  EXTENSION: "Gia hạn Milestone",
+  EXTENSION: "Gia hạn mốc công việc",
   PAUSE: "Tạm dừng dự án",
   RESUME: "Tiếp tục dự án",
-  MILESTONE_CANCEL: "Hủy Milestone",
+  MILESTONE_CANCEL: "Hủy mốc công việc",
   DISPUTE: "Mở bất đồng",
   DISPUTE_RESOLUTION: "Đóng bất đồng",
   PROJECT_TERMINATION: "Chấm dứt dự án",
@@ -82,9 +82,9 @@ export function ProjectChangeRequestPanel({
               </select>
             </label>
             <label className="space-y-1 text-sm">
-              <span>Milestone (nếu áp dụng)</span>
+              <span>Mốc công việc (nếu áp dụng)</span>
               <select className="w-full rounded-lg border border-border bg-background px-3 py-2" name="milestoneId" defaultValue="">
-                <option value="">Không gắn Milestone</option>
+                <option value="">Không gắn mốc công việc</option>
                 {milestones.map(({ id, title, status }) => (
                   <option key={id} value={id}>{title}{status === "DISPUTED" ? " · Có bất đồng" : ""}</option>
                 ))}

@@ -59,7 +59,7 @@ export function MilestoneSubmissionForm({
 
   return (
     <form className="mt-4 space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4" onSubmit={submit}>
-      <h4 className="font-semibold">Nộp kết quả Milestone</h4>
+      <h4 className="font-semibold">Nộp kết quả mốc công việc</h4>
       <label className="block text-sm font-medium">
         Mô tả kết quả
         <textarea
@@ -98,7 +98,7 @@ export function MilestoneSubmissionForm({
         disabled={pending}
         type="submit"
       >
-        {pending ? "Đang nộp..." : "Nộp Milestone"}
+        {pending ? "Đang nộp..." : "Nộp mốc công việc"}
       </button>
     </form>
   );

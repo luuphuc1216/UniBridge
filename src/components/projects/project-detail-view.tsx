@@ -327,7 +327,7 @@ export function ProjectDetailView({
           <h2 className="font-semibold">Tiền còn trong escrow</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {isLegacyDeposit
-              ? "Áp dụng phí cũ 15% · Giữ nguyên đến khi dự án hoàn tất."
+              ? "Áp dụng phí nền tảng theo luồng cũ · Giữ nguyên đến khi dự án hoàn tất."
               : `Phụ phí doanh nghiệp ${(paymentBreakdown.businessFeeBasisPoints ?? 0) / 100}% · Phí nhóm ${(paymentBreakdown.studentFeeBasisPoints ?? 0) / 100}% · Tỷ lệ được chụp tại thời điểm nạp.`}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -384,7 +384,7 @@ export function ProjectDetailView({
                       ["Điều kiện chấm dứt", agreementSnapshot.terminationTerms],
                       ["Xử lý bất đồng", agreementSnapshot.disputeTerms],
                       [
-                        "Số lần chỉnh sửa tối đa mỗi Milestone",
+                        "Số lần chỉnh sửa tối đa mỗi mốc công việc",
                         String(agreementSnapshot.maxMilestoneRevisions),
                       ],
                     ]
@@ -541,7 +541,7 @@ export function ProjectDetailView({
           )}
 
           <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-            <h2 className="text-lg font-semibold">Milestone và nghiệm thu</h2>
+            <h2 className="text-lg font-semibold">Mốc công việc và nghiệm thu</h2>
             {!project.legacyTermsExempt && project.pausedAt && (
               <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                 Dự án đang tạm dừng. Tiến độ, bàn giao, nghiệm thu và giải ngân đang bị khóa.
@@ -559,7 +559,7 @@ export function ProjectDetailView({
                         <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
                           <div>
                             <p className="text-xs font-semibold text-primary">
-                              Milestone {index + 1}
+                              Mốc công việc {index + 1}
                             </p>
                             <h3 className="mt-1 font-semibold">{milestone.title}</h3>
                           </div>
@@ -577,7 +577,7 @@ export function ProjectDetailView({
                           <span>Hạn: {formatDate(new Date(`${milestone.dueAt}T12:00:00.000Z`))}</span>
                           <span>Thanh toán: {milestone.paymentPercent}%</span>
                           <span>
-                            Giá trị Milestone: {formatCurrency(allocation?.grossAmount ?? 0)}
+                            Giá trị mốc công việc: {formatCurrency(allocation?.grossAmount ?? 0)}
                           </span>
                         </div>
                       </li>
@@ -632,7 +632,7 @@ export function ProjectDetailView({
                   <li className="rounded-xl border border-border p-4" key={milestone.id}>
                     <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
                       <div>
-                        <p className="text-xs font-semibold text-primary">Milestone {index + 1}</p>
+                        <p className="text-xs font-semibold text-primary">Mốc công việc {index + 1}</p>
                         <h3 className="mt-1 font-semibold">{milestone.title}</h3>
                       </div>
                       <span className="w-fit rounded-full bg-muted px-3 py-1 text-xs font-semibold">
@@ -652,9 +652,9 @@ export function ProjectDetailView({
                         )}
                       </span>
                       <span>Thanh toán: {milestone.paymentPercent}%</span>
-                      <span>Giá trị Milestone: {formatCurrency(allocation?.grossAmount ?? milestone.amount ?? 0)}</span>
+                      <span>Giá trị mốc công việc: {formatCurrency(allocation?.grossAmount ?? milestone.amount ?? 0)}</span>
                       {isLegacyDeposit ? (
-                        <span>Áp dụng phí cũ 15%: {formatCurrency(allocation?.platformFee ?? 0)}</span>
+                        <span>Áp dụng phí nền tảng theo luồng cũ: {formatCurrency(allocation?.platformFee ?? 0)}</span>
                       ) : (
                         <>
                           <span>Phụ phí doanh nghiệp: {formatCurrency(allocation?.businessFee ?? 0)}</span>
@@ -873,7 +873,7 @@ export function ProjectDetailView({
               <h2 className="font-semibold">Nghiệm thu cuối cùng</h2>
               <p className="mt-2 text-sm text-muted-foreground">
                 {project.finalAcceptanceStatus === "AWAITING_FINAL_ACCEPTANCE"
-                  ? "Tất cả Milestone đã được nghiệm thu hoặc hủy và hoàn tiền. Đang chờ doanh nghiệp xác nhận hoàn tất dự án."
+                  ? "Tất cả mốc công việc đã được nghiệm thu hoặc hủy và hoàn tiền mô phỏng. Đang chờ doanh nghiệp xác nhận hoàn tất dự án."
                   : project.finalAcceptanceStatus === "ACCEPTED"
                     ? `Đã xác nhận hoàn tất${project.finalAcceptedAt ? ` lúc ${formatDateTime(project.finalAcceptedAt)}` : ""}.`
                     : project.finalAcceptanceStatus}
@@ -951,10 +951,10 @@ export function ProjectDetailView({
                         <>
                           <p className="text-sm font-semibold">
                             {transaction.type === "DEPOSIT"
-                              ? "Nạp vào escrow"
+                              ? "Khoản đặt cọc mô phỏng"
                               : transaction.type === "REFUND"
-                                ? `Hoàn lại doanh nghiệp${releasedMilestone ? `: ${releasedMilestone.title}` : ""}`
-                                : `Giải ngân Milestone${releasedMilestone ? `: ${releasedMilestone.title}` : ""}`}
+                                ? `Hoàn tiền mô phỏng${releasedMilestone ? `: ${releasedMilestone.title}` : ""}`
+                                : `Giải ngân mốc công việc${releasedMilestone ? `: ${releasedMilestone.title}` : ""}`}
                           </p>
                           {transaction.type === "REFUND" ? (
                             <>
@@ -968,11 +968,11 @@ export function ProjectDetailView({
                           ) : transactionUsesLegacyFees ? (
                             <>
                               <p className="mt-1 text-sm">
-                                {transaction.type === "DEPOSIT" ? "Tổng nạp" : "Phần nhóm nhận"}:{" "}
+                                {transaction.type === "DEPOSIT" ? "Tổng nạp mô phỏng" : "Phần nhóm nhận"}:{" "}
                                 {formatCurrency(transaction.amount)}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                Áp dụng phí cũ 15%: {formatCurrency(transaction.platformFee)}
+                                Áp dụng phí nền tảng theo luồng cũ: {formatCurrency(transaction.platformFee)}
                               </p>
                             </>
                           ) : transaction.type === "DEPOSIT" ? (
@@ -996,7 +996,7 @@ export function ProjectDetailView({
                           ) : (
                             <>
                               <p className="mt-1 text-sm">
-                                Giá trị Milestone: {formatCurrency(releasedMilestone?.amount ?? transaction.amount + transaction.platformFee)}
+                                Giá trị mốc công việc: {formatCurrency(releasedMilestone?.amount ?? transaction.amount + transaction.platformFee)}
                               </p>
                               <p className="text-sm">
                                 Phụ phí doanh nghiệp (đã tính trong khoản nạp):{" "}
@@ -1007,7 +1007,7 @@ export function ProjectDetailView({
                                 Nhóm nhận ròng: {formatCurrency(transaction.amount)}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                Tổng phí nền tảng Milestone: {formatCurrency(transaction.platformFee + (transaction.businessFee ?? 0))} ·
+                                Tổng phí nền tảng mốc công việc: {formatCurrency(transaction.platformFee + (transaction.businessFee ?? 0))} ·
                                 Tỷ lệ chụp lúc nạp: {((transaction.businessFeeBasisPoints ?? 0) / 100).toFixed(2)}% +
                                 {((transaction.studentFeeBasisPoints ?? 0) / 100).toFixed(2)}%
                               </p>
@@ -1034,7 +1034,7 @@ export function ProjectDetailView({
           {project.status === "COMPLETED" && (
             <>
               <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900">
-                Tất cả Milestone đã được nghiệm thu hoặc hủy và hoàn tiền. Dự án và bài toán đã hoàn thành.
+                Tất cả mốc công việc đã được nghiệm thu hoặc hủy và hoàn tiền mô phỏng. Dự án và bài toán đã hoàn thành.
               </p>
               {reviewState && (
                 <ProjectReviewSection

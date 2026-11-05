@@ -282,7 +282,7 @@ export function AgreementForm({
             value={values.disputeTerms}
           />
           <TextField
-            label="Số lần chỉnh sửa tối đa cho mỗi Milestone"
+            label="Số lần chỉnh sửa tối đa cho mỗi mốc công việc"
             name="maxMilestoneRevisions"
             onChange={(value) =>
               updateField(
@@ -300,7 +300,7 @@ export function AgreementForm({
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold">Milestone</h3>
+            <h3 className="font-semibold">Mốc công việc</h3>
             <p className="text-sm text-muted-foreground">
               Tổng tỷ lệ hiện tại:{" "}
               <strong className={percentageTotal === 100 ? "text-emerald-700" : "text-amber-700"}>
@@ -319,12 +319,12 @@ export function AgreementForm({
             }
             type="button"
           >
-            Thêm Milestone
+            Thêm mốc công việc
           </button>
         </div>
         {values.milestones.map((milestone, index) => (
           <fieldset className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2" key={index}>
-            <legend className="px-1 text-sm font-semibold">Milestone {index + 1}</legend>
+            <legend className="px-1 text-sm font-semibold">Mốc công việc {index + 1}</legend>
             <label className="text-sm font-medium">
               Tên
               <input
@@ -387,7 +387,7 @@ export function AgreementForm({
                 }
                 type="button"
               >
-                Xóa Milestone
+                Xóa mốc công việc
               </button>
             )}
           </fieldset>

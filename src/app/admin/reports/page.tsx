@@ -13,7 +13,7 @@ const statusLabels: Record<ReportStatus, string> = {
 };
 
 const targetLabels: Record<(typeof reportTargetTypes)[number], string> = {
-  PROBLEM: "Problem",
+  PROBLEM: "Bài toán",
   TEAM: "Hồ sơ nhóm",
   MESSAGE: "Tin nhắn",
   REVIEW: "Đánh giá",

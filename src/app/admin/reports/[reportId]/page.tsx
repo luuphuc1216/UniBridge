@@ -43,11 +43,11 @@ export default async function AdminReportDetailPage({
         targetId: report.targetId,
         targetType:
           report.targetType === "PROBLEM"
-            ? "Problem"
+            ? "Bài toán"
             : report.targetType === "TEAM"
-              ? "StudentTeam"
+              ? "Nhóm sinh viên"
               : report.targetType === "MESSAGE"
-                ? "WorkspaceMessage"
+                ? "Tin nhắn không gian làm việc"
                 : "Review",
       },
       orderBy: { createdAt: "desc" },

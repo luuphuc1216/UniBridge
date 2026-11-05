@@ -13,7 +13,7 @@ const statusOptions = [
   ["APPROVED", "Đã duyệt"],
   ["PUBLISHED", "Đang nhận hồ sơ"],
   ["TEAM_SELECTED", "Đã chọn nhóm"],
-  ["PROTOTYPING", "Đang xây dựng Prototype / Solution Proposal"],
+  ["PROTOTYPING", "Đang xây dựng Bản thử nghiệm (Prototype) / Đề xuất giải pháp"],
   ["EVALUATING", "Doanh nghiệp đang đánh giá"],
   ["CLOSED", "Đã kết thúc – không triển khai"],
   ["READY_FOR_IMPLEMENTATION", "Sẵn sàng soạn thỏa thuận triển khai"],

@@ -111,13 +111,13 @@ export default async function StudentProblemsPage({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-primary">Khu vực sinh viên</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">Bài toán doanh nghiệp</h1>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Khám phá bài toán</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Tìm bài toán phù hợp với năng lực và mối quan tâm của nhóm.
           </p>
         </div>
         <Link
-          className="rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold hover:bg-muted"
+          className="min-h-11 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold hover:bg-muted"
           href="/student/saved-problems"
         >
           Bài toán đã lưu

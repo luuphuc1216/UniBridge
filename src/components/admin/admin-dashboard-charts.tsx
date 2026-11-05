@@ -129,7 +129,7 @@ export function AdminDashboardCharts({
       </section>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <ChartPanel title="Problem đăng mới và hồ sơ gửi theo tuần">
+        <ChartPanel title="Bài toán đăng mới và hồ sơ gửi theo tuần">
           {!weeklyActivity.hasData ? (
             <EmptyChart />
           ) : (
@@ -137,7 +137,7 @@ export function AdminDashboardCharts({
               <div aria-label="Chú giải" className="mt-3 flex flex-wrap gap-4 text-sm">
                 <span className="flex items-center gap-2">
                   <span aria-hidden="true" className="size-3 rounded-sm" style={{ backgroundColor: chartColors[0] }} />
-                  Problem đăng mới
+                  Bài toán đăng mới
                 </span>
                 <span className="flex items-center gap-2">
                   <span aria-hidden="true" className="size-3 rounded-sm" style={{ backgroundColor: chartColors[2] }} />
@@ -151,7 +151,7 @@ export function AdminDashboardCharts({
                     <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
                     <YAxis allowDecimals={false} tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
                     <Tooltip content={<ChartTooltip />} />
-                    <Bar dataKey="problems" fill={chartColors[0]} name="Problem đăng mới" radius={[4, 4, 0, 0]}>
+                    <Bar dataKey="problems" fill={chartColors[0]} name="Bài toán đăng mới" radius={[4, 4, 0, 0]}>
                       <LabelList dataKey="problems" fill="var(--foreground)" position="top" />
                     </Bar>
                     <Bar dataKey="applications" fill={chartColors[2]} name="Hồ sơ ứng tuyển" radius={[4, 4, 0, 0]}>
@@ -163,7 +163,7 @@ export function AdminDashboardCharts({
               <ul className="mt-3 grid gap-x-4 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2">
                 {weeklyActivity.values.map((item) => (
                   <li key={item.label}>
-                    {item.label}: Problem {item.problems} · Hồ sơ {item.applications}
+                    {item.label}: Bài toán {item.problems} · Hồ sơ {item.applications}
                   </li>
                 ))}
               </ul>
@@ -215,7 +215,7 @@ export function AdminDashboardCharts({
           )}
         </ChartPanel>
 
-        <ChartPanel title="DEPOSIT và doanh thu nền tảng theo tháng">
+        <ChartPanel title="Khoản đặt cọc mô phỏng và doanh thu nền tảng theo tháng">
           {!monthlyRevenue.hasData ? (
             <EmptyChart />
           ) : (
@@ -223,7 +223,7 @@ export function AdminDashboardCharts({
               <div aria-label="Chú giải" className="mt-3 flex flex-wrap gap-4 text-sm">
                 <span className="flex items-center gap-2">
                   <span aria-hidden="true" className="size-3 rounded-full" style={{ backgroundColor: chartColors[1] }} />
-                  Tổng giá trị DEPOSIT
+                  Tổng khoản đặt cọc mô phỏng
                 </span>
                 <span className="flex items-center gap-2">
                   <span aria-hidden="true" className="size-3 rounded-full" style={{ backgroundColor: chartColors[4] }} />
@@ -241,7 +241,7 @@ export function AdminDashboardCharts({
                       width={64}
                     />
                     <Tooltip content={<ChartTooltip currency />} />
-                    <Line dataKey="deposit" dot={{ r: 3 }} name="Tổng giá trị DEPOSIT" stroke={chartColors[1]} strokeWidth={2} type="monotone" />
+                    <Line dataKey="deposit" dot={{ r: 3 }} name="Tổng khoản đặt cọc mô phỏng" stroke={chartColors[1]} strokeWidth={2} type="monotone" />
                     <Line dataKey="revenue" dot={{ r: 3 }} name="Tổng doanh thu nền tảng" stroke={chartColors[4]} strokeWidth={2} type="monotone" />
                   </LineChart>
                 </ResponsiveContainer>
@@ -249,7 +249,7 @@ export function AdminDashboardCharts({
               <ul className="mt-3 grid gap-x-4 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2">
                 {monthlyRevenue.values.map((item) => (
                   <li key={item.label}>
-                    {item.label}: DEPOSIT {formatCurrency(item.deposit)} · Doanh thu {formatCurrency(item.revenue)}
+                    {item.label}: Khoản đặt cọc mô phỏng {formatCurrency(item.deposit)} · Doanh thu {formatCurrency(item.revenue)}
                   </li>
                 ))}
               </ul>

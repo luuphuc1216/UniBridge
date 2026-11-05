@@ -106,7 +106,7 @@ export function ProjectListView({
                   <>
                     {hasLegacyDeposit && (
                       <p className="mt-2 text-xs font-semibold text-amber-800">
-                        Áp dụng phí cũ 15%
+                        Áp dụng phí nền tảng theo luồng cũ
                       </p>
                     )}
                     <dl className="mt-4 grid gap-3 border-t border-border pt-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
