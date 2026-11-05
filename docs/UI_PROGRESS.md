@@ -24,7 +24,9 @@
 
 ## Bước 5 — Student Dashboard
 
-- Chưa làm.
+- Đã làm: Làm rõ hero dashboard, khu vực gợi ý và trạng thái chưa có hồ sơ nhóm.
+- Đã làm: Đổi nhãn hiển thị `APPROVED` thành “đã duyệt”, thêm card hover chỉ trên thiết bị hỗ trợ hover.
+- Chưa làm: Không bổ sung metric giả hoặc truy vấn mới; các số liệu khác chưa có trong dữ liệu dashboard hiện tại.
 
 ## Bước 6 — Business Dashboard
 

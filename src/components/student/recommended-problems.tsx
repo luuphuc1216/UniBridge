@@ -34,13 +34,13 @@ export function RecommendedProblems({
 }) {
   if (!hasTeam) {
     return (
-      <section className="mt-8 rounded-2xl border border-dashed border-border bg-card p-6 sm:p-8">
+      <section className="mt-8 rounded-[2rem] border border-dashed border-border bg-card p-6 sm:p-8">
         <h2 className="text-xl font-semibold">Gợi ý cho nhóm bạn</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Hãy tạo hồ sơ nhóm để nhận gợi ý phù hợp với chuyên ngành, kỹ năng và lĩnh vực quan tâm.
         </p>
         <Link
-          className="mt-4 inline-flex rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+          className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           href="/student/team"
         >
           Tạo hồ sơ nhóm
@@ -56,14 +56,14 @@ export function RecommendedProblems({
         <h2 className="mt-1 text-2xl font-bold tracking-tight">Gợi ý cho nhóm bạn</h2>
       </div>
       {problems.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card p-6 text-sm leading-6 text-muted-foreground">
-          Hiện chưa có bài toán APPROVED phù hợp để hiển thị. Bài đã ứng tuyển hoặc đã chọn nhóm sẽ không xuất hiện ở đây.
+        <div className="rounded-[2rem] border border-dashed border-border bg-card p-6 text-sm leading-6 text-muted-foreground">
+          Hiện chưa có bài toán đã duyệt phù hợp để hiển thị. Bài đã ứng tuyển hoặc đã chọn nhóm sẽ không xuất hiện ở đây.
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {problems.slice(0, recommendationConfig.maxItems).map((problem) => (
             <article
-              className="flex min-w-0 flex-col rounded-2xl border border-border bg-card p-5 shadow-sm"
+              className="flex min-w-0 flex-col rounded-2xl border border-border bg-card p-5 shadow-sm transition-transform [@media(hover:hover)]:hover:-translate-y-1"
               key={problem.id}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
