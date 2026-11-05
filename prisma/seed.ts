@@ -7,7 +7,10 @@ import {
   legacyPlatformFeeRate,
   studentFeeRate,
 } from "../src/lib/project-config";
-import { calculateProjectFinancialBreakdown } from "../src/lib/project-money";
+import {
+  calculateLegacyProjectFinancialBreakdown,
+  calculateProjectFinancialBreakdown,
+} from "../src/lib/project-money";
 import { attachmentStorage } from "../src/lib/storage";
 import { BUSINESS_POST_CONFIG, POST_CREDIT_SOURCES, PLATFORM_CHARGE_TYPES } from "../src/lib/business-post-config";
 
@@ -281,6 +284,15 @@ async function createCompletedReviewSample({
   const completedAt = new Date(Date.now() - daysAgo * daysInMs);
   const dueAt = new Date(completedAt.getTime() + (late ? -daysInMs : daysInMs));
   const milestoneId = `seed-review-milestone-${slug}`;
+  const projectBreakdown = calculateLegacyProjectFinancialBreakdown(
+    5_000_000,
+    [100],
+    legacyPlatformFeeRate,
+  );
+  const milestoneAllocation = projectBreakdown.milestones[0];
+  if (!milestoneAllocation) {
+    throw new Error("Thiếu phân bổ Milestone cho dự án mẫu đã hoàn tất.");
+  }
   const project = await prisma.project.upsert({
     where: { applicationId: application.id },
     update: {
@@ -289,7 +301,7 @@ async function createCompletedReviewSample({
       agreedScope: "Thực hiện và bàn giao theo các yêu cầu đã thống nhất.",
       deliverables: "Sản phẩm mẫu đã nghiệm thu.",
       duration: "4 tuần",
-      totalAmount: 5000000,
+      totalAmount: projectBreakdown.totalAmount,
       generalAcceptanceCriteria: "Bàn giao đầy đủ kết quả.",
       businessResponsibilities: "Cung cấp thông tin và phản hồi theo thỏa thuận.",
       teamResponsibilities: "Thực hiện và bàn giao đúng phạm vi.",
@@ -306,7 +318,7 @@ async function createCompletedReviewSample({
       agreedScope: "Thực hiện và bàn giao theo các yêu cầu đã thống nhất.",
       deliverables: "Sản phẩm mẫu đã nghiệm thu.",
       duration: "4 tuần",
-      totalAmount: 5000000,
+      totalAmount: projectBreakdown.totalAmount,
       generalAcceptanceCriteria: "Bàn giao đầy đủ kết quả.",
       businessResponsibilities: "Cung cấp thông tin và phản hồi theo thỏa thuận.",
       teamResponsibilities: "Thực hiện và bàn giao đúng phạm vi.",
@@ -324,10 +336,12 @@ async function createCompletedReviewSample({
       description: "Hoàn thành và bàn giao sản phẩm.",
       acceptanceCriteria: "Doanh nghiệp nghiệm thu sản phẩm.",
       paymentPercent: 100,
-      amount: 5000000,
+      amount: milestoneAllocation.grossAmount,
       dueAt,
       sortOrder: 0,
       status: "ACCEPTED",
+      acceptanceStatus: "ACCEPTED",
+      paymentStatus: "RELEASED",
       submittedAt: new Date(completedAt.getTime() - 60 * 60 * 1000),
       acceptedAt: completedAt,
     },
@@ -338,10 +352,12 @@ async function createCompletedReviewSample({
       description: "Hoàn thành và bàn giao sản phẩm.",
       acceptanceCriteria: "Doanh nghiệp nghiệm thu sản phẩm.",
       paymentPercent: 100,
-      amount: 5000000,
+      amount: milestoneAllocation.grossAmount,
       dueAt,
       sortOrder: 0,
       status: "ACCEPTED",
+      acceptanceStatus: "ACCEPTED",
+      paymentStatus: "RELEASED",
       submittedAt: new Date(completedAt.getTime() - 60 * 60 * 1000),
       acceptedAt: completedAt,
     },
@@ -351,8 +367,8 @@ async function createCompletedReviewSample({
     update: {
       projectId: project.id,
       type: "DEPOSIT",
-      amount: 5000000,
-      platformFee: 750000,
+      amount: projectBreakdown.totalDeposit,
+      platformFee: projectBreakdown.totalPlatformFee,
       platformFeeBasisPoints: legacyPlatformFeeRate,
       businessFeeBasisPoints: null,
       studentFeeBasisPoints: null,
@@ -364,8 +380,8 @@ async function createCompletedReviewSample({
       projectId: project.id,
       idempotencyKey: `deposit:${project.id}`,
       type: "DEPOSIT",
-      amount: 5000000,
-      platformFee: 750000,
+      amount: projectBreakdown.totalDeposit,
+      platformFee: projectBreakdown.totalPlatformFee,
       platformFeeBasisPoints: legacyPlatformFeeRate,
       businessFeeBasisPoints: null,
       studentFeeBasisPoints: null,
@@ -380,8 +396,8 @@ async function createCompletedReviewSample({
       projectId: project.id,
       milestoneId,
       type: "MILESTONE_RELEASE",
-      amount: 4250000,
-      platformFee: 750000,
+      amount: milestoneAllocation.teamAmount,
+      platformFee: milestoneAllocation.platformFee,
       platformFeeBasisPoints: legacyPlatformFeeRate,
       businessFeeBasisPoints: null,
       studentFeeBasisPoints: null,
@@ -394,8 +410,8 @@ async function createCompletedReviewSample({
       milestoneId,
       idempotencyKey: `release:${milestoneId}`,
       type: "MILESTONE_RELEASE",
-      amount: 4250000,
-      platformFee: 750000,
+      amount: milestoneAllocation.teamAmount,
+      platformFee: milestoneAllocation.platformFee,
       platformFeeBasisPoints: legacyPlatformFeeRate,
       businessFeeBasisPoints: null,
       studentFeeBasisPoints: null,
@@ -1511,6 +1527,8 @@ async function main() {
         dueAt: new Date(Date.now() + (index + 1) * 14 * 86_400_000),
         sortOrder: index,
         status: index === 0 ? "ACCEPTED" : index === 1 ? "IN_PROGRESS" : "PENDING",
+        acceptanceStatus: index === 0 ? "ACCEPTED" : "NOT_SUBMITTED",
+        paymentStatus: index === 0 ? "RELEASED" : "ESCROW",
         submittedAt: index === 0 ? new Date() : null,
         acceptedAt: index === 0 ? new Date() : null,
         progressNote: index === 1 ? "Đang dựng bố cục giao diện trên thiết bị di động." : null,
@@ -1524,6 +1542,8 @@ async function main() {
         dueAt: new Date(Date.now() + (index + 1) * 14 * 86_400_000),
         sortOrder: index,
         status: index === 0 ? "ACCEPTED" : index === 1 ? "IN_PROGRESS" : "PENDING",
+        acceptanceStatus: index === 0 ? "ACCEPTED" : "NOT_SUBMITTED",
+        paymentStatus: index === 0 ? "RELEASED" : "ESCROW",
         submittedAt: index === 0 ? new Date() : null,
         acceptedAt: index === 0 ? new Date() : null,
         progressNote: index === 1 ? "Đang dựng bố cục giao diện trên thiết bị di động." : null,

@@ -1,14 +1,21 @@
 import "dotenv/config";
 
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { runExpireInvitationsJob } from "@/lib/expire-invitations-runner";
 import {
   shouldExpireInvitation,
   shouldSendInvitationReminder,
 } from "@/lib/problem-workflow";
 
-export async function expireInvitations(now = new Date()): Promise<number> {
-  await sendDueReminders(now);
-  const invitations = await prisma.applicationInvitation.findMany({
+export async function expireInvitations(
+  now = new Date(),
+  database: PrismaClient = prisma,
+): Promise<number> {
+  await sendDueReminders(database, now);
+  const invitations = await database.applicationInvitation.findMany({
     where: {
       status: "PENDING_CONFIRMATION",
       expiresAt: { lte: now },
@@ -18,7 +25,7 @@ export async function expireInvitations(now = new Date()): Promise<number> {
 
   let count = 0;
   for (const invitation of invitations) {
-    const expired = await prisma.$transaction(async (transaction) => {
+    const expired = await database.$transaction(async (transaction) => {
       const current = await transaction.applicationInvitation.findUnique({
         where: { id: invitation.id },
         select: { status: true, expiresAt: true, applicationId: true, problemId: true },
@@ -66,8 +73,8 @@ export async function expireInvitations(now = new Date()): Promise<number> {
   return count;
 }
 
-async function sendDueReminders(now: Date) {
-  const due = await prisma.applicationInvitation.findMany({
+async function sendDueReminders(database: PrismaClient, now: Date) {
+  const due = await database.applicationInvitation.findMany({
     where: {
       status: "PENDING_CONFIRMATION",
       reminderAt: { lte: now },
@@ -86,7 +93,7 @@ async function sendDueReminders(now: Date) {
     },
   });
   for (const invitation of due) {
-    await prisma.$transaction(async (transaction) => {
+    await database.$transaction(async (transaction) => {
       const current = await transaction.applicationInvitation.findUnique({
         where: { id: invitation.id },
         select: { status: true, reminderSentAt: true },
@@ -123,11 +130,28 @@ async function sendDueReminders(now: Date) {
 }
 
 async function main() {
-  const count = await expireInvitations();
-  console.log(`Đã xử lý ${count} lời mời hết hạn.`);
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl?.startsWith("file:")) {
+    throw new Error("DATABASE_URL must reference a SQLite file.");
+  }
+  const databasePath = databaseUrl.startsWith("file:/")
+    ? fileURLToPath(databaseUrl)
+    : join(
+        /*turbopackIgnore: true*/ process.cwd(),
+        databaseUrl.slice("file:".length),
+      );
+  const lockDirectory = `${databasePath}.expire-invitations.lock`;
+  await runExpireInvitationsJob({
+    lockDirectory,
+    run: () => expireInvitations(),
+    disconnect: () => prisma.$disconnect(),
+  });
 }
 
-if (process.argv[1]?.endsWith("expire-invitations.ts")) {
+if (
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === resolve(process.argv[1])
+) {
   main().catch((error) => {
     console.error("Xử lý hết hạn lời mời thất bại:", error);
     process.exitCode = 1;
