@@ -30,7 +30,7 @@ export async function POST(
     where: { id: milestoneId },
     select: { projectId: true },
   });
-  if (!milestone) return Response.json({ error: "Không tìm thấy Milestone." }, { status: 404 });
+  if (!milestone) return Response.json({ error: "Không tìm thấy mốc công việc." }, { status: 404 });
 
   const project = await findAccessibleProject(
     milestone.projectId,
@@ -38,7 +38,7 @@ export async function POST(
     session.user.role,
   );
   if (!project || project.status !== "IN_PROGRESS") {
-    return Response.json({ error: "Bạn không có quyền nộp kết quả cho Milestone này." }, { status: 404 });
+    return Response.json({ error: "Bạn không có quyền nộp kết quả cho mốc công việc này." }, { status: 404 });
   }
 
   const activeMilestone = project.milestones.find(({ id }) => id === milestoneId);
@@ -58,7 +58,7 @@ export async function POST(
         ({ acceptanceStatus }) => acceptanceStatus !== "ACCEPTED",
       )?.id !== milestoneId
     ) {
-      return Response.json({ error: "Milestone này chưa mở để nộp kết quả." }, { status: 409 });
+      return Response.json({ error: "Mốc công việc này chưa mở để nộp kết quả." }, { status: 409 });
     }
   }
   if (
@@ -71,7 +71,7 @@ export async function POST(
         .some(({ status }) => status !== "ACCEPTED")
     )
   ) {
-    return Response.json({ error: "Milestone này chưa mở để nộp kết quả." }, { status: 409 });
+    return Response.json({ error: "Mốc công việc này chưa mở để nộp kết quả." }, { status: 409 });
   }
 
   const storedKeys: string[] = [];
@@ -124,7 +124,7 @@ export async function POST(
         links,
         files: submissionFiles,
       });
-      return Response.json({ success: "Đã nộp kết quả Milestone." });
+      return Response.json({ success: "Đã nộp kết quả mốc công việc." });
     }
 
     await prisma.$transaction(async (transaction) => {
@@ -154,13 +154,13 @@ export async function POST(
           },
         },
       });
-      if (!current) throw new Error("Milestone đã thay đổi. Vui lòng tải lại trang.");
+      if (!current) throw new Error("Mốc công việc đã thay đổi. Vui lòng tải lại trang.");
       if (
         current.project.milestones
           .filter(({ sortOrder }) => sortOrder < current.sortOrder)
           .some(({ status }) => status !== "ACCEPTED")
       ) {
-        throw new Error("Milestone trước cần được nghiệm thu trước khi nộp.");
+        throw new Error("Mốc công việc trước cần được nghiệm thu trước khi nộp.");
       }
       const submission = await transaction.milestoneSubmission.create({
         data: {
@@ -190,14 +190,14 @@ export async function POST(
           revisionFeedback: null,
         },
       });
-      if (changed.count !== 1) throw new Error("Milestone đã được nộp. Vui lòng tải lại.");
+      if (changed.count !== 1) throw new Error("Mốc công việc đã được nộp. Vui lòng tải lại.");
       const businessUserId = current.project.application.problem.businessProfile.userId;
       const teamUserIds = getProjectTeamUserIds(current.project.team);
       await transaction.notification.createMany({
         data: [
           {
             userId: businessUserId,
-            title: "Nhóm đã nộp kết quả Milestone",
+            title: "Nhóm đã nộp kết quả mốc công việc",
             message: `Nhóm đã nộp kết quả cho “${current.title}” của dự án “${current.project.title}”.`,
             href: getProjectNotificationHref("BUSINESS", project.id),
           },
@@ -205,7 +205,7 @@ export async function POST(
             .filter((userId) => userId !== session.user.id)
             .map((userId) => ({
               userId,
-              title: "Nhóm đã nộp kết quả Milestone",
+              title: "Nhóm đã nộp kết quả mốc công việc",
               message: `Đã lưu lần nộp kết quả mới cho “${current.title}”.`,
               href: getProjectNotificationHref("STUDENT", project.id),
             })),
@@ -214,7 +214,7 @@ export async function POST(
       return submission.id;
     });
 
-    return Response.json({ success: "Đã nộp kết quả Milestone." });
+    return Response.json({ success: "Đã nộp kết quả mốc công việc." });
   } catch (error) {
     await Promise.all(
       storedKeys.map(async (storageKey) => {

@@ -245,7 +245,7 @@ export async function submitProposalAction(
   const type = readText(formData, "type");
   const description = readText(formData, "description");
   if (!proposalTypes.some((proposalType) => proposalType === type)) {
-    return { error: "Vui lòng chọn loại Proposal hợp lệ." };
+    return { error: "Vui lòng chọn loại đề xuất giải pháp hợp lệ." };
   }
   if (!description || description.length > 10_000) {
     return { error: "Mô tả phải có nội dung và không vượt quá 10.000 ký tự." };
@@ -265,16 +265,16 @@ export async function submitProposalAction(
       readText(formData, "applicationId"),
     );
     if (session.user.role !== "STUDENT") {
-      throw new Error("Chỉ nhóm được chọn mới có thể nộp Proposal.");
+      throw new Error("Chỉ nhóm được chọn mới có thể nộp đề xuất giải pháp.");
     }
     if (workspace.status !== "PROTOTYPING") {
-      throw new Error("Chỉ có thể nộp Proposal khi bài toán đang ở giai đoạn xây dựng.");
+      throw new Error("Chỉ có thể nộp đề xuất giải pháp khi bài toán đang ở giai đoạn xây dựng.");
     }
     if (
       !workspace.prototypeLegacy &&
       !canRespondForTeam(application.team.ownerId, session.user.id)
     ) {
-      throw new Error("Chỉ chủ nhóm được chọn mới có thể nộp Proposal.");
+      throw new Error("Chỉ chủ nhóm được chọn mới có thể nộp đề xuất giải pháp.");
     }
     const validatedFiles = await Promise.all(uploadedFiles.map(validateAttachment));
     if (
@@ -319,7 +319,7 @@ export async function submitProposalAction(
           select: { id: true },
         });
         if (!currentProblem) {
-          throw new Error("Bài toán không còn nhận Proposal.");
+          throw new Error("Bài toán không còn nhận đề xuất giải pháp.");
         }
         const latest = await transaction.proposal.aggregate({
           where: { applicationId: application.id },
@@ -356,7 +356,7 @@ export async function submitProposalAction(
         await transaction.notification.create({
           data: {
             userId: workspace.businessProfile.userId,
-            title: "Nhóm đã nộp Proposal để đánh giá",
+            title: "Nhóm đã nộp đề xuất giải pháp để đánh giá",
             message: `Nhóm đã nộp phiên bản ${version} cho bài toán “${workspace.title}”.`,
             href: `/business/problems/${problemId}/workspace`,
           },
@@ -371,10 +371,10 @@ export async function submitProposalAction(
       result.status === "rejected" ? [result.reason] : [],
     );
     if (cleanupErrors.length > 0) {
-      console.error("Không thể dọn tệp Proposal cũ sau lỗi:", cleanupErrors);
-      return { error: "Nộp Proposal thất bại và không thể xóa toàn bộ tệp vừa tải lên." };
+      console.error("Không thể dọn tệp đề xuất giải pháp cũ sau lỗi:", cleanupErrors);
+      return { error: "Nộp đề xuất giải pháp thất bại và không thể xóa toàn bộ tệp vừa tải lên." };
     }
-    return actionError(error, "Nộp Proposal");
+    return actionError(error, "Nộp đề xuất giải pháp");
   }
   revalidateWorkspace(problemId);
   return { error: null };
@@ -425,7 +425,7 @@ export async function evaluateProposalAction(
         select: { id: true },
       });
       if (!proposal) {
-        throw new Error("Không tìm thấy Proposal đang chờ đánh giá.");
+        throw new Error("Không tìm thấy đề xuất giải pháp đang chờ đánh giá.");
       }
       const updatedProblem = await transaction.problem.updateMany({
         where: {
@@ -459,7 +459,7 @@ export async function evaluateProposalAction(
         },
       });
       if (updatedProposal.count !== 1) {
-        throw new Error("Proposal đã được đánh giá. Vui lòng tải lại trang.");
+        throw new Error("Đề xuất giải pháp đã được đánh giá. Vui lòng tải lại trang.");
       }
       await transaction.proposalEvaluation.create({
         data: {
@@ -480,17 +480,17 @@ export async function evaluateProposalAction(
           userId,
           title:
             decision === "CHANGES_REQUESTED"
-              ? "Doanh nghiệp yêu cầu chỉnh sửa Proposal"
+              ? "Doanh nghiệp yêu cầu chỉnh sửa đề xuất giải pháp"
               : decision === "CLOSED"
                 ? "Doanh nghiệp đã quyết định không triển khai"
                 : "Doanh nghiệp sẵn sàng triển khai giải pháp",
-          message: `Doanh nghiệp đã đánh giá Proposal của bài toán “${workspace.title}”.`,
+          message: `Doanh nghiệp đã đánh giá đề xuất giải pháp của bài toán “${workspace.title}”.`,
           href: `/student/workspace/${problemId}`,
         })),
       });
     });
   } catch (error) {
-    return actionError(error, "Đánh giá Proposal");
+    return actionError(error, "Đánh giá đề xuất giải pháp");
   }
   revalidateWorkspace(problemId);
   return { error: null };
@@ -503,7 +503,7 @@ export async function evaluatePrototypeAction(
   const problemId = readText(formData, "problemId");
   const decision = parsePrototypeEvaluationDecision(readText(formData, "decision"));
   if (!decision) {
-    return { error: "Kết quả đánh giá Prototype không hợp lệ." };
+    return { error: "Kết quả đánh giá Bản thử nghiệm (Prototype) không hợp lệ." };
   }
   const scores = {
     problemResponse: Number(readText(formData, "problemResponse")),
@@ -523,7 +523,7 @@ export async function evaluatePrototypeAction(
       throw new Error("Chỉ doanh nghiệp sở hữu bài toán mới có thể đánh giá.");
     }
     if (workspace.prototypeLegacy) {
-      throw new Error("Bài toán legacy phải tiếp tục dùng luồng đánh giá cũ.");
+      throw new Error("Bài toán thuộc luồng cũ phải tiếp tục dùng luồng đánh giá cũ.");
     }
     await prisma.$transaction((transaction) =>
       evaluatePrototypeProposal(transaction, {
@@ -537,7 +537,7 @@ export async function evaluatePrototypeAction(
       }),
     );
   } catch (error) {
-    return actionError(error, "Đánh giá Prototype");
+    return actionError(error, "Đánh giá Bản thử nghiệm (Prototype)");
   }
   revalidateWorkspace(problemId);
   return { error: null };
@@ -558,7 +558,7 @@ export async function decidePrototypeImplementationAction(
       throw new Error("Chỉ doanh nghiệp sở hữu bài toán mới có thể quyết định triển khai.");
     }
     if (workspace.prototypeLegacy) {
-      throw new Error("Bài toán legacy không thuộc luồng quyết định Prototype mới.");
+      throw new Error("Bài toán thuộc luồng cũ không thuộc luồng quyết định Bản thử nghiệm (Prototype) mới.");
     }
     await prisma.$transaction((transaction) =>
       decidePrototypeImplementation(transaction, {
@@ -575,13 +575,13 @@ export async function decidePrototypeImplementationAction(
     }
     if (
       error instanceof Error &&
-      /^(Vui lòng đăng nhập|Không tìm thấy không gian|Không tìm thấy nhóm|Chỉ doanh nghiệp sở hữu|Bài toán legacy)/.test(
+      /^(Vui lòng đăng nhập|Không tìm thấy không gian|Không tìm thấy nhóm|Chỉ doanh nghiệp sở hữu|Bài toán thuộc luồng cũ)/.test(
         error.message,
       )
     ) {
       return { error: error.message, completed: previousState.completed };
     }
-    console.error("Lỗi hệ thống khi lưu quyết định triển khai Prototype:", error);
+    console.error("Lỗi hệ thống khi lưu quyết định triển khai Bản thử nghiệm (Prototype):", error);
     return {
       error: "Đã xảy ra lỗi hệ thống khi lưu quyết định. Vui lòng liên hệ quản trị viên.",
       completed: previousState.completed,
@@ -605,7 +605,7 @@ export async function closePrototypeWithoutSubmissionAction(
       throw new Error("Chỉ doanh nghiệp sở hữu bài toán mới có thể kết thúc thử nghiệm.");
     }
     if (workspace.prototypeLegacy) {
-      throw new Error("Bài toán legacy không thuộc luồng kết thúc Prototype mới.");
+      throw new Error("Bài toán thuộc luồng cũ không thuộc luồng kết thúc Bản thử nghiệm (Prototype) mới.");
     }
     await prisma.$transaction((transaction) =>
       closePrototypeWithoutSubmission(transaction, {
@@ -616,7 +616,7 @@ export async function closePrototypeWithoutSubmissionAction(
       }),
     );
   } catch (error) {
-    return actionError(error, "Kết thúc giai đoạn Prototype");
+    return actionError(error, "Kết thúc giai đoạn Bản thử nghiệm (Prototype)");
   }
   revalidateWorkspace(problemId);
   return { error: null };

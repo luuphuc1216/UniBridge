@@ -65,7 +65,7 @@ export default async function BusinessAgreementPage({
       >
         ← Không gian làm việc
       </Link>
-      <h1 className="mt-3 text-2xl font-bold sm:text-3xl">Soạn thỏa thuận Paid Implementation</h1>
+      <h1 className="mt-3 text-2xl font-bold sm:text-3xl">Soạn thỏa thuận triển khai có phí</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Bài toán: {problem.title} · Nhóm: {application.team.name}
       </p>
@@ -75,7 +75,7 @@ export default async function BusinessAgreementPage({
       <section className="mt-5 rounded-2xl border border-border bg-card p-5 sm:p-7">
         <p className="mb-5 text-sm leading-6 text-muted-foreground">
           Nhóm sẽ xem và đồng ý hoặc đề nghị chỉnh sửa. Mọi thay đổi sau phản hồi đều cần hai bên
-          xác nhận lại. Tỷ lệ Milestone phải cộng đúng 100%.
+          xác nhận lại. Tỷ lệ mốc công việc phải cộng đúng 100%.
         </p>
         <AgreementForm
           applicationId={application.id}

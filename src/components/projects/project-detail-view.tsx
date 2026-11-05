@@ -905,7 +905,7 @@ export function ProjectDetailView({
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
                 Phí sinh viên ({(studentFeeRate / 100).toFixed(2)}%) sẽ được khấu trừ khỏi từng
-                Milestone khi giải ngân. Sau khi nạp, điều khoản và tỷ lệ chia không thể chỉnh sửa.
+                Mốc công việc khi giải ngân. Sau khi nạp, điều khoản và tỷ lệ chia không thể chỉnh sửa.
               </p>
               <div className="mt-4">
                 <ProjectActionForm

@@ -41,7 +41,7 @@ export async function BusinessNavigation() {
           await ensureBusinessPrototypeReminders(problem.id, session.user.id);
         }
       } catch (error) {
-        console.error("Không thể tạo nhắc nhở Prototype trên chuông doanh nghiệp:", error);
+        console.error("Không thể tạo nhắc nhở Bản thử nghiệm (Prototype) trên chuông doanh nghiệp:", error);
       }
     }
     const [credits, notificationRows] = await Promise.all([

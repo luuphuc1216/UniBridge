@@ -73,7 +73,7 @@ export default async function AdminProjectPage({
               {openDisputes.map((dispute) => (
                 <li className="rounded-xl border border-border p-4" key={dispute.id}>
                   <p className="font-medium">
-                    {dispute.milestone?.title ?? "Milestone"} · {dispute.reason}
+                    {dispute.milestone?.title ?? "Mốc công việc"} · {dispute.reason}
                   </p>
                   <div className="mt-3">
                     <ProjectActionForm

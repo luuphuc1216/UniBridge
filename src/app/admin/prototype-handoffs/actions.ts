@@ -52,7 +52,7 @@ export async function reviewProposalHandoffAction(
     );
   } catch (error) {
     if (!(error instanceof Error)) {
-      console.error("Kiểm tra bàn giao Proposal thất bại:", error);
+      console.error("Kiểm tra bàn giao đề xuất giải pháp thất bại:", error);
     }
     return {
       error: error instanceof Error ? error.message : "Không thể lưu kết quả kiểm tra bàn giao.",

@@ -97,7 +97,7 @@ const navigationIcons: Record<string, LucideIcon> = {
   "Tài khoản": UserCog,
   "Duyệt bài toán": ClipboardCheck,
   "Báo cáo vi phạm": ShieldCheck,
-  "Kiểm tra bàn giao Prototype": CheckSquare,
+  "Kiểm tra bàn giao Bản thử nghiệm (Prototype)": CheckSquare,
   "Quản lý dự án": BriefcaseBusiness,
   "Báo cáo và xử lý phát sinh": ListChecks,
   "Thống kê": BarChart3,

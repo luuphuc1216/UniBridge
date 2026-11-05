@@ -38,7 +38,7 @@ export default async function BusinessWorkspacePage({
       clock: { now: () => now },
     });
   } catch (error) {
-    console.error("Không thể tạo nhắc nhở Prototype cho doanh nghiệp:", error);
+    console.error("Không thể tạo nhắc nhở Bản thử nghiệm (Prototype) cho doanh nghiệp:", error);
   }
   const overdue = getWorkspacePrototypeOverdueStatus(
     { problem, trialBriefVersions: problem.trialBriefVersions, proposals: application.proposals },

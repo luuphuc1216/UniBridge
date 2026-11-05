@@ -44,14 +44,14 @@ export function ProjectListView({
         {role === "BUSINESS" ? "Khu vực doanh nghiệp" : "Khu vực sinh viên"}
       </p>
       <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
-        {transactionDashboard ? "Tổng quan giao dịch" : "Dự án Paid Implementation"}
+        {transactionDashboard ? "Tổng quan giao dịch" : "Dự án triển khai có phí"}
       </h1>
       <aside className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-950">
         Thanh toán giả lập, không phát sinh giao dịch thật.
       </aside>
       {projects.length === 0 ? (
         <section className="mt-6 rounded-2xl border border-dashed border-border bg-card p-8 text-center">
-          <p className="font-semibold">Chưa có dự án Paid Implementation.</p>
+          <p className="font-semibold">Chưa có dự án triển khai có phí.</p>
           <p className="mt-2 text-sm text-muted-foreground">
             Dự án sẽ xuất hiện tại đây sau khi doanh nghiệp gửi thỏa thuận.
           </p>
@@ -92,7 +92,6 @@ export function ProjectListView({
               <article className="rounded-2xl border border-border bg-card p-5 sm:p-6" key={project.id}>
                 <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                   <div>
-                    <p className="text-sm text-muted-foreground">{project.application.problem.title}</p>
                     <h2 className="mt-1 text-lg font-semibold">{project.title}</h2>
                   </div>
                   <span className="w-fit rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">

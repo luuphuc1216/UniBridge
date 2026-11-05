@@ -37,7 +37,7 @@ export async function AdminNavigation() {
         { href: "/admin/accounts", label: "Tài khoản" },
         { href: "/admin/problems", label: "Duyệt bài toán" },
         { href: "/admin/reports", label: "Báo cáo vi phạm" },
-        { href: "/admin/prototype-handoffs", label: "Kiểm tra bàn giao Prototype" },
+        { href: "/admin/prototype-handoffs", label: "Kiểm tra bàn giao Bản thử nghiệm (Prototype)" },
       ]}
       tools={
         session?.user?.role === "ADMIN" ? (

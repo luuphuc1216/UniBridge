@@ -137,17 +137,17 @@ export type WorkspaceViewData = {
 
 const statusLabels: Record<string, string> = {
   TEAM_SELECTED: "Đã chọn nhóm",
-  PROTOTYPING: "Đang xây dựng Prototype / Solution Proposal",
+  PROTOTYPING: "Đang xây dựng Bản thử nghiệm (Prototype) / Đề xuất giải pháp",
   EVALUATING: "Doanh nghiệp đang đánh giá",
   CLOSED: "Đã kết thúc – không triển khai",
-  READY_FOR_IMPLEMENTATION: "Sẵn sàng sang Paid Implementation",
+  READY_FOR_IMPLEMENTATION: "Sẵn sàng sang triển khai có phí",
   COMPLETED: "Đã hoàn thành",
   SUBMITTED: "Đã nộp",
   CHANGES_REQUESTED: "Được yêu cầu chỉnh sửa",
   NOT_IMPLEMENTED: "Không triển khai",
   ACCEPTED: "Được chấp nhận",
-  REVISION_REQUESTED: "Doanh nghiệp yêu cầu chỉnh sửa Prototype",
-  STOPPED: "Doanh nghiệp không tiếp tục Prototype",
+  REVISION_REQUESTED: "Doanh nghiệp yêu cầu chỉnh sửa Bản thử nghiệm (Prototype)",
+  STOPPED: "Doanh nghiệp không tiếp tục Bản thử nghiệm (Prototype)",
   PENDING_REVIEW: "Đang chờ Admin kiểm tra bàn giao",
   APPROVED: "Đã qua kiểm tra bàn giao",
   RETURNED: "Cần bổ sung bàn giao",
@@ -428,7 +428,7 @@ function ProposalForm({
           setFileError(
             /unexpected end of form/i.test(message)
               ? "Tệp quá lớn hoặc quá nhiều tệp, vui lòng kiểm tra lại"
-              : "Không thể nộp Proposal lúc này. Vui lòng kiểm tra tệp và thử lại.",
+              : "Không thể nộp đề xuất giải pháp lúc này. Vui lòng kiểm tra tệp và thử lại.",
           );
         });
     });
@@ -556,7 +556,7 @@ function EvaluationForm({
         >
           <option value="CHANGES_REQUESTED">Yêu cầu chỉnh sửa</option>
           <option value="CLOSED">Không triển khai</option>
-          <option value="READY_FOR_IMPLEMENTATION">Sẵn sàng sang Paid Implementation</option>
+          <option value="READY_FOR_IMPLEMENTATION">Sẵn sàng sang triển khai có phí</option>
         </select>
       </label>
       <button
@@ -811,7 +811,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
   );
   const canCreateAgreement = isBusiness && canOpenPaidImplementationAgreement(problem);
   const overdueLabels = [
-    ["submission", "Nộp Proposal quá hạn"],
+    ["submission", "Nộp đề xuất giải pháp quá hạn"],
     ["evaluation", "Doanh nghiệp đánh giá quá hạn"],
     ["implementationDecision", "Quyết định triển khai quá hạn"],
   ] as const;
@@ -859,7 +859,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
       {readonly ? (
         <p className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
           Quy trình Bản thử nghiệm (Prototype) / Đề xuất giải pháp đã kết thúc. Không thể gửi thêm tin nhắn hoặc đề xuất tại đây;
-          lịch sử vẫn được xem. Thỏa thuận và Milestone được quản lý trong trang dự án.
+          lịch sử vẫn được xem. Thỏa thuận và mốc công việc được quản lý trong trang dự án.
         </p>
       ) : null}
       {!readonly && (
@@ -894,7 +894,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
       {["READY_FOR_IMPLEMENTATION", "COMPLETED"].includes(problem.status) && (
         <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
           <h2 className="font-semibold text-emerald-950">
-            {problem.status === "COMPLETED" ? "Paid Implementation đã hoàn tất" : "Sẵn sàng sang Paid Implementation"}
+            {problem.status === "COMPLETED" ? "Triển khai có phí đã hoàn tất" : "Sẵn sàng sang triển khai có phí"}
           </h2>
           <p className="mt-1 text-sm text-emerald-900">
             Thỏa thuận, thanh toán mô phỏng và tiến độ theo mốc công việc được quản lý riêng trong trang dự án.
@@ -958,7 +958,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
           {proposals.length === 0 ? (
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               {isBusiness && !problem.prototypeLegacy && problem.status !== "EVALUATING"
-                ? "Chưa có Proposal nào được duyệt bàn giao để doanh nghiệp xem."
+                ? "Chưa có đề xuất giải pháp nào được duyệt bàn giao để doanh nghiệp xem."
                 : "Nhóm chưa nộp phiên bản nào. Các phiên bản nộp lại sẽ được lưu thành lịch sử riêng."}
             </p>
           ) : (
@@ -1074,12 +1074,12 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
               (!handoffPending && (!handoffApproved || revisionResubmissionAvailable))) && (
             <div className="mt-5 border-t border-border pt-4">
               <h3 className="font-semibold">
-                {returnedProposal ? `Nộp lại phiên bản ${returnedProposal.version}` : "Nộp Proposal"}
+                {returnedProposal ? `Nộp lại phiên bản ${returnedProposal.version}` : "Nộp đề xuất giải pháp"}
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 {problem.prototypeLegacy
                   ? "Sau khi nộp, bài toán chuyển sang trạng thái doanh nghiệp đánh giá."
-                  : "Sau khi nộp, Proposal được khóa để Admin kiểm tra bàn giao. Doanh nghiệp chỉ xem được khi Admin duyệt đạt."}
+                  : "Sau khi nộp, đề xuất giải pháp được khóa để quản trị viên kiểm tra bàn giao. Doanh nghiệp chỉ xem được khi quản trị viên duyệt đạt."}
               </p>
               <ProposalForm
                 applicationId={problem.applicationId}
@@ -1100,7 +1100,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
             !handoffApproved &&
             !problem.canRespondToTrialBrief && (
               <p className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-                Chỉ chủ nhóm mới có thể nộp Proposal.
+                Chỉ chủ nhóm mới có thể nộp đề xuất giải pháp.
               </p>
             )}
           {isBusiness &&
@@ -1118,7 +1118,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
             problem.trialBriefLockedAt === null &&
             !handoffPending && (
               <p className="mt-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-                Chỉ có thể nộp Proposal sau khi hai bên xác nhận và khóa hồ sơ thử nghiệm.
+                Chỉ có thể nộp đề xuất giải pháp sau khi hai bên xác nhận và khóa hồ sơ thử nghiệm.
               </p>
             )}
           {problem.status === "EVALUATING" && !isBusiness && (

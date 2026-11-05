@@ -4,6 +4,9 @@ import { ProjectListView } from "@/components/projects/project-list-view";
 import { prisma } from "@/lib/prisma";
 
 export const instant = false;
+export const metadata = {
+  title: "Dự án triển khai có phí | UniBridge",
+};
 
 export default async function BusinessProjectsPage() {
   const session = await auth();

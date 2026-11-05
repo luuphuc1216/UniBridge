@@ -39,7 +39,7 @@ export default async function StudentWorkspacePage({
       clock: { now: () => now },
     });
   } catch (error) {
-    console.error("Không thể tạo nhắc nhở nộp Proposal cho nhóm:", error);
+    console.error("Không thể tạo nhắc nhở nộp đề xuất giải pháp cho nhóm:", error);
   }
   const overdue = getWorkspacePrototypeOverdueStatus(
     { problem, trialBriefVersions: problem.trialBriefVersions, proposals: application.proposals },

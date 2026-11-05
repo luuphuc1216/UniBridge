@@ -102,10 +102,10 @@ function parseAgreement(formData: FormData, requireNewTerms = true): AgreementIn
   try {
     milestones = JSON.parse(rawMilestones) as AgreementMilestoneInput[];
   } catch {
-    throw new Error("Danh sách Milestone không hợp lệ.");
+    throw new Error("Danh sách mốc công việc không hợp lệ.");
   }
   if (!Array.isArray(milestones) || milestones.length === 0 || milestones.length > 20) {
-    throw new Error("Thỏa thuận cần có từ 1 đến 20 Milestone.");
+    throw new Error("Thỏa thuận cần có từ 1 đến 20 mốc công việc.");
   }
 
   const input: AgreementInput = {
@@ -185,7 +185,7 @@ function parseAgreement(formData: FormData, requireNewTerms = true): AgreementIn
       milestone.paymentPercent <= 0 ||
       milestone.paymentPercent > 100
     ) {
-      throw new Error("Mỗi Milestone cần tên, mô tả, hạn, tiêu chí nghiệm thu và % hợp lệ.");
+      throw new Error("Mỗi mốc công việc cần tên, mô tả, hạn, tiêu chí nghiệm thu và % hợp lệ.");
     }
   }
   calculateProjectFinancialBreakdown(
@@ -703,7 +703,7 @@ export async function depositProjectAction(
       error: null,
       success: result.alreadyDeposited
         ? "Khoản nạp trước đó đã được ghi nhận."
-        : "Đã ghi nhận khoản nạp giả lập và mở Milestone đầu tiên.",
+        : "Đã ghi nhận khoản nạp giả lập và mở mốc công việc đầu tiên.",
     };
   } catch (error) {
     if (authorizedBusiness) {
@@ -740,7 +740,7 @@ export async function updateMilestoneProgressAction(
         difficulties: readText(formData, "difficulties"),
       });
       revalidateProject(projectId, project.application.problem.id);
-      return { error: null, success: "Đã cập nhật tiến độ Milestone." };
+      return { error: null, success: "Đã cập nhật tiến độ mốc công việc." };
     }
     if (!progressNote || progressNote.length > 4000) {
       return { error: "Cập nhật tiến độ cần có nội dung, tối đa 4.000 ký tự." };
@@ -750,14 +750,14 @@ export async function updateMilestoneProgressAction(
     }
     const milestone = project.milestones.find(({ id }) => id === milestoneId);
     if (!milestone || !["IN_PROGRESS", "REVISION_REQUESTED"].includes(milestone.status)) {
-      throw new Error("Milestone này hiện chưa mở để cập nhật.");
+      throw new Error("Mốc công việc này hiện chưa mở để cập nhật.");
     }
     if (
       project.milestones
         .filter(({ sortOrder }) => sortOrder < milestone.sortOrder)
         .some(({ status }) => status !== "ACCEPTED")
     ) {
-      throw new Error("Cần nghiệm thu Milestone trước đó theo đúng thứ tự.");
+      throw new Error("Cần nghiệm thu mốc công việc trước đó theo đúng thứ tự.");
     }
     const changed = await prisma.milestone.updateMany({
       where: {
@@ -767,7 +767,7 @@ export async function updateMilestoneProgressAction(
       },
       data: { progressNote },
     });
-    if (changed.count !== 1) throw new Error("Milestone đã thay đổi. Vui lòng tải lại.");
+    if (changed.count !== 1) throw new Error("Mốc công việc đã thay đổi. Vui lòng tải lại.");
     revalidateProject(projectId, project.application.problem.id);
     return { error: null, success: "Đã cập nhật tiến độ." };
   } catch (error) {
@@ -790,7 +790,7 @@ export async function requestMilestoneRevisionAction(
     assertProjectActionable(project);
     if (!project.legacyTermsExempt) {
       if (session.user.role !== "BUSINESS") {
-        throw new Error("Chỉ doanh nghiệp sở hữu mới có thể phản hồi Milestone.");
+        throw new Error("Chỉ doanh nghiệp sở hữu mới có thể phản hồi mốc công việc.");
       }
       await requestPaidMilestoneRevision(prisma, {
         projectId,
@@ -802,7 +802,7 @@ export async function requestMilestoneRevisionAction(
       return { error: null, success: "Đã gửi yêu cầu chỉnh sửa cho nhóm." };
     }
     if (session.user.role !== "BUSINESS" || project.status !== "IN_PROGRESS") {
-      throw new Error("Chỉ doanh nghiệp sở hữu mới có thể phản hồi Milestone.");
+      throw new Error("Chỉ doanh nghiệp sở hữu mới có thể phản hồi mốc công việc.");
     }
     const milestone = project.milestones.find(({ id }) => id === milestoneId);
     if (!milestone || milestone.status !== "SUBMITTED") {
@@ -813,7 +813,7 @@ export async function requestMilestoneRevisionAction(
         .filter(({ sortOrder }) => sortOrder < milestone.sortOrder)
         .some(({ status }) => status !== "ACCEPTED")
     ) {
-      throw new Error("Cần xử lý Milestone trước đó theo đúng thứ tự.");
+      throw new Error("Cần xử lý mốc công việc trước đó theo đúng thứ tự.");
     }
     const recipients = projectRecipients(project);
     await prisma.$transaction(async (transaction) => {
@@ -821,12 +821,12 @@ export async function requestMilestoneRevisionAction(
         where: { id: milestoneId, projectId, status: "SUBMITTED" },
         data: { status: "REVISION_REQUESTED", revisionFeedback: feedback },
       });
-      if (changed.count !== 1) throw new Error("Milestone đã được xử lý. Vui lòng tải lại.");
+      if (changed.count !== 1) throw new Error("Mốc công việc đã được xử lý. Vui lòng tải lại.");
       await transaction.notification.createMany({
         data: recipients.teamUserIds.map((userId) => ({
           userId,
-          title: "Doanh nghiệp yêu cầu chỉnh sửa Milestone",
-          message: `Milestone “${milestone.title}” cần được điều chỉnh trong phạm vi đã thỏa thuận.`,
+          title: "Doanh nghiệp yêu cầu chỉnh sửa mốc công việc",
+          message: `Mốc công việc “${milestone.title}” cần được điều chỉnh trong phạm vi đã thỏa thuận.`,
           href: getProjectNotificationHref("STUDENT", projectId),
         })),
       });
@@ -834,7 +834,7 @@ export async function requestMilestoneRevisionAction(
     revalidateProject(projectId, project.application.problem.id);
     return { error: null, success: "Đã gửi yêu cầu chỉnh sửa cho nhóm." };
   } catch (error) {
-    return getActionError(error, "Yêu cầu chỉnh sửa Milestone");
+    return getActionError(error, "Yêu cầu chỉnh sửa mốc công việc");
   }
 }
 
@@ -862,10 +862,10 @@ export async function acceptMilestoneAction(
       return {
         error: null,
         success: result.alreadyAccepted
-          ? "Milestone này đã được nghiệm thu và giải ngân trước đó."
+          ? "Mốc công việc này đã được nghiệm thu và giải ngân trước đó."
           : result.finalAcceptancePending
-            ? "Đã nghiệm thu Milestone. Dự án đang chờ nghiệm thu cuối cùng."
-            : "Đã nghiệm thu Milestone và ghi nhận giải ngân giả lập.",
+            ? "Đã nghiệm thu mốc công việc. Dự án đang chờ nghiệm thu cuối cùng."
+            : "Đã nghiệm thu mốc công việc và ghi nhận giải ngân giả lập.",
       };
     }
     const result = await acceptLegacyMilestone(prisma, { projectId, milestoneId });
@@ -873,8 +873,8 @@ export async function acceptMilestoneAction(
     return {
       error: null,
       success: result.alreadyAccepted
-        ? "Milestone này đã được nghiệm thu và giải ngân trước đó."
-        : "Đã nghiệm thu Milestone và ghi nhận giải ngân giả lập.",
+        ? "Mốc công việc này đã được nghiệm thu và giải ngân trước đó."
+        : "Đã nghiệm thu mốc công việc và ghi nhận giải ngân giả lập.",
     };
   } catch (error) {
     if (authorizedBusiness) {
@@ -884,11 +884,11 @@ export async function acceptMilestoneAction(
       });
       if (!shouldRecordMilestoneRelease(existingRelease)) {
         revalidateProject(projectId);
-        return { error: null, success: "Milestone này đã được nghiệm thu và giải ngân trước đó." };
+        return { error: null, success: "Mốc công việc này đã được nghiệm thu và giải ngân trước đó." };
       }
     }
 
-    return getActionError(error, "Nghiệm thu Milestone");
+    return getActionError(error, "Nghiệm thu mốc công việc");
   }
 }
 
@@ -904,7 +904,7 @@ export async function acceptProjectFinalCompletionAction(
       throw new Error("Chỉ doanh nghiệp sở hữu dự án mới có thể xác nhận hoàn tất.");
     }
     if (project.legacyTermsExempt) {
-      throw new Error("Dự án legacy giữ nguyên luồng nghiệm thu hiện tại.");
+      throw new Error("Dự án thuộc luồng cũ giữ nguyên luồng nghiệm thu hiện tại.");
     }
     const result = await acceptProjectFinalCompletion(prisma, {
       projectId,

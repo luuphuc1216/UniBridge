@@ -8,12 +8,12 @@ export async function GET(
 ) {
   const session = await auth();
   if (!session?.user) {
-    return new Response("Vui lòng đăng nhập để tải Proposal.", { status: 401 });
+    return new Response("Vui lòng đăng nhập để tải đề xuất giải pháp.", { status: 401 });
   }
   const { fileId } = await params;
   const file = await findAuthorizedProposalFile(fileId, session.user.id, session.user.role);
   if (!file) {
-    return new Response("Không tìm thấy tệp Proposal.", { status: 404 });
+    return new Response("Không tìm thấy tệp đề xuất giải pháp.", { status: 404 });
   }
 
   try {
@@ -32,7 +32,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error("Không thể đọc tệp Proposal:", error);
-    return new Response("Không thể tải Proposal lúc này.", { status: 500 });
+    console.error("Không thể đọc tệp đề xuất giải pháp:", error);
+    return new Response("Không thể tải đề xuất giải pháp lúc này.", { status: 500 });
   }
 }

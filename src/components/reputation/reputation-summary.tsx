@@ -10,7 +10,7 @@ export function ReputationSummary({ reputation }: { reputation: TeamReputation }
     ["Số đánh giá", String(reputation.ratingCount)],
     ["Dự án hoàn tất", String(reputation.completedProjectCount)],
     ["Tỷ lệ hoàn thành", formatRate(reputation.completionRate)],
-    ["Milestone đúng hạn", formatRate(reputation.onTimeRate)],
+    ["Mốc công việc đúng hạn", formatRate(reputation.onTimeRate)],
     ["Đánh giá tích cực", String(reputation.positiveReviewCount)],
     ["Giao dịch đã ghi nhận", String(reputation.transactionCount)],
   ];

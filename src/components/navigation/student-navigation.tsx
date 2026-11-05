@@ -30,7 +30,7 @@ export async function StudentNavigation() {
         await ensureGroupSubmissionReminders(problemId);
       }
     } catch (error) {
-      console.error("Không thể tạo nhắc nhở Proposal trên chuông sinh viên:", error);
+      console.error("Không thể tạo nhắc nhở đề xuất giải pháp trên chuông sinh viên:", error);
     }
     notifications = await prisma.notification.findMany({
       where: { userId: session.user.id },
