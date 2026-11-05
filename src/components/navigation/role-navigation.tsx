@@ -129,6 +129,15 @@ export function RoleNavigation({ title, links, tools }: RoleNavigationProps) {
     });
   }
 
+  const activeHref = links
+    .filter((link) => {
+      const isRoleRoot = /^\/(student|business|admin)$/.test(link.href);
+      return isRoleRoot
+        ? pathname === link.href
+        : pathname === link.href || pathname.startsWith(`${link.href}/`);
+    })
+    .sort((left, right) => right.href.length - left.href.length)[0]?.href;
+
   return (
     <>
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur sm:px-6 lg:px-8">
@@ -183,12 +192,13 @@ export function RoleNavigation({ title, links, tools }: RoleNavigationProps) {
         </div>
         <nav aria-label={`Điều hướng ${title}`} className="flex-1 space-y-1 overflow-y-auto p-3">
           {links.map((link) => {
-            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+            const active = link.href === activeHref;
             const Icon = navigationIcons[link.label] ?? ListChecks;
             return (
               <Link
+                aria-current={active ? "page" : undefined}
                 aria-label={collapsed ? link.label : undefined}
-                className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors ${
+                className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring ${
                   active
                     ? "bg-sidebar-primary text-sidebar-primary-foreground"
                     : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
