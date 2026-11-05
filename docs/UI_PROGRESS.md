@@ -50,4 +50,8 @@
 
 ## Bước 9 — Responsive, accessibility và rà soát
 
-- Chưa làm.
+- Đã làm: Kiểm tra landing ở 375px, 768px và 1280px; không phát hiện horizontal overflow.
+- Đã làm: Kiểm tra cấu trúc heading, link/button có nhãn, focus-visible global, vùng bấm tối thiểu cho navigation/CTA và reduced-motion.
+- Đã làm: Chạy lại test repository; 216 test pass. Lint và build pass.
+- Chưa làm: Chưa có session đăng nhập để kiểm tra trực quan sidebar/dashboard/workspace ở cả ba viewport.
+- Điểm bất thường: Dev server hiện báo cảnh báo/error Next.js về `crypto.getRandomValues()` khi prerender `/dang-nhap` và `/dang-ky`; đây là ranh giới dynamic/auth hiện có, không tự thay đổi trong UI-only scope. Build production vẫn pass.
