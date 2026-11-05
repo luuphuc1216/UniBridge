@@ -12,7 +12,12 @@ export default async function BusinessTransactionsPage() {
     where: { application: { problem: { businessProfile: { userId: session.user.id } } } },
     orderBy: { updatedAt: "desc" },
     include: {
-      application: { include: { problem: { select: { title: true } } } },
+      application: {
+        select: {
+          problem: { select: { businessProfile: { select: { companyName: true } } } },
+        },
+      },
+      team: { select: { name: true } },
       transactions: {
         select: {
           type: true,
@@ -25,5 +30,15 @@ export default async function BusinessTransactionsPage() {
       },
     },
   });
-  return <ProjectListView projects={projects} role="BUSINESS" transactionDashboard />;
+  return (
+    <ProjectListView
+      projects={projects.map((project) => ({
+        ...project,
+        teamName: project.team.name,
+        businessName: project.application.problem.businessProfile.companyName,
+      }))}
+      role="BUSINESS"
+      transactionDashboard
+    />
+  );
 }

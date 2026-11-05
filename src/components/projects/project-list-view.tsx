@@ -5,6 +5,8 @@ export type ProjectListItem = {
   title: string;
   status: string;
   totalAmount: number;
+  teamName?: string | null;
+  businessName?: string | null;
   transactions: {
     type: string;
     amount: number;
@@ -33,10 +35,11 @@ export function ProjectListView({
   transactionDashboard = false,
 }: {
   projects: ProjectListItem[];
-  role: "BUSINESS" | "STUDENT";
+  role: "BUSINESS" | "STUDENT" | "ADMIN";
   transactionDashboard?: boolean;
 }) {
-  const basePath = role === "BUSINESS" ? "/business" : "/student";
+  const basePath =
+    role === "BUSINESS" ? "/business" : role === "STUDENT" ? "/student" : "/admin";
   return (
     <main className="mx-auto max-w-5xl px-4 py-7 sm:px-6 sm:py-10">
       <p className="text-sm font-semibold text-primary">
@@ -58,6 +61,15 @@ export function ProjectListView({
       ) : (
         <div className="mt-6 grid gap-4">
           {projects.map((project) => {
+            const subtitle =
+              role === "BUSINESS"
+                ? project.teamName
+                : role === "STUDENT"
+                  ? project.businessName
+                  : [project.businessName, project.teamName].filter(Boolean).join(" · ");
+            const subtitleText = subtitle?.trim();
+            const showSubtitle =
+              Boolean(subtitleText) && subtitleText !== project.title.trim();
             const releases = project.transactions.filter(
               (transaction) => transaction.type === "MILESTONE_RELEASE",
             );
@@ -91,6 +103,9 @@ export function ProjectListView({
               <article className="rounded-2xl border border-border bg-card p-5 sm:p-6" key={project.id}>
                 <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                   <div>
+                    {showSubtitle ? (
+                      <p className="max-w-full truncate text-sm text-muted-foreground">{subtitleText}</p>
+                    ) : null}
                     <h2 className="mt-1 text-lg font-semibold">{project.title}</h2>
                   </div>
                   <span className="w-fit rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
