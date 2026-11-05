@@ -41,6 +41,46 @@ type RoleNavigationProps = {
   tools?: ReactNode;
 };
 
+function BrandMark({ collapsed }: { collapsed: boolean }) {
+  return (
+    <Link
+      aria-label="UniBridge"
+      className={`flex min-w-0 items-center gap-3 text-white ${
+        collapsed ? "justify-center" : ""
+      }`}
+      href="/"
+      title="UniBridge"
+    >
+      <svg
+        aria-hidden="true"
+        className="size-10 shrink-0"
+        fill="none"
+        viewBox="0 0 40 40"
+      >
+        <rect fill="var(--primary)" height="40" rx="12" width="40" />
+        <text
+          fill="white"
+          fontFamily="Arial, sans-serif"
+          fontSize="13"
+          fontWeight="700"
+          textAnchor="middle"
+          x="20"
+          y="25"
+        >
+          UB
+        </text>
+      </svg>
+      <span
+        className={`overflow-hidden whitespace-nowrap text-lg font-bold tracking-tight transition-[opacity,max-width] duration-200 ${
+          collapsed ? "max-w-0 opacity-0" : "max-w-32 opacity-100"
+        }`}
+      >
+        UniBridge
+      </span>
+    </Link>
+  );
+}
+
 const navigationIcons: Record<string, LucideIcon> = {
   "Tổng quan": LayoutDashboard,
   "Khám phá bài toán": Search,
@@ -131,9 +171,7 @@ export function RoleNavigation({ title, links, tools }: RoleNavigationProps) {
         }`}
       >
         <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
-          <Link className="truncate text-lg font-bold tracking-tight text-white" href="/">
-            {collapsed ? "UB" : "UniBridge"}
-          </Link>
+          <BrandMark collapsed={collapsed} />
           <button
             aria-label="Đóng menu điều hướng"
             className="inline-flex size-10 items-center justify-center rounded-xl text-sidebar-foreground hover:bg-sidebar-accent lg:hidden"
