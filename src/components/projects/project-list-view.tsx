@@ -5,7 +5,6 @@ export type ProjectListItem = {
   title: string;
   status: string;
   totalAmount: number;
-  application: { problem: { title: string } };
   transactions: {
     type: string;
     amount: number;
