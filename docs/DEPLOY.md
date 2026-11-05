@@ -45,6 +45,8 @@ sh scripts/backup.sh
 
 Khôi phục trước tiên nên chạy `scripts/restore.sh <thư-mục-backup>` để kiểm checksum, giải nén vào `RESTORE_STAGING_DIR` mới và kiểm tra `PRAGMA integrity_check`. Chỉ dùng `--apply` khi ứng dụng và job đã dừng, đồng thời xác nhận tên thư mục backup theo yêu cầu của script.
 
+`restore.sh --apply` kiểm tra tiến trình đang dùng database bằng `lsof` (ưu tiên) hoặc `fuser`. VPS cần cài ít nhất một công cụ; trên Debian/Ubuntu có thể cài `lsof` bằng `apt install lsof`. Chạy script bằng đúng user chạy ứng dụng hoặc bằng `sudo`, vì các công cụ này chỉ thấy tiến trình mà user có quyền xem. Luôn dừng ứng dụng và timer trước khi restore, không dựa hoàn toàn vào kiểm tra tự động. Nếu không có cả `lsof` lẫn `fuser`, script yêu cầu nhập xác nhận lần hai bằng tay.
+
 Khi áp dụng, script chuyển database cũ cùng các file `-wal`, `-shm`, `-journal` (nếu tồn tại) vào thư mục `<DB_PATH>.pre-restore-<timestamp>`, rồi kiểm tra integrity của database đã cài. Nếu kiểm tra thất bại, script báo vị trí bản cũ và hướng dẫn khôi phục: chuyển database lỗi sang chỗ khác, sau đó chuyển database cũ và sidecar tương ứng từ thư mục pre-restore về cạnh `DB_PATH` với đúng tên ban đầu. Không xóa thư mục pre-restore cho tới khi database đã được xác minh và ứng dụng hoạt động bình thường.
 
 ## Kiểm chứng Linux
