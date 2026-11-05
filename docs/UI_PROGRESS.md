@@ -16,7 +16,11 @@
 
 ## Bước 4 — Landing và authentication
 
-- Chưa làm.
+- Đã làm: Redesign landing với header public, hero, CTA hai vai trò, composition UI, hai phía giá trị, quy trình 8 bước, FAQ và footer.
+- Đã làm: Làm rõ Prototype (Bản thử nghiệm), Triển khai có phí và cơ chế thỏa thuận; không thêm dữ liệu DB hoặc hành vi mới.
+- Đã làm: Cải thiện presentation cho đăng ký, đăng nhập, quên mật khẩu và đặt lại mật khẩu; giữ nguyên route, auth flow và form component.
+- Chưa làm: Chưa tích hợp dữ liệu bài toán thật vào landing vì việc thêm truy vấn sẽ vượt ranh giới UI-only.
+- Điểm bất thường: FAQ dùng native `details` để không thêm logic/client state; sẽ rà soát accessibility ở Bước 9.
 
 ## Bước 5 — Student Dashboard
 

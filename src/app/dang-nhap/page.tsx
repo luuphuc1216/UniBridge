@@ -13,7 +13,7 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <Suspense
       fallback={
-        <main className="grid min-h-screen place-items-center text-sm text-muted-foreground">
+        <main className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">
           Đang tải...
         </main>
       }
@@ -30,10 +30,10 @@ async function LoginContent({ searchParams }: LoginPageProps) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-muted/40 px-4 py-10">
-      <section className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-9">
-        <Link className="text-sm font-semibold text-primary" href="/">
-          ← UniBridge
+    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
+      <section className="w-full max-w-md rounded-[2rem] border border-border bg-card p-6 shadow-sm sm:p-9">
+        <Link className="text-sm font-semibold text-brand-navy" href="/">
+          ← UNIBRIDGE
         </Link>
         <p className="mt-8 text-sm font-semibold uppercase tracking-[0.18em] text-primary">
           Chào mừng trở lại
