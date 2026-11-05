@@ -9,7 +9,10 @@
 
 ## Bước 3 — Layout và navigation
 
-- Chưa làm.
+- Đã làm: Đổi navigation dashboard sang sidebar cố định trên desktop, drawer trên mobile, topbar sticky và trạng thái active theo route.
+- Đã làm: Thêm thu gọn sidebar lưu bằng localStorage; giữ nguyên các server navigation, truy vấn, reminder, notification bell và props.
+- Chưa làm: Breadcrumb/menu người dùng chuyên sâu; sẽ cân nhắc trong các bước màn hình.
+- Điểm bất thường: Sidebar hiện dùng chữ cái đầu khi thu gọn vì navigation chưa có metadata icon; không thêm dữ liệu điều hướng mới.
 
 ## Bước 4 — Landing và authentication
 
