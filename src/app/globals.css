@@ -147,6 +147,23 @@
   }
 }
 
+@layer components {
+  .dashboard-shell {
+    --sidebar-w: 16rem;
+    transition: padding-left var(--transition-standard);
+  }
+
+  body[data-sidebar-collapsed="true"] .dashboard-shell {
+    --sidebar-w: 4.5rem;
+  }
+
+  @media (min-width: 1024px) {
+    .dashboard-shell {
+      padding-left: var(--sidebar-w);
+    }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

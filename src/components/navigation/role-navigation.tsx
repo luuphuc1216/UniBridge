@@ -4,7 +4,31 @@ import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import {
+  BarChart3,
+  Bookmark,
+  BriefcaseBusiness,
+  Building2,
+  CheckSquare,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
+  FileCheck2,
+  FilePlus2,
+  Files,
+  FolderKanban,
+  LayoutDashboard,
+  ListChecks,
+  Menu,
+  Search,
+  Settings,
+  ShieldCheck,
+  UserCog,
+  Users,
+  WalletCards,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
 export type NavigationLink = {
   href: string;
@@ -17,29 +41,57 @@ type RoleNavigationProps = {
   tools?: ReactNode;
 };
 
+const navigationIcons: Record<string, LucideIcon> = {
+  "Tổng quan": LayoutDashboard,
+  "Khám phá bài toán": Search,
+  "Bài toán đã lưu": Bookmark,
+  "Hồ sơ nhóm": Users,
+  "Hồ sơ đã gửi": FileCheck2,
+  "Dự án": FolderKanban,
+  "Giao dịch": WalletCards,
+  "Hồ sơ doanh nghiệp": Building2,
+  "Đăng bài toán": FilePlus2,
+  "Quản lý bài toán": Files,
+  "Bài toán của tôi": Files,
+  "Gói và hạn mức": WalletCards,
+  "Tài khoản": UserCog,
+  "Duyệt bài toán": ClipboardCheck,
+  "Báo cáo vi phạm": ShieldCheck,
+  "Kiểm tra bàn giao Prototype": CheckSquare,
+  "Quản lý dự án": BriefcaseBusiness,
+  "Báo cáo và xử lý phát sinh": ListChecks,
+  "Thống kê": BarChart3,
+  "Cài đặt": Settings,
+};
+
 export function RoleNavigation({ title, links, tools }: RoleNavigationProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    if (window.localStorage.getItem("unibridge-sidebar-collapsed") === "true") {
+    const storedCollapsed =
+      window.localStorage.getItem("unibridge-sidebar-collapsed") === "true";
+    document.body.dataset.sidebarCollapsed = String(storedCollapsed);
+    if (storedCollapsed) {
       const frame = window.requestAnimationFrame(() => setCollapsed(true));
       return () => window.cancelAnimationFrame(frame);
     }
+    return undefined;
   }, []);
 
   function toggleCollapsed() {
     setCollapsed((current) => {
       const next = !current;
       window.localStorage.setItem("unibridge-sidebar-collapsed", String(next));
+      document.body.dataset.sidebarCollapsed = String(next);
       return next;
     });
   }
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur sm:px-6 lg:ml-64 lg:px-8">
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <button
             aria-label="Mở menu điều hướng"
@@ -74,9 +126,9 @@ export function RoleNavigation({ title, links, tools }: RoleNavigationProps) {
         />
       ) : null}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-[transform,width] duration-200 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[var(--sidebar-w)] flex-col bg-sidebar text-sidebar-foreground transition-[transform,width] duration-200 lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
-        } ${collapsed ? "lg:w-20" : ""}`}
+        }`}
       >
         <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
           <Link className="truncate text-lg font-bold tracking-tight text-white" href="/">
@@ -94,9 +146,11 @@ export function RoleNavigation({ title, links, tools }: RoleNavigationProps) {
         <nav aria-label={`Điều hướng ${title}`} className="flex-1 space-y-1 overflow-y-auto p-3">
           {links.map((link) => {
             const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+            const Icon = navigationIcons[link.label] ?? ListChecks;
             return (
               <Link
-                className={`flex min-h-11 items-center rounded-xl px-3 text-sm font-medium transition-colors ${
+                aria-label={collapsed ? link.label : undefined}
+                className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors ${
                   active
                     ? "bg-sidebar-primary text-sidebar-primary-foreground"
                     : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
@@ -106,8 +160,8 @@ export function RoleNavigation({ title, links, tools }: RoleNavigationProps) {
                 onClick={() => setMobileOpen(false)}
                 title={collapsed ? link.label : undefined}
               >
+                <Icon aria-hidden="true" className="size-5 shrink-0" />
                 <span className={collapsed ? "sr-only" : undefined}>{link.label}</span>
-                {collapsed ? <span aria-hidden="true">{link.label.slice(0, 1)}</span> : null}
               </Link>
             );
           })}
@@ -133,7 +187,6 @@ export function RoleNavigation({ title, links, tools }: RoleNavigationProps) {
           </button>
         </div>
       </aside>
-      <div className="hidden lg:block lg:w-64" aria-hidden="true" />
     </>
   );
 }
