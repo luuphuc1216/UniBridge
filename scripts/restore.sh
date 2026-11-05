@@ -121,12 +121,12 @@ printf 'Type %s to apply this restore: ' "$backup_name"
 IFS= read -r confirmation || confirmation=
 [ "$confirmation" = "$backup_name" ] || fail "confirmation did not match"
 
-if command -v fuser >/dev/null 2>&1; then
-  if fuser "$DB_PATH" >/dev/null 2>&1; then
+if command -v lsof >/dev/null 2>&1; then
+  if [ -n "$(lsof -t "$DB_PATH" 2>/dev/null || true)" ]; then
     fail "a process is using the database"
   fi
-elif command -v lsof >/dev/null 2>&1; then
-  if [ -n "$(lsof -t "$DB_PATH" 2>/dev/null || true)" ]; then
+elif command -v fuser >/dev/null 2>&1; then
+  if fuser "$DB_PATH" >/dev/null 2>&1; then
     fail "a process is using the database"
   fi
 else
