@@ -36,7 +36,9 @@
 
 ## Bước 7 — Admin Dashboard
 
-- Chưa làm.
+- Đã làm: Làm rõ header quản trị, cảnh báo thanh toán mô phỏng và metric cards.
+- Đã làm: Đổi nhãn hiển thị “Phí legacy 15%” thành “Phí nền tảng (dự kiến)”, giữ nguyên dữ liệu `metrics.projectFees.legacy`.
+- Chưa làm: Chưa tái cấu trúc sâu các bảng Admin; phần đó nằm trong rà soát module ở Bước 8/9.
 
 ## Bước 8 — Module nghiệp vụ
 

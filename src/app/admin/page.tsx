@@ -45,7 +45,7 @@ function formatCurrency(amount: number): string {
 
 function MetricCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <article className="rounded-2xl border border-border bg-card p-5">
+    <article className="rounded-2xl border border-border bg-card p-5 transition-shadow hover:shadow-md">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>
     </article>
@@ -81,11 +81,16 @@ export default async function AdminDashboard() {
   const revenueBreakdown = getDashboardRevenueBreakdown(metrics);
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
-      <p className="text-sm font-semibold text-primary">Khu vực quản trị</p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight">Tổng quan</h1>
-      <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-        Thanh toán giả lập — các số liệu phản ánh dữ liệu giao dịch mô phỏng trong hệ thống.
+    <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
+      <section className="rounded-[2rem] bg-brand-navy p-6 text-white sm:p-8">
+        <p className="text-sm font-semibold text-brand-light">Khu vực quản trị</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Tổng quan</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">
+          Theo dõi hoạt động nền tảng, kiểm duyệt nội dung và xử lý các báo cáo cần chú ý.
+        </p>
+      </section>
+      <p className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+        Thanh toán mô phỏng — các số liệu phản ánh dữ liệu giao dịch mô phỏng trong hệ thống.
       </p>
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Tài khoản doanh nghiệp" value={metrics.businessAccounts} />
@@ -105,7 +110,7 @@ export default async function AdminDashboard() {
           <MetricCard label="Tổng REFUND (hiển thị riêng)" value={formatCurrency(metrics.refundValue)} />
           <MetricCard label="Phụ phí doanh nghiệp 10%" value={formatCurrency(metrics.projectFees.business)} />
           <MetricCard label="Phí nhóm sinh viên 5%" value={formatCurrency(metrics.projectFees.student)} />
-          <MetricCard label="Phí legacy 15%" value={formatCurrency(metrics.projectFees.legacy)} />
+          <MetricCard label="Phí nền tảng (dự kiến)" value={formatCurrency(metrics.projectFees.legacy)} />
           <MetricCard label="Tổng doanh thu phí dự án" value={formatCurrency(metrics.projectFeeRevenue)} />
           <MetricCard
             label={`Mua lẻ · ${metrics.postPurchaseOrders} đơn`}
