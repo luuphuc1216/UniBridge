@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ensureBusinessCreditNotifications } from "@/lib/business-credit-notifications";
 import { getUnreadWorkspaceMessageCount } from "@/lib/workspace-messages";
 import {
-  BUSINESS_PROBLEM_STATUSES,
+  BUSINESS_PROBLEM_STATUS_GROUPS,
   getEffectiveApplicationCounts,
 } from "@/lib/business-dashboard";
 
@@ -55,11 +55,14 @@ export default async function BusinessDashboard() {
     (sum, count) => sum + count,
     0,
   );
-  const problemStatusLinks = BUSINESS_PROBLEM_STATUSES.map(([status, label]) => ({
-    status,
+  const problemStatusLinks = BUSINESS_PROBLEM_STATUS_GROUPS.map(({ key, label, statuses }) => ({
+    status: key,
     label,
-    count: statusCounts.get(status) ?? 0,
+    count: statuses.reduce((sum, status) => sum + (statusCounts.get(status) ?? 0), 0),
   }));
+  const needsRevisionCount = statusCounts.get("NEEDS_REVISION") ?? 0;
+  const changesRequestedCount = statusCounts.get("CHANGES_REQUESTED") ?? 0;
+  const totalNeedsRevision = needsRevisionCount + changesRequestedCount;
   return (
     <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <p className="text-sm font-semibold text-primary">Khu vực doanh nghiệp</p>
@@ -95,14 +98,14 @@ export default async function BusinessDashboard() {
       <section className="mt-6 rounded-2xl border border-border bg-card p-6">
         <h2 className="text-lg font-semibold">Cần xử lý</h2>
         <div className="mt-4 grid gap-2 text-sm">
-          {(statusCounts.get("NEEDS_REVISION") ?? 0) > 0 && <Link className="text-primary hover:underline" href="/business/problems?status=NEEDS_REVISION">Bài toán cần chỉnh sửa ({statusCounts.get("NEEDS_REVISION") ?? 0})</Link>}
+          {totalNeedsRevision > 0 && <Link className="text-primary hover:underline" href="/business/problems?status=NEEDS_REVISION">Bài toán cần chỉnh sửa ({totalNeedsRevision})</Link>}
           {pendingReview > 0 && <Link className="text-primary hover:underline" href="/business/problems">Hồ sơ cần xem xét ({pendingReview})</Link>}
           {pendingInvitations > 0 && <Link className="text-primary hover:underline" href="/business/problems">Lời mời đang chờ nhóm phản hồi ({pendingInvitations}) — hạn gần nhất: {pendingInvitationDeadline ? new Intl.DateTimeFormat("vi-VN").format(pendingInvitationDeadline.expiresAt) : "chưa xác định"}</Link>}
           {pendingProposals > 0 && <Link className="text-primary hover:underline" href="/business/projects">Proposal chờ đánh giá ({pendingProposals})</Link>}
           {pendingMilestones > 0 && <Link className="text-primary hover:underline" href="/business/projects">Milestone chờ nghiệm thu ({pendingMilestones})</Link>}
           {pendingAgreements > 0 && <Link className="text-primary hover:underline" href="/business/problems">Thỏa thuận chờ xác nhận ({pendingAgreements})</Link>}
           {unreadMessages > 0 && <Link className="text-primary hover:underline" href="/business/messages">Tin nhắn chưa đọc ({unreadMessages})</Link>}
-          {pendingReview === 0 && pendingInvitations === 0 && pendingProposals === 0 && pendingMilestones === 0 && pendingAgreements === 0 && unreadMessages === 0 && (statusCounts.get("NEEDS_REVISION") ?? 0) === 0 && <p className="text-muted-foreground">Không có việc cần xử lý.</p>}
+          {pendingReview === 0 && pendingInvitations === 0 && pendingProposals === 0 && pendingMilestones === 0 && pendingAgreements === 0 && unreadMessages === 0 && totalNeedsRevision === 0 && <p className="text-muted-foreground">Không có việc cần xử lý.</p>}
         </div>
       </section>
       <section className="mt-6 rounded-2xl border border-border bg-card p-6">

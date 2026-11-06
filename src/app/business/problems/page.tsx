@@ -2,7 +2,11 @@ import Link from "next/link";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
-import { getEffectiveApplicationCounts } from "@/lib/business-dashboard";
+import {
+  BUSINESS_PROBLEM_STATUS_GROUPS,
+  getBusinessProblemStatusFilter,
+  getEffectiveApplicationCounts,
+} from "@/lib/business-dashboard";
 
 export const instant = false;
 
@@ -31,7 +35,7 @@ export default async function BusinessProblemsPage({
   const problems = await prisma.problem.findMany({
     where: {
       businessProfileId,
-      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.status ? { status: getBusinessProblemStatusFilter(filters.status) } : {}),
       ...(filters.field ? { field: filters.field } : {}),
       ...(filters.query ? { title: { contains: filters.query } } : {}),
     },
@@ -59,7 +63,7 @@ export default async function BusinessProblemsPage({
           <input className="rounded-xl border border-border bg-background px-3 py-2 text-sm" defaultValue={filters.field} name="field" placeholder="Lĩnh vực" />
           <select className="rounded-xl border border-border bg-background px-3 py-2 text-sm" defaultValue={filters.status ?? ""} name="status">
             <option value="">Tất cả trạng thái</option>
-            {Object.keys(statusClasses).map((status) => <option key={status} value={status}>{status}</option>)}
+            {BUSINESS_PROBLEM_STATUS_GROUPS.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
           </select>
           <button className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground" type="submit">Lọc</button>
         </form>
