@@ -36,7 +36,7 @@ export default async function BusinessDashboard() {
       getUnreadWorkspaceMessageCount(sessionProfile.userId, "BUSINESS"),
       prisma.application.count({ where: { problem: { businessProfileId }, needsReview: true, status: { in: ["SUBMITTED", "PENDING_CONFIRMATION", "SELECTED"] } } }),
       prisma.applicationInvitation.count({ where: { invitedByBusinessProfileId: businessProfileId, status: "PENDING_CONFIRMATION" } }),
-      prisma.proposal.count({ where: { problem: { businessProfileId }, status: { in: ["SUBMITTED", "EVALUATING"] } } }),
+      prisma.proposal.count({ where: { application: { problem: { businessProfileId } }, status: { in: ["SUBMITTED", "EVALUATING"] } } }),
       prisma.milestone.count({ where: { project: { application: { problem: { businessProfileId } } }, status: "SUBMITTED" } }),
       prisma.project.count({ where: { application: { problem: { businessProfileId } }, status: "AGREEING" } }),
     ]);
