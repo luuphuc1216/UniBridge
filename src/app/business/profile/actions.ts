@@ -7,6 +7,9 @@ import {
   isBusinessLogoUrl,
   isBusinessWebsiteUrl,
 } from "@/lib/business-profile-validation";
+import { validateAttachment } from "@/lib/business-attachments/validation";
+import { attachmentStorage } from "@/lib/storage";
+import { randomUUID } from "node:crypto";
 
 export type BusinessProfileActionState = { error: string | null };
 
@@ -42,6 +45,16 @@ export async function saveBusinessProfileAction(
   if (phone && !/^[+]?[0-9 ()-]{8,20}$/.test(phone)) {
     return { error: "Số điện thoại không hợp lệ." };
   }
+  let storedLogoKey: string | null = null;
+  const logoFile = formData.get("logoFile");
+  if (logoFile instanceof File && logoFile.size > 0) {
+    const validated = await validateAttachment(logoFile);
+    if (!["image/png", "image/jpeg"].includes(validated.contentType)) {
+      return { error: "Logo chỉ nhận tệp PNG hoặc JPG." };
+    }
+    storedLogoKey = randomUUID();
+    await attachmentStorage.save(storedLogoKey, validated.content);
+  }
   try {
     await prisma.businessProfile.upsert({
       where: { userId: session.user.id },
@@ -50,7 +63,7 @@ export async function saveBusinessProfileAction(
         companyName,
         industry: industry || "Chưa cập nhật",
         industries: text(formData, "industries"),
-        logo: logo || null,
+        logo: storedLogoKey ?? (logo || null),
         website: website || null,
         description: text(formData, "description"),
         address: text(formData, "address"),
@@ -62,7 +75,7 @@ export async function saveBusinessProfileAction(
         companyName,
         industry: industry || "Chưa cập nhật",
         industries: text(formData, "industries"),
-        logo: logo || null,
+        logo: storedLogoKey ?? (logo || null),
         website: website || null,
         description: text(formData, "description"),
         address: text(formData, "address"),

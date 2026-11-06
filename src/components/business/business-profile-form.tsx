@@ -27,7 +27,7 @@ export function BusinessProfileForm({ profile }: { profile: Profile }) {
         ["companyName", "Tên doanh nghiệp", profile.companyName, true],
         ["industry", "Lĩnh vực chính", profile.industry, true],
         ["industries", "Các lĩnh vực (ngăn cách bằng dấu phẩy)", profile.industries, false],
-        ["logo", "URL logo (HTTPS)", profile.logo ?? "", false],
+        ["logo", "URL logo cũ (HTTPS, nếu không tải tệp)", profile.logo?.startsWith("http") ? profile.logo : "", false],
         ["website", "Website", profile.website ?? "", false],
         ["address", "Địa chỉ", profile.address, false],
         ["contactEmail", "Email liên hệ", profile.contactEmail ?? "", false],
@@ -47,6 +47,10 @@ export function BusinessProfileForm({ profile }: { profile: Profile }) {
       <label className="text-sm font-medium sm:col-span-2">
         Mô tả doanh nghiệp
         <textarea className="mt-1.5 min-h-32 w-full rounded-xl border border-border bg-background p-3" defaultValue={profile.description} name="description" />
+      </label>
+      <label className="text-sm font-medium sm:col-span-2">
+        Logo mới (PNG/JPG)
+        <input className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5" name="logoFile" type="file" accept="image/png,image/jpeg" />
       </label>
       {state.error && <p className="sm:col-span-2 text-sm text-destructive" role="alert">{state.error}</p>}
       <div className="flex gap-3 sm:col-span-2">

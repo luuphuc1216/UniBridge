@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { ReviewList } from "@/components/reputation/review-list";
 import { prisma } from "@/lib/prisma";
 import { getBusinessReviewPage } from "@/lib/reputation-data";
+import { BusinessLogo } from "@/components/business/business-logo";
 
 export const instant = false;
 
@@ -42,6 +43,7 @@ export default async function BusinessProfilePage({
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6 sm:py-10">
       <header className="rounded-2xl border border-border bg-card p-5 sm:p-7">
         <p className="text-sm font-semibold text-primary">{business.industry}</p>
+        {business.logo && <BusinessLogo alt={`Logo ${business.companyName}`} src={business.logo} />}
         <h1 className="mt-2 text-3xl font-bold tracking-tight">{business.companyName}</h1>
         <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{business.description}</p>
         {business.address && <p className="mt-3 text-sm text-muted-foreground">Địa chỉ: {business.address}</p>}
