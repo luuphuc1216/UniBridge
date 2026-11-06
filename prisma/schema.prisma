@@ -119,6 +119,7 @@ model BusinessProfile {
   industry        String
   industries      String                  @default("")
   logo            String?
+  logoMimeType   String?
   website         String?
   description     String
   address         String                  @default("")

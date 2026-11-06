@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Buffer } from "node:buffer";
 import { attachmentStorage } from "@/lib/storage";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(
   _request: Request,
@@ -11,10 +12,15 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 });
   }
   try {
+    const profile = await prisma.businessProfile.findFirst({
+      where: { logo: logoKey },
+      select: { logoMimeType: true },
+    });
+    if (!profile) return new NextResponse("Not found", { status: 404 });
     const content = await attachmentStorage.read(logoKey);
     return new NextResponse(Buffer.from(content), {
       headers: {
-        "Content-Type": "image/*",
+        "Content-Type": profile.logoMimeType ?? "application/octet-stream",
         "Cache-Control": "public, max-age=3600",
         "X-Content-Type-Options": "nosniff",
       },

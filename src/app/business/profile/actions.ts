@@ -46,6 +46,7 @@ export async function saveBusinessProfileAction(
     return { error: "Số điện thoại không hợp lệ." };
   }
   let storedLogoKey: string | null = null;
+  let storedLogoMimeType: string | null = null;
   const logoFile = formData.get("logoFile");
   if (logoFile instanceof File && logoFile.size > 0) {
     const validated = await validateAttachment(logoFile);
@@ -53,6 +54,7 @@ export async function saveBusinessProfileAction(
       return { error: "Logo chỉ nhận tệp PNG hoặc JPG." };
     }
     storedLogoKey = randomUUID();
+    storedLogoMimeType = validated.contentType;
     await attachmentStorage.save(storedLogoKey, validated.content);
   }
   try {
@@ -64,6 +66,7 @@ export async function saveBusinessProfileAction(
         industry: industry || "Chưa cập nhật",
         industries: text(formData, "industries"),
         logo: storedLogoKey ?? (logo || null),
+        logoMimeType: storedLogoMimeType,
         website: website || null,
         description: text(formData, "description"),
         address: text(formData, "address"),
@@ -76,6 +79,7 @@ export async function saveBusinessProfileAction(
         industry: industry || "Chưa cập nhật",
         industries: text(formData, "industries"),
         logo: storedLogoKey ?? (logo || null),
+        logoMimeType: storedLogoMimeType,
         website: website || null,
         description: text(formData, "description"),
         address: text(formData, "address"),
