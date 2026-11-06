@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 import { ensureBusinessCreditNotifications } from "@/lib/business-credit-notifications";
+import { getUnreadWorkspaceMessageCount } from "@/lib/workspace-messages";
 
 export default async function BusinessDashboard() {
   const { businessProfileId } = await requireBusinessProfile();
@@ -24,7 +25,7 @@ export default async function BusinessDashboard() {
     _sum: { remaining: true },
   });
   const remaining = credits._sum.remaining ?? 0;
-  const [problems, receivedApplications, activeProjects, completedProjects, subscription, notifications] =
+  const [problems, receivedApplications, activeProjects, completedProjects, subscription, notifications, unreadMessages, pendingReview, pendingInvitations, pendingProposals, pendingMilestones, pendingAgreements] =
     await Promise.all([
       prisma.problem.groupBy({ by: ["status"], where: { businessProfileId }, _count: { _all: true } }),
       prisma.application.count({ where: { problem: { businessProfileId }, status: { notIn: ["WITHDRAWN", "REJECTED"] } } }),
@@ -32,6 +33,12 @@ export default async function BusinessDashboard() {
       prisma.project.count({ where: { application: { problem: { businessProfileId } }, status: "COMPLETED" } }),
       prisma.subscription.findFirst({ where: { businessProfileId, status: "ACTIVE", endsAt: { gt: new Date() } }, orderBy: { endsAt: "desc" } }),
       prisma.notification.findMany({ where: { userId: sessionProfile.userId }, orderBy: { createdAt: "desc" }, take: 8 }),
+      getUnreadWorkspaceMessageCount(sessionProfile.userId, "BUSINESS"),
+      prisma.application.count({ where: { problem: { businessProfileId }, needsReview: true, status: { in: ["SUBMITTED", "PENDING_CONFIRMATION", "SELECTED"] } } }),
+      prisma.applicationInvitation.count({ where: { invitedByBusinessProfileId: businessProfileId, status: "PENDING_CONFIRMATION" } }),
+      prisma.proposal.count({ where: { problem: { businessProfileId }, status: { in: ["SUBMITTED", "EVALUATING"] } } }),
+      prisma.milestone.count({ where: { project: { application: { problem: { businessProfileId } } }, status: "SUBMITTED" } }),
+      prisma.project.count({ where: { application: { problem: { businessProfileId } }, status: "AGREEING" } }),
     ]);
   const statusCounts = new Map(problems.map((item) => [item.status, item._count._all]));
   return (
@@ -55,11 +62,16 @@ export default async function BusinessDashboard() {
         <h2 className="text-lg font-semibold">Cần xử lý</h2>
         <div className="mt-4 grid gap-2 text-sm">
           {(statusCounts.get("NEEDS_REVISION") ?? 0) > 0 && <Link className="text-primary hover:underline" href="/business/problems?status=NEEDS_REVISION">Bài toán cần chỉnh sửa</Link>}
-          {receivedApplications > 0 && <Link className="text-primary hover:underline" href="/business/problems">Hồ sơ đang chờ xem xét</Link>}
+          {pendingReview > 0 && <Link className="text-primary hover:underline" href="/business/problems">Hồ sơ cần xem xét ({pendingReview})</Link>}
+          {pendingInvitations > 0 && <Link className="text-primary hover:underline" href="/business/problems">Lời mời đang chờ phản hồi ({pendingInvitations})</Link>}
+          {pendingProposals > 0 && <Link className="text-primary hover:underline" href="/business/projects">Proposal chờ đánh giá ({pendingProposals})</Link>}
+          {pendingMilestones > 0 && <Link className="text-primary hover:underline" href="/business/projects">Milestone chờ nghiệm thu ({pendingMilestones})</Link>}
+          {pendingAgreements > 0 && <Link className="text-primary hover:underline" href="/business/problems">Thỏa thuận chờ xác nhận ({pendingAgreements})</Link>}
+          {unreadMessages > 0 && <Link className="text-primary hover:underline" href="/business/messages">Tin nhắn chưa đọc ({unreadMessages})</Link>}
           {notifications.filter((notification) => !notification.readAt).map((notification) => (
             <Link className="text-primary hover:underline" href={notification.href} key={notification.id}>{notification.title}</Link>
           ))}
-          {receivedApplications === 0 && !notifications.some((notification) => !notification.readAt) && <p className="text-muted-foreground">Không có việc cần xử lý.</p>}
+          {pendingReview === 0 && pendingInvitations === 0 && pendingProposals === 0 && pendingMilestones === 0 && pendingAgreements === 0 && unreadMessages === 0 && !notifications.some((notification) => !notification.readAt) && <p className="text-muted-foreground">Không có việc cần xử lý.</p>}
         </div>
       </section>
       <section className="mt-6 rounded-2xl border border-border bg-card p-6">
