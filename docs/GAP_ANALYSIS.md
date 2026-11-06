@@ -27,6 +27,13 @@
 - `UNDER_REVIEW` hiện chỉ được tham chiếu trong luồng đóng Problem; không có luồng tạo/cập nhật trạng thái này nên không thay đổi hàm đếm hồ sơ hiệu lực.
 - Bộ test tăng từ 222 lên 239 test pass. Không phát sinh migration trong Đợt 5D; migration MIME logo của Đợt 5C vẫn là additive.
 
+## Cập nhật Đợt 5E
+
+- Bổ sung file [close-problem-core.test.ts](../src/lib/close-problem-core.test.ts) với 14 test SQLite độc lập cho toàn bộ luồng đóng Problem: chặn lời mời/nhóm/dự án, sai chủ sở hữu, trường trạng thái, hồ sơ liên quan, thông báo, AuditLog, PostCredit, rollback, gọi hai lần, chuyển trạng thái đồng thời, tìm kiếm công khai và hồ sơ mới.
+- Mỗi test có từ khóa nghiệp vụ tương ứng trong tên `it(...)` để dễ tra cứu.
+- Thêm hook tùy chọn `CloseProblemCoreHooks` tại [close-problem-core.ts](../src/lib/close-problem-core.ts) chỉ phục vụ mô phỏng lỗi trong transaction. Khi không truyền hook, hành vi mặc định không thay đổi.
+- Test tăng từ 239 lên 253 test pass. Không có lỗi chức năng được phát hiện; không thêm migration, không đổi logic tiền hoặc trạng thái dùng chung.
+
 > Phạm vi: đọc [UniBridge.md](./UniBridge.md), [ModuleKetNoi.md](./ModuleKetNoi.md), [ChiTietGiaoDienModuleKetNoi.md](./ChiTietGiaoDienModuleKetNoi.md), [ModuleGiaiPhapGiaoDich.md](./ModuleGiaiPhapGiaoDich.md) và đối chiếu với code/schema/seed/test đang có. Báo cáo chỉ ghi nhận, **không sửa code**. “Đã có” có thể là có một phần, không đồng nghĩa đã đáp ứng đầy đủ đặc tả.
 
 > Ghi chú phạm vi Đợt 1: tệp minh họa cho Approach qua file-picker được hoãn sang đợt sau; không triển khai dở dang trong đợt này.
