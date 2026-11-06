@@ -48,3 +48,6 @@ next-env.d.ts
 *.bak
 prisma/*.db.bak
 prisma/*.db.bak
+
+# Local demo data
+/data/
