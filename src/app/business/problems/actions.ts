@@ -95,7 +95,7 @@ async function getBusinessContext() {
   if (!profile) {
     throw new Error("Không tìm thấy hồ sơ doanh nghiệp.");
   }
-  return { businessProfileId: profile.id };
+  return { userId: session.user.id, businessProfileId: profile.id };
 }
 
 function makeSlug(title: string): string {
@@ -548,5 +548,47 @@ export async function updateApplicationReviewAction(
     return { error: "Không thể cập nhật ghi chú hồ sơ. Vui lòng thử lại." };
   }
   revalidatePath(`/business/problems/${problemId}/applications`);
+  return { error: null };
+}
+
+export async function closeProblemAction(
+  _previousState: ProblemActionState,
+  formData: FormData,
+): Promise<ProblemActionState> {
+  const problemId = getText(formData, "problemId");
+  try {
+    const { userId, businessProfileId } = await getBusinessContext();
+    await prisma.$transaction(async (transaction) => {
+      const problem = await transaction.problem.findFirst({
+        where: { id: problemId, businessProfileId, status: { in: ["APPROVED", "PUBLISHED"] } },
+        select: { id: true, title: true },
+      });
+      if (!problem) throw new Error("Chỉ có thể đóng bài toán đã được duyệt và đang mở.");
+      const pendingInvitation = await transaction.applicationInvitation.findFirst({
+        where: { problemId, status: "PENDING_CONFIRMATION" },
+        select: { id: true },
+      });
+      if (pendingInvitation) throw new Error("Không thể đóng: còn lời mời đang chờ nhóm phản hồi.");
+      const runningProject = await transaction.project.findFirst({
+        where: { application: { problemId }, status: { in: ["AGREEING", "IN_PROGRESS"] } },
+        select: { id: true },
+      });
+      const selected = await transaction.application.findFirst({
+        where: { problemId, status: "SELECTED" },
+        select: { id: true },
+      });
+      if (runningProject || selected) throw new Error("Không thể đóng: bài toán đã có nhóm được chọn hoặc dự án đang thực hiện.");
+      await transaction.problem.update({ where: { id: problemId }, data: { status: "CLOSED" } });
+      await transaction.auditLog.create({
+        data: { actorId: userId, action: "BUSINESS_CLOSED_PROBLEM", targetType: "Problem", targetId: problemId, metadata: JSON.stringify({ title: problem.title }) },
+      });
+    });
+  } catch (error) {
+    if (error instanceof Error) return { error: error.message };
+    console.error("Đóng bài toán thất bại:", error);
+    return { error: "Không thể đóng bài toán. Vui lòng thử lại." };
+  }
+  revalidatePath("/business/problems");
+  revalidatePath(`/business/problems/${problemId}`);
   return { error: null };
 }

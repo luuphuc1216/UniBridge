@@ -21,10 +21,20 @@ const statusClasses: Record<string, string> = {
   READY_FOR_IMPLEMENTATION: "bg-emerald-100 text-emerald-800",
 };
 
-export default async function BusinessProblemsPage() {
+export default async function BusinessProblemsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; field?: string; query?: string }>;
+}) {
   const { businessProfileId } = await requireBusinessProfile();
+  const filters = await searchParams;
   const problems = await prisma.problem.findMany({
-    where: { businessProfileId },
+    where: {
+      businessProfileId,
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.field ? { field: filters.field } : {}),
+      ...(filters.query ? { title: { contains: filters.query } } : {}),
+    },
     orderBy: { updatedAt: "desc" },
     include: {
       _count: {
@@ -46,6 +56,15 @@ export default async function BusinessProblemsPage() {
             Quản lý nội dung, hồ sơ ứng tuyển và trạng thái duyệt của các bài toán.
           </p>
         </div>
+        <form className="mt-6 grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-4" method="get">
+          <input className="rounded-xl border border-border bg-background px-3 py-2 text-sm" defaultValue={filters.query} name="query" placeholder="Tìm theo tên bài toán" />
+          <input className="rounded-xl border border-border bg-background px-3 py-2 text-sm" defaultValue={filters.field} name="field" placeholder="Lĩnh vực" />
+          <select className="rounded-xl border border-border bg-background px-3 py-2 text-sm" defaultValue={filters.status ?? ""} name="status">
+            <option value="">Tất cả trạng thái</option>
+            {Object.keys(statusClasses).map((status) => <option key={status} value={status}>{status}</option>)}
+          </select>
+          <button className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground" type="submit">Lọc</button>
+        </form>
         <Link
           className="rounded-xl bg-primary px-5 py-3 text-center text-sm font-semibold text-primary-foreground hover:opacity-90"
           href="/business/problems/new"
