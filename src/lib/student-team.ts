@@ -20,6 +20,10 @@ export function getOwnedTeam(userId: string) {
         select: { name: true, major: true, title: true, isLead: true },
       },
       skills: { select: { skill: { select: { name: true } } } },
+      portfolioItems: {
+        orderBy: { createdAt: "desc" },
+        select: { id: true, title: true, description: true, demoUrl: true, field: true, isVisible: true },
+      },
     },
   });
 }
