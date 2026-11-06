@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { auth } from "@/auth";
 import { ReviewList } from "@/components/reputation/review-list";
 import { prisma } from "@/lib/prisma";
@@ -24,6 +25,14 @@ export default async function BusinessProfilePage({
       industry: true,
       website: true,
       description: true,
+      logo: true,
+      industries: true,
+      address: true,
+      problems: {
+        where: { status: { in: ["APPROVED", "PUBLISHED"] }, hiddenByAdmin: false },
+        select: { id: true, title: true, field: true },
+        orderBy: { approvedAt: "desc" },
+      },
     },
   });
   if (!business) notFound();
@@ -35,12 +44,31 @@ export default async function BusinessProfilePage({
         <p className="text-sm font-semibold text-primary">{business.industry}</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">{business.companyName}</h1>
         <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{business.description}</p>
+        {business.address && <p className="mt-3 text-sm text-muted-foreground">Địa chỉ: {business.address}</p>}
+        {business.industries && <p className="mt-2 text-sm text-muted-foreground">Lĩnh vực: {business.industries}</p>}
         {business.website && (
           <p className="mt-4 break-all text-sm text-muted-foreground">
             Trang web doanh nghiệp: {business.website}
           </p>
         )}
       </header>
+      <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">
+        <h2 className="text-lg font-semibold">Bài toán đang mở</h2>
+        {business.problems.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">Doanh nghiệp chưa có bài toán đang mở.</p>
+        ) : (
+          <ul className="mt-3 grid gap-2">
+            {business.problems.map((problem) => (
+              <li key={problem.id}>
+                <Link className="font-medium text-primary hover:underline" href={`/student/problems/${problem.id}`}>
+                  {problem.title}
+                </Link>
+                <span className="ml-2 text-sm text-muted-foreground">{problem.field}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       <ReviewList
         basePath={`/businesses/${business.id}`}
         reviewPage={reviewPage}

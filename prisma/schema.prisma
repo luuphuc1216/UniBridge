@@ -50,6 +50,7 @@ model User {
   reports                           Report[]                    @relation("ReportReporter")
   handledReports                    Report[]                    @relation("ReportHandler")
   passwordResetTokens               PasswordResetToken[]
+  workspaceReadCursors              WorkspaceReadCursor[]
 }
 
 model AuditLog {
@@ -116,8 +117,14 @@ model BusinessProfile {
   userId          String                  @unique
   companyName     String
   industry        String
+  industries      String                  @default("")
+  logo            String?
   website         String?
   description     String
+  address         String                  @default("")
+  contactEmail    String?
+  phone           String?
+  representative  String                  @default("")
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
   user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -163,6 +170,7 @@ model StudentTeam {
   invitations      ApplicationInvitation[]
   projects         Project[]
   reviews          Review[]                @relation("ReviewedTeam")
+  portfolioItems   PortfolioItem[]
 }
 
 model TeamMembership {
@@ -341,6 +349,7 @@ model Application {
   proposals              Proposal[]
   project                Project?
   workspaceMessages      WorkspaceMessage[]
+  workspaceReadCursors   WorkspaceReadCursor[]
 
   @@unique([problemId, teamId])
   @@index([status])
@@ -472,6 +481,37 @@ model WorkspaceMessage {
 
   @@index([problemId, createdAt])
   @@index([applicationId, createdAt])
+}
+
+model WorkspaceReadCursor {
+  id            String      @id @default(cuid())
+  applicationId String
+  userId        String
+  lastReadAt    DateTime?
+  updatedAt     DateTime    @updatedAt
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, userId])
+}
+
+model PortfolioItem {
+  id              String      @id @default(cuid())
+  teamId          String
+  sourceProjectId String?     @unique
+  title           String
+  description     String
+  demoUrl         String?
+  fileStorageKey  String?
+  fileName        String?
+  field           String      @default("")
+  isVisible       Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  team            StudentTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  sourceProject   Project?    @relation(fields: [sourceProjectId], references: [id], onDelete: SetNull)
+
+  @@index([teamId, isVisible])
 }
 
 model ProposalEvaluation {
@@ -613,6 +653,7 @@ model Project {
   pausedTotalSeconds        Int                       @default(0)
   createdAt                 DateTime                  @default(now())
   updatedAt                 DateTime                  @updatedAt
+  portfolioItem             PortfolioItem?
   application               Application               @relation(fields: [applicationId], references: [id], onDelete: Restrict)
   team                      StudentTeam               @relation(fields: [teamId], references: [id], onDelete: Restrict)
   finalAcceptedBy           User?                     @relation("ProjectFinalAccepter", fields: [finalAcceptedById], references: [id], onDelete: SetNull)
