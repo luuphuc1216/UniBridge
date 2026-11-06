@@ -18,6 +18,15 @@
 - Thêm migration additive `20261106190000_dot5c_logo_mime` để trả MIME chính xác cho logo upload; route Portfolio yêu cầu tài khoản sinh viên có quyền quản lý nhóm, mục ẩn trả 404 và mọi route tệp có `nosniff`.
 - Test tăng từ 220 lên 222; thêm test SQLite độc lập cho tổng Problem mọi trạng thái và đối chiếu số hồ sơ hiệu lực giữa dashboard/danh sách.
 
+## Cập nhật Đợt 5D
+
+- Tách logic lõi cập nhật hồ sơ doanh nghiệp, đóng Problem và kiểm tra nội dung tin nhắn khỏi lớp server action để có thể kiểm thử trực tiếp bằng SQLite tạm.
+- Route tệp Portfolio cho phép người dùng đã đăng nhập xem mục đang hiện; mục ẩn chỉ cho quản trị viên hoặc thành viên có quyền quản lý nhóm, trường hợp còn lại trả 404. Giữ `nosniff`, MIME cụ thể và PDF inline.
+- Hồ sơ doanh nghiệp chỉ truy vấn và hiển thị email, số điện thoại, người đại diện cho chủ doanh nghiệp, Admin hoặc nhóm có hồ sơ `SELECTED`. Logo legacy không có MIME được nhận diện bằng chữ ký PNG/JPEG; chữ ký không hợp lệ trả 404.
+- Sửa kiểm tra quyền đóng Problem trong hàm lõi bằng cách ràng buộc `userId` với chủ BusinessProfile. Bổ sung kiểm thử các trạng thái chặn, bảo toàn hồ sơ `DRAFT`, chuyển hồ sơ đang xử lý sang `NOT_SELECTED`, thông báo và AuditLog.
+- `UNDER_REVIEW` hiện chỉ được tham chiếu trong luồng đóng Problem; không có luồng tạo/cập nhật trạng thái này nên không thay đổi hàm đếm hồ sơ hiệu lực.
+- Bộ test tăng từ 222 lên 239 test pass. Không phát sinh migration trong Đợt 5D; migration MIME logo của Đợt 5C vẫn là additive.
+
 > Phạm vi: đọc [UniBridge.md](./UniBridge.md), [ModuleKetNoi.md](./ModuleKetNoi.md), [ChiTietGiaoDienModuleKetNoi.md](./ChiTietGiaoDienModuleKetNoi.md), [ModuleGiaiPhapGiaoDich.md](./ModuleGiaiPhapGiaoDich.md) và đối chiếu với code/schema/seed/test đang có. Báo cáo chỉ ghi nhận, **không sửa code**. “Đã có” có thể là có một phần, không đồng nghĩa đã đáp ứng đầy đủ đặc tả.
 
 > Ghi chú phạm vi Đợt 1: tệp minh họa cho Approach qua file-picker được hoãn sang đợt sau; không triển khai dở dang trong đợt này.
