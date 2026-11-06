@@ -148,6 +148,16 @@ describe("Prototype evaluation workflow", () => {
       select: { id: true },
     });
     attemptId = attempt.id;
+    await database.prisma.proposalFile.create({
+      data: {
+        proposalId,
+        attemptId,
+        originalName: "san-pham-ban-giao.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 1024,
+        storageKey: "prototype-handoff-file",
+      },
+    });
     await database.prisma.proposalHandoffReview.create({
       data: {
         id: "prototype-handoff-review",
@@ -285,7 +295,12 @@ describe("Prototype evaluation workflow", () => {
       submitterId: "prototype-team-owner",
       type: "DETAILED_SOLUTION_PROPOSAL",
       description: "Bản đã chỉnh sửa",
-      files: [],
+      files: [{
+        originalName: "san-pham-ban-giao.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 1024,
+        content: new Uint8Array([1, 2, 3]),
+      }],
       clock,
     });
     assert.equal(submission.proposalId, proposalId);

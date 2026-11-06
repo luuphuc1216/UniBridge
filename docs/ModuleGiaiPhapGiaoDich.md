@@ -69,7 +69,7 @@ Bước 2. Thực hiện và nộp sản phẩm
 1. Nhóm tải sản phẩm lên hệ thống và nhấn “Nộp”.
 1. Hệ thống kiểm tra thông tin bắt buộc, tệp đính kèm và thời hạn bàn giao.
 1. Nếu hợp lệ, hệ thống lưu sản phẩm, ghi nhận thời gian nộp và chuyển sang bước kiểm tra bàn giao.
-1. Nền tảng kiểm tra tính đầy đủ của sản phẩm, tài liệu và việc tuân thủ quy định. Nền tảng không thay doanh nghiệp đánh giá chuyên môn về chất lượng giải pháp.
+1. Nền tảng kiểm tra tính đầy đủ của sản phẩm, tài liệu, loại/dung lượng tệp, thời hạn và đối chiếu với danh sách sản phẩm đầu ra trong hồ sơ thử nghiệm. Solution Proposal thuần văn bản hợp lệ khi nội dung đạt độ dài tối thiểu; Prototype bắt buộc có tệp hoặc URL demo. AI chỉ đối chiếu đầu ra, không chấm chất lượng và không chặn nộp bài khi AI lỗi.
 1. Khi sản phẩm đáp ứng điều kiện bàn giao, hệ thống chuyển sản phẩm cho doanh nghiệp và cập nhật trạng thái “Chờ doanh nghiệp đánh giá”. Nếu thiếu tài liệu hoặc chưa đáp ứng điều kiện, hệ thống thông báo để nhóm bổ sung.
 
 Bước 3. Doanh nghiệp đánh giá sản phẩm
@@ -430,6 +430,7 @@ Bước 2. Kiểm duyệt và chuẩn hóa bài toán
 1. Nếu bài toán còn chung chung, người kiểm duyệt yêu cầu doanh nghiệp bổ sung hoặc chuẩn hóa thành Problem Brief rõ ràng hơn.
 1. Nếu đạt yêu cầu, bài toán được phê duyệt và chuyển sang trạng thái Open Problem.
 1. Nếu bị từ chối, hệ thống lưu lý do và thông báo cho doanh nghiệp.
+1. Có thể dùng AI kiểm tra sau bước luật; kết quả checklist lưu trong `AiReview`, người thực hiện tự động là “AI”, còn admin có quyền ghi đè hoặc thu hồi duyệt. Mọi ghi đè/thu hồi được ghi vào nhật ký.
 
 Sau khi bài toán được duyệt, hệ thống phân loại và đề xuất bài toán cho sinh viên dựa trên các thông tin phù hợp như ngành học, kỹ năng, lĩnh vực quan tâm, Portfolio và lịch sử dự án. Đây là cơ chế đề xuất, không phải tự động lựa chọn nhóm thay doanh nghiệp.
 Bước 3. Theo dõi dự án và giao dịch
@@ -452,7 +453,7 @@ Bước 4. Tiếp nhận và xử lý báo cáo
 Hệ thống lưu trữ:
 
 - Dữ liệu tài khoản: Mã tài khoản, thông tin người dùng, vai trò, quyền truy cập và trạng thái hoạt động.
-- Dữ liệu kiểm duyệt: Mã bài toán, doanh nghiệp đăng, người duyệt, kết quả, lý do và thời gian xử lý.
+- Dữ liệu kiểm duyệt: Mã bài toán, doanh nghiệp đăng, người duyệt (giá trị “AI” khi tự động), kết quả checklist, `AiReview`, lý do, phiên bản nội dung và thời gian xử lý; thao tác admin được lưu trong nhật ký.
 - Dữ liệu dự án: Mã dự án, các bên tham gia, trạng thái triển khai, Milestone và thông tin bàn giao.
 - Dữ liệu giao dịch: Mã giao dịch, giá trị dự án, trạng thái thỏa thuận và thông tin thanh toán cần theo dõi.
 - Dữ liệu báo cáo: Nội dung vi phạm, người gửi, thời gian gửi, kết quả và lý do xử lý.

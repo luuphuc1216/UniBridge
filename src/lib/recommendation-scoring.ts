@@ -27,11 +27,44 @@ export type RecommendationProblem = {
   createdAt: Date;
 };
 
+export type RecommendationTeam = {
+  id: string;
+  name: string;
+  skills: string[];
+  interests: string[];
+  majors: string[];
+  createdAt: Date;
+};
+
 export type ScoredRecommendation<T extends RecommendationProblem = RecommendationProblem> = {
   problem: T;
   score: number;
   reasons: string[];
 };
+
+export function scoreTeamForProblem(
+  problem: RecommendationProblem,
+  team: RecommendationTeam,
+): { team: RecommendationTeam; score: number; reasons: string[] } {
+  const scored = scoreRecommendation(problem, {
+    majors: team.majors,
+    skills: team.skills,
+    interests: team.interests,
+    viewedProblems: [],
+    savedProblems: [],
+    searchedFields: [],
+    searchedSkills: [],
+    searchQueries: [],
+    appliedProblems: [],
+    ratingAverage: 0,
+    ratingCount: 0,
+  });
+  return {
+    team,
+    score: scored.score,
+    reasons: scored.reasons,
+  };
+}
 
 export function sortByRecommendationScore<T extends { id: string; createdAt: Date }>(
   items: T[],

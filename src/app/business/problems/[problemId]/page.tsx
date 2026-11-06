@@ -43,7 +43,7 @@ export default async function BusinessProblemDetailPage({
     notFound();
   }
 
-  const editable = ["DRAFT", "NEEDS_REVISION", "CHANGES_REQUESTED"].includes(problem.status);
+  const editable = ["DRAFT", "NEEDS_REVISION", "CHANGES_REQUESTED", "REJECTED"].includes(problem.status);
   const canReviewApplications = [
     "APPROVED",
     "PUBLISHED",

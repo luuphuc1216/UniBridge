@@ -135,6 +135,35 @@ model BusinessProfile {
   postCredits     PostCredit[]
   subscriptions   Subscription[]
   platformCharges PlatformCharge[]
+  aiUsages        AiUsage[]
+  aiUsageBuckets  AiUsageBucket[]
+}
+
+model AiUsage {
+  id                String          @id @default(cuid())
+  businessProfileId String?
+  quotaKey          String           @default("BUSINESS")
+  targetId          String?
+  feature           String
+  status            String          @default("RESERVED")
+  createdAt         DateTime        @default(now())
+  completedAt       DateTime?
+  businessProfile   BusinessProfile? @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+
+  @@index([quotaKey, feature, targetId, status, createdAt])
+}
+
+model AiUsageBucket {
+  id                String          @id @default(cuid())
+  businessProfileId String?
+  quotaKey          String           @default("BUSINESS")
+  periodType        String
+  periodStart       DateTime
+  used              Int             @default(0)
+  businessProfile   BusinessProfile? @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([quotaKey, periodType, periodStart])
+  @@index([quotaKey, periodType, periodStart])
 }
 
 model StudentProfile {
@@ -228,6 +257,7 @@ model Problem {
   firstApprovedAt               DateTime?
   createdAt                     DateTime                @default(now())
   updatedAt                     DateTime                @updatedAt
+  version                       Int                     @default(1)
   businessProfile               BusinessProfile         @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
   reviewer                      User?                   @relation("ProblemReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   skills                        ProblemSkill[]
@@ -248,10 +278,30 @@ model Problem {
   trialBriefVersions            TrialBriefVersion[]
   proposalHandoffReviews        ProposalHandoffReview[]
   prototypeClosures             PrototypeClosure[]
+  aiReviews                     AiReview[]
 
   @@index([status, field])
   @@index([businessProfileId])
   @@index([consumedCreditId])
+}
+
+model AiReview {
+  id            String   @id @default(cuid())
+  problemId     String?
+  attemptId     String?
+  feature       String
+  actor         String   @default("AI")
+  status        String
+  conclusion    String?
+  checklist     Json
+  reason        String?
+  problemVersion Int?
+  createdAt     DateTime @default(now())
+  problem       Problem? @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  attempt       ProposalSubmissionAttempt? @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([problemId, feature, createdAt])
+  @@index([attemptId, feature, createdAt])
 }
 
 model PostCredit {
@@ -587,6 +637,7 @@ model ProposalSubmissionAttempt {
   submittedBy       User                    @relation("ProposalSubmissionUser", fields: [submittedByUserId], references: [id], onDelete: Restrict)
   files             ProposalFile[]
   handoffReviews    ProposalHandoffReview[]
+  aiReviews         AiReview[]
 
   @@unique([proposalId, attempt])
   @@index([proposalId, submittedAt])

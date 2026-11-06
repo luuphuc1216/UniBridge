@@ -5,7 +5,9 @@ import { useActionState } from "react";
 import {
   sendInvitationAction,
   updateApplicationReviewAction,
+  generateApplicationExplanationAction,
   type ProblemActionState,
+  type AiExplanationState,
 } from "@/app/business/problems/actions";
 import type { TeamReputation } from "@/lib/reputation";
 import {
@@ -47,6 +49,8 @@ type ApplicationCardData = {
     members: { name: string; major: string }[];
     projects: { title: string }[];
   };
+  recommendationScore: number;
+  recommendationReasons: string[];
 };
 
 type ApplicationComparisonProps = {
@@ -55,6 +59,7 @@ type ApplicationComparisonProps = {
   problemSkills: string[];
   problemStatus: string;
   hasPendingInvitation: boolean;
+  aiRemaining: { daily: number; monthly: number };
 };
 
 function formatCurrency(amount: number | null): string {
@@ -129,12 +134,59 @@ function ReviewForm({ problemId, application }: { problemId: string; application
   );
 }
 
+function AiExplanation({
+  problemId,
+  applications,
+  remaining,
+}: {
+  problemId: string;
+  applications: ApplicationCardData[];
+  remaining: { daily: number; monthly: number };
+}) {
+  const [state, formAction, isPending] = useActionState<AiExplanationState, FormData>(
+    generateApplicationExplanationAction,
+    { error: null },
+  );
+  return (
+    <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3">
+      <p className="text-sm font-semibold">Gợi ý do AI tạo, chỉ mang tính tham khảo</p>
+      <form action={formAction}>
+        <input name="problemId" type="hidden" value={problemId} />
+        <button
+          className="text-sm font-semibold text-primary disabled:opacity-60"
+          disabled={isPending || remaining.daily === 0 || remaining.monthly === 0}
+          type="submit"
+        >
+          {isPending ? "Đang phân tích danh sách..." : "AI giải thích vì sao phù hợp"}
+        </button>
+      </form>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Còn {remaining.daily} lượt hôm nay / {remaining.monthly} lượt tháng này
+      </p>
+      {state.error && <p className="mt-2 text-xs text-destructive">{state.error}</p>}
+      {state.explanations && (
+        <div className="mt-2 space-y-2 text-sm leading-6">
+          {applications.map((application) => {
+            const explanation = state.explanations?.[application.id];
+            return explanation ? (
+              <p key={application.id}>
+                <span className="font-semibold">{application.team.name}:</span> {explanation}
+              </p>
+            ) : null;
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ApplicationComparison({
   problemId,
   applications,
   problemSkills,
   problemStatus,
   hasPendingInvitation,
+  aiRemaining,
 }: ApplicationComparisonProps) {
   const canSelect = ["APPROVED", "PUBLISHED"].includes(problemStatus);
 
@@ -240,6 +292,11 @@ export function ApplicationComparison({
                       : `${application.team.reputation.onTimeRate}%`}
                   </p>
                 </div>
+              )}
+              {application.recommendationReasons.length > 0 && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Recommendation: {application.recommendationReasons.join(" · ")}
+                </p>
               )}
             </div>
             <p className="mt-4 text-sm leading-6">{application.team.description}</p>
@@ -392,6 +449,11 @@ export function ApplicationComparison({
           </article>
         );
       })}
+      <AiExplanation
+        applications={applications}
+        problemId={problemId}
+        remaining={aiRemaining}
+      />
     </div>
   );
 }

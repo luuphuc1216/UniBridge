@@ -171,7 +171,7 @@ export async function submitProblemForReview(
       where: {
         id: problemId,
         businessProfileId,
-        status: { in: ["DRAFT", "NEEDS_REVISION", "CHANGES_REQUESTED"] },
+        status: { in: ["DRAFT", "NEEDS_REVISION", "CHANGES_REQUESTED", "REJECTED"] },
         consumedCreditId: { not: null },
       },
       data: {

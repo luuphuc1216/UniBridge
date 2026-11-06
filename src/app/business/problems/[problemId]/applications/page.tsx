@@ -6,6 +6,8 @@ import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 import { getTeamReputations } from "@/lib/reputation-data";
 import { expireInvitations } from "@/jobs/expire-invitations";
+import { getAiUsageRemaining } from "@/lib/ai/usage";
+import { scoreTeamForProblem } from "@/lib/recommendation-scoring";
 
 export const instant = false;
 
@@ -77,6 +79,25 @@ export default async function BusinessProblemApplicationsPage({
   );
   const applications = problem.applications.map((application) => {
     const snapshot = getProfileSnapshot(application.profileSnapshot);
+    const recommendation = scoreTeamForProblem(
+      {
+        id: problem.id,
+        title: problem.title,
+        field: problem.field,
+        skills: problem.skills.map(({ skill }) => skill.name),
+        createdAt: problem.createdAt,
+      },
+      {
+        id: application.team.id,
+        name: application.team.name,
+        majors: (snapshot?.members ?? application.team.memberships)
+          .map(({ major }) => major)
+          .filter(Boolean),
+        skills: snapshot?.skills ?? application.team.skills.map(({ skill }) => skill.name),
+        interests: (snapshot?.interests ?? application.team.interests).split(/[,;\n]/).filter(Boolean),
+        createdAt: application.submittedAt,
+      },
+    );
     return {
     id: application.id,
     approach: application.approach,
@@ -108,8 +129,12 @@ export default async function BusinessProblemApplicationsPage({
         application.team.memberships.map(({ name, major }) => ({ name, major })),
       projects: application.team.projects,
     },
+    recommendationScore: recommendation.score,
+    recommendationReasons: recommendation.reasons,
   };
   });
+  applications.sort((left, right) => right.recommendationScore - left.recommendationScore);
+  const aiRemaining = await getAiUsageRemaining(prisma, businessProfileId);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
@@ -133,6 +158,7 @@ export default async function BusinessProblemApplicationsPage({
           problemSkills={problem.skills.map(({ skill }) => skill.name)}
           problemStatus={problem.status}
           hasPendingInvitation={hasPendingInvitation}
+          aiRemaining={aiRemaining}
         />
       </section>
     </main>

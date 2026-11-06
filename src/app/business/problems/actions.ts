@@ -15,10 +15,24 @@ import {
 import { canCreatePendingInvitation } from "@/lib/problem-workflow";
 import { submitProblemForReview } from "@/lib/post-credits";
 import { closeProblemCore } from "@/lib/close-problem-core";
+import { requireActivePremium } from "@/lib/ai/access";
+import { AI_FEATURES } from "@/lib/ai/config";
+import { generateApplicationExplanations } from "@/lib/ai/application-explanation";
+import { completeAiUsage, reserveAiUsage } from "@/lib/ai/usage";
+import {
+  automaticallyReviewSubmittedProblem,
+  isAutomaticProblemReviewEnabled,
+} from "@/lib/ai/problem-review";
+import { isSignificantProblemTextChange } from "@/lib/problem-change";
 
 export type ProblemActionState = {
   error: string | null;
   actionHref?: string;
+};
+
+export type AiExplanationState = {
+  error: string | null;
+  explanations?: Record<string, string>;
 };
 
 function getText(formData: FormData, key: string): string {
@@ -71,6 +85,7 @@ function validateProblemFields(formData: FormData) {
   if (Object.values(fields).some((value) => value.length < 2)) {
     throw new Error("Vui lòng điền đầy đủ thông tin bài toán.");
   }
+
   if (fields.title.length > 200 || fields.field.length > 100) {
     throw new Error("Tên vấn đề tối đa 200 ký tự, lĩnh vực tối đa 100 ký tự.");
   }
@@ -200,6 +215,13 @@ export async function createProblemAction(
           actionHref: `/business/problems/${problemId}/edit`,
         };
       }
+      if (result.status === "submitted" && isAutomaticProblemReviewEnabled()) {
+        try {
+          await automaticallyReviewSubmittedProblem(problemId, businessProfileId);
+        } catch (error) {
+          console.error("AI tự động kiểm duyệt Problem thất bại:", error);
+        }
+      }
     }
   } catch (error) {
     await Promise.all(
@@ -233,6 +255,7 @@ export async function updateProblemAction(
     .filter((value): value is string => typeof value === "string");
   let removedStorageKeys: string[] = [];
   let businessProfileId = "";
+  let significantChange = false;
   const shouldSubmit = getText(formData, "intent") === "submit";
 
   try {
@@ -241,9 +264,21 @@ export async function updateProblemAction(
       where: {
         id: problemId,
         businessProfileId,
-        status: { in: ["DRAFT", "NEEDS_REVISION", "CHANGES_REQUESTED"] },
+        status: { in: ["DRAFT", "NEEDS_REVISION", "CHANGES_REQUESTED", "REJECTED", "APPROVED"] },
       },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        title: true,
+        description: true,
+        goal: true,
+        field: true,
+        expectedDuration: true,
+        requirements: true,
+        version: true,
+        skills: { select: { skillId: true } },
+        attachments: { select: { id: true, originalName: true, sizeBytes: true } },
+      },
     });
     if (!problem) {
       throw new Error("Không tìm thấy bài toán hoặc bài toán không còn được phép chỉnh sửa.");
@@ -264,12 +299,41 @@ export async function updateProblemAction(
       },
     });
     stored = await validateAndStoreFiles(getUploadedFiles(formData), currentCount);
+    const submittedSkillIds = formData
+      .getAll("skillIds")
+      .filter((value): value is string => typeof value === "string")
+      .sort();
+    const currentSkillIds = problem.skills.map(({ skillId }) => skillId).sort();
+    const skillsChanged =
+      formData.get("skillIds") !== null &&
+      submittedSkillIds.join(",") !== currentSkillIds.join(",");
+    significantChange =
+      problem.status === "APPROVED" &&
+      (
+        isSignificantProblemTextChange(problem.title, fields.title) ||
+        isSignificantProblemTextChange(problem.description, fields.description) ||
+        isSignificantProblemTextChange(problem.goal, fields.goal) ||
+        isSignificantProblemTextChange(problem.field, fields.field) ||
+        isSignificantProblemTextChange(problem.expectedDuration, fields.expectedDuration) ||
+        isSignificantProblemTextChange(problem.requirements, fields.requirements) ||
+        skillsChanged ||
+        stored.length > 0 ||
+        attachmentsToDelete.length > 0
+      );
 
     await prisma.$transaction(async (transaction) => {
       await transaction.problem.update({
         where: { id: problemId },
         data: {
           ...fields,
+          version: { increment: 1 },
+          ...(significantChange ? {
+            status: "PENDING_REVIEW",
+            submittedAt: new Date(),
+            reviewNote: null,
+            reviewedById: null,
+            approvedAt: null,
+          } : {}),
           attachments: { create: stored },
         },
       });
@@ -324,6 +388,19 @@ export async function updateProblemAction(
           "Bài toán đã được lưu thành bản nháp nhưng bạn đã hết lượt đăng. Hãy mua thêm lượt rồi gửi lại.",
         actionHref: `/business/problems/${problemId}/edit`,
       };
+    }
+    if (result.status === "submitted" && isAutomaticProblemReviewEnabled()) {
+      try {
+        await automaticallyReviewSubmittedProblem(problemId, businessProfileId);
+      } catch (error) {
+        console.error("AI tự động kiểm duyệt Problem sau cập nhật thất bại:", error);
+      }
+    }
+  } else if (significantChange && isAutomaticProblemReviewEnabled()) {
+    try {
+      await automaticallyReviewSubmittedProblem(problemId, businessProfileId);
+    } catch (error) {
+      console.error("AI tự động kiểm duyệt Problem sau chỉnh sửa thất bại:", error);
     }
   }
 
@@ -441,6 +518,85 @@ export async function sendInvitationAction(
   revalidatePath("/student/applications");
   revalidatePath(`/student/problems/${problemId}`);
   return { error: null };
+}
+
+export async function generateApplicationExplanationAction(
+  _previousState: AiExplanationState,
+  formData: FormData,
+): Promise<AiExplanationState> {
+  const problemId = getText(formData, "problemId");
+  let usageId: string | null = null;
+  try {
+    const { businessProfileId } = await getBusinessContext();
+    await requireActivePremium(businessProfileId);
+    const applications = await prisma.application.findMany({
+      where: {
+        problemId,
+        status: { in: ["SUBMITTED", "PENDING_CONFIRMATION"] },
+        problem: {
+          businessProfileId,
+          status: { in: ["APPROVED", "PUBLISHED"] },
+        },
+      },
+      select: {
+        id: true,
+        problem: {
+          select: {
+            title: true,
+            field: true,
+            description: true,
+            goal: true,
+            skills: { select: { skill: { select: { name: true } } } },
+          },
+        },
+        team: {
+          select: {
+            name: true,
+            description: true,
+            experience: true,
+            interests: true,
+            skills: { select: { skill: { select: { name: true } } } },
+          },
+        },
+      },
+    });
+    if (applications.length === 0) throw new Error("Chưa có hồ sơ ứng tuyển để giải thích.");
+    const reservation = await prisma.$transaction((transaction) =>
+      reserveAiUsage(transaction, {
+        businessProfileId,
+        feature: AI_FEATURES.applicationExplanation,
+      }),
+    );
+    usageId = reservation.usageId;
+    const result = await generateApplicationExplanations(
+      applications.map((application) => ({
+        applicationId: application.id,
+        problem: {
+          ...application.problem,
+          skills: application.problem.skills.map(({ skill }) => skill.name),
+        },
+        team: {
+          ...application.team,
+          skills: application.team.skills.map(({ skill }) => skill.name),
+        },
+        score: 0,
+        reasons: [],
+      })),
+    );
+    await completeAiUsage(prisma, usageId, "SUCCEEDED");
+    return {
+      error: null,
+      explanations: Object.fromEntries(
+        result.explanations.map(({ applicationId, explanation }) => [
+          applicationId,
+          explanation.slice(0, 300),
+        ]),
+      ),
+    };
+  } catch (error) {
+    if (usageId) await completeAiUsage(prisma, usageId, "FAILED").catch(() => undefined);
+    return { error: error instanceof Error ? error.message : "Không thể tạo giải thích AI." };
+  }
 }
 
 export async function selectTeamAction(

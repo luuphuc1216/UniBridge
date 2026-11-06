@@ -114,17 +114,27 @@ Module gồm 3 giao diện chính:
 
 - Giao diện đăng và chỉnh sửa vấn đề: Bao gồm tên vấn đề, mô tả vấn đề, mục tiêu mong muốn, lĩnh vực, kỹ năng yêu cầu, thời gian dự kiến, ngân sách tham khảo và tài liệu đính kèm. Giao diện có các nút “Lưu bản nháp”, “Gửi duyệt” và “Hủy”.
 - Giao diện quản lý vấn đề của doanh nghiệp: Hiển thị danh sách vấn đề do doanh nghiệp đăng, gồm tên vấn đề, ngày đăng, lĩnh vực, trạng thái và các thao tác tương ứng. Doanh nghiệp có thể xem chi tiết, chỉnh sửa hoặc đóng vấn đề theo trạng thái hiện tại.
-- Giao diện kiểm duyệt của quản trị viên: Hiển thị danh sách vấn đề đang chờ duyệt và nội dung chi tiết của từng vấn đề. Quản trị viên có thể chọn “Phê duyệt”, “Yêu cầu chỉnh sửa” hoặc “Từ chối”; trường hợp yêu cầu chỉnh sửa hoặc từ chối phải có lý do xử lý.
+- Giao diện kiểm duyệt của quản trị viên: Hiển thị danh sách vấn đề đang chờ duyệt và nội dung chi tiết của từng vấn đề. Có nút “AI kiểm tra” và checklist ĐẠT/KHÔNG ĐẠT. Quản trị viên có thể chọn “Phê duyệt”, “Yêu cầu chỉnh sửa”, “Từ chối” hoặc “Thu hồi duyệt”; trường hợp yêu cầu chỉnh sửa hoặc từ chối phải có lý do xử lý.
 
 
 ### **5. Luồng xử lý và phản hồi hệ thống**
-Khi doanh nghiệp lưu bản nháp, vấn đề được lưu với trạng thái “Bản nháp” và chưa công khai. Khi nhấn “Gửi duyệt”, hệ thống kiểm tra các trường bắt buộc và chuyển vấn đề sang trạng thái “Chờ duyệt” nếu dữ liệu hợp lệ.
-Quản trị viên xem xét nội dung và thực hiện một trong ba thao tác. Nếu phê duyệt, vấn đề chuyển sang “Đã duyệt” và được đưa vào danh sách công khai phục vụ tìm kiếm, đề xuất. Nếu yêu cầu chỉnh sửa, vấn đề chuyển sang “Cần chỉnh sửa” và doanh nghiệp nhận được lý do xử lý. Nếu từ chối, vấn đề chuyển sang “Bị từ chối” và hệ thống lưu lại lý do.
+Khi doanh nghiệp lưu bản nháp, vấn đề được lưu với trạng thái “Bản nháp” và chưa công khai. Khi nhấn “Gửi duyệt”, hệ thống kiểm tra các trường bắt buộc và chuyển vấn đề sang trạng thái “Chờ duyệt” nếu dữ liệu hợp lệ. Sau bước kiểm tra theo luật, hệ thống có thể chạy AI kiểm tra độ rõ ràng, phạm vi, mức phù hợp với sinh viên và dấu hiệu vi phạm. Chế độ AI tự động duyệt được bật mặc định (`AI_AUTO_REVIEW=true`): nếu toàn bộ checklist đạt, bài toán được tự chuyển “Đã duyệt”; nếu cần bổ sung, chuyển “Cần chỉnh sửa”; vi phạm rõ ràng do luật phát hiện có thể chuyển “Bị từ chối”. AI không chắc chắn, lỗi nhà cung cấp, hết lượt hoặc thiếu khóa không được tự từ chối và để bài toán ở “Chờ duyệt” cho quản trị viên. Quản trị viên giám sát, có thể chạy AI kiểm tra thủ công và ghi đè mọi kết quả tự động.
+Quản trị viên xem xét nội dung và thực hiện một trong các thao tác. Nếu phê duyệt, vấn đề chuyển sang “Đã duyệt” và được đưa vào danh sách công khai phục vụ tìm kiếm, đề xuất. Nếu yêu cầu chỉnh sửa, vấn đề chuyển sang “Cần chỉnh sửa” và doanh nghiệp nhận được lý do xử lý. Nếu từ chối, vấn đề chuyển sang “Bị từ chối” và hệ thống lưu lại lý do. “Thu hồi duyệt” chuyển bài toán đã duyệt về “Chờ duyệt”, ghi nhật ký ghi đè và dừng hiển thị công khai cho đến khi kiểm tra lại.
+
+AI tự động chỉ được áp dụng theo compare-and-set khi bài toán vẫn ở “Chờ duyệt” và `version` đúng phiên bản đã kiểm. Nếu doanh nghiệp sửa bài toán trong lúc AI kiểm tra, hệ thống chỉ lưu `AiReview`, không đổi trạng thái. Nội dung được xem là thay đổi đáng kể nếu thay đổi tên, mô tả, mục tiêu, yêu cầu, lĩnh vực, thời gian, kỹ năng hoặc thêm/xóa tệp đính kèm; thay đổi ngân sách không kích hoạt kiểm duyệt lại. Sửa chính tả nhỏ không được coi là thay đổi đáng kể; khi nội dung thay đổi đáng kể, bài toán đã duyệt phải quay về “Chờ duyệt” để kiểm tra lại.
 Doanh nghiệp có thể chỉnh sửa vấn đề theo trạng thái cho phép. Nếu nội dung cần được duyệt lại, hệ thống chuyển vấn đề về “Chờ duyệt”. Khi đóng vấn đề, hệ thống ngừng nhận hồ sơ mới theo quy định của nền tảng.
 
 ### **6. Dữ liệu**
 Module lưu mã vấn đề, mã doanh nghiệp, tên vấn đề, mô tả, mục tiêu, lĩnh vực, kỹ năng yêu cầu, thời gian dự kiến, ngân sách, tài liệu đính kèm, ngày tạo, người kiểm duyệt, lý do xử lý và trạng thái. Các trạng thái gồm “Bản nháp”, “Chờ duyệt”, “Cần chỉnh sửa”, “Đã duyệt”, “Bị từ chối” và “Đã đóng”.
-Dữ liệu vấn đề phải được liên kết với doanh nghiệp đăng vấn đề và đồng bộ giữa trang quản lý của doanh nghiệp, khu vực kiểm duyệt và danh sách vấn đề công khai.
+Dữ liệu vấn đề phải được liên kết với doanh nghiệp đăng vấn đề và đồng bộ giữa trang quản lý của doanh nghiệp, khu vực kiểm duyệt và danh sách vấn đề công khai. Kết quả AI lưu trong `AiReview`, người thực hiện tự động là “AI”; mọi ghi đè hoặc thu hồi của quản trị viên lưu nhật ký riêng.
+
+## **Module quản trị — kiểm duyệt vấn đề**
+
+### **Bước 2. Kiểm tra và giám sát**
+Quản trị viên xem danh sách bài toán đã được AI xử lý, có thể bấm “AI kiểm tra”, xem checklist, duyệt lại, yêu cầu chỉnh sửa, từ chối hoặc thu hồi duyệt. Thu hồi duyệt đưa bài toán về “Chờ duyệt”; mọi quyết định thủ công là ghi đè có nhật ký riêng. AI lỗi, hết hạn mức, thiếu khóa hoặc trả JSON sai không làm mất bài toán và để quản trị viên xử lý.
+
+### **Dữ liệu kiểm duyệt**
+Mỗi kết quả lưu trong `AiReview`, gồm phiên bản bài toán đã kiểm, checklist, kết luận, lý do, thời điểm, trạng thái và người thực hiện là “AI”. Hành động của quản trị viên lưu trong `AuditLog`; compare-and-set chỉ áp dụng kết quả tự động khi trạng thái và phiên bản vẫn khớp.
 
 ## **V. Module tìm kiếm và lọc vấn đề**
 

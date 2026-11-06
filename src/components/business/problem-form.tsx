@@ -5,6 +5,7 @@ import {
   useState,
   useTransition,
   type FormEvent,
+  useRef,
 } from "react";
 import {
   MAX_ATTACHMENT_COUNT,
@@ -61,9 +62,41 @@ export function ProblemForm({
   const [isPending, startPendingTransition] = useTransition();
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [clientError, setClientError] = useState<string | null>(null);
+  const [aiBrief, setAiBrief] = useState("");
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [aiPending, setAiPending] = useState(false);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const goalRef = useRef<HTMLTextAreaElement>(null);
+  const requirementsRef = useRef<HTMLTextAreaElement>(null);
   const visibleAttachments = attachments.filter(
     (attachment) => !deletedIds.includes(attachment.id),
   );
+
+  async function handleAiDraft() {
+    if (aiPending) return;
+    setAiPending(true);
+    setAiMessage(null);
+    try {
+      const response = await fetch("/api/business/ai/problem-draft", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ brief: aiBrief }),
+      });
+      const result = (await response.json()) as {
+        error?: string;
+        suggestion?: { description: string; goal: string; requirements: string };
+      };
+      if (!response.ok || !result.suggestion) throw new Error(result.error ?? "Không thể dùng AI.");
+      if (descriptionRef.current) descriptionRef.current.value = result.suggestion.description;
+      if (goalRef.current) goalRef.current.value = result.suggestion.goal;
+      if (requirementsRef.current) requirementsRef.current.value = result.suggestion.requirements;
+      setAiMessage("AI đã điền gợi ý. Bạn hãy kiểm tra và chỉnh sửa trước khi lưu.");
+    } catch (error) {
+      setAiMessage(error instanceof Error ? error.message : "Không thể dùng AI lúc này.");
+    } finally {
+      setAiPending(false);
+    }
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -139,6 +172,7 @@ export function ProblemForm({
           <textarea
             className={`${inputClass} min-h-32 resize-y`}
             defaultValue={problem?.description}
+            ref={descriptionRef}
             minLength={2}
             name="description"
             placeholder="Mô tả thực trạng và vấn đề doanh nghiệp đang gặp phải"
@@ -150,6 +184,7 @@ export function ProblemForm({
           <textarea
             className={`${inputClass} min-h-24 resize-y`}
             defaultValue={problem?.goal}
+            ref={goalRef}
             minLength={2}
             name="goal"
             placeholder="Kết quả doanh nghiệp mong muốn đạt được"
@@ -184,12 +219,37 @@ export function ProblemForm({
           <textarea
             className={`${inputClass} min-h-24 resize-y`}
             defaultValue={problem?.requirements}
+            ref={requirementsRef}
             minLength={2}
             name="requirements"
             placeholder="Kiến thức, kỹ năng hoặc kinh nghiệm cần thiết"
             required
           />
         </label>
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 sm:col-span-2">
+          <p className="text-sm font-semibold">AI viết giúp (Premium)</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Nhập ý ngắn, AI chỉ điền gợi ý vào biểu mẫu để bạn chỉnh sửa; không tự lưu hay gửi duyệt.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <input
+              className={inputClass}
+              maxLength={4000}
+              onChange={(event) => setAiBrief(event.target.value)}
+              placeholder="Ví dụ: Cần website giới thiệu sản phẩm thân thiện trên điện thoại"
+              value={aiBrief}
+            />
+            <button
+              className="rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+              disabled={aiPending || !aiBrief.trim()}
+              onClick={handleAiDraft}
+              type="button"
+            >
+              {aiPending ? "Đang viết..." : "AI viết giúp"}
+            </button>
+          </div>
+          {aiMessage && <p className="mt-2 text-xs text-muted-foreground" role="status">{aiMessage}</p>}
+        </div>
         <fieldset className="space-y-2 sm:col-span-2">
           <legend className="text-sm font-semibold">Ngân sách tham khảo (VNĐ)</legend>
           <div className="grid gap-3 sm:grid-cols-2">

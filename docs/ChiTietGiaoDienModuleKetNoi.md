@@ -220,7 +220,7 @@ Giao diện 3: Kiểm duyệt vấn đề dành cho quản trị viên
   - Thông tin doanh nghiệp đăng vấn đề.
   - Nội dung mô tả, mục tiêu, lĩnh vực và tài liệu đính kèm.
   - Ô nhập lý do xử lý.
-  - Nút “Phê duyệt”, “Yêu cầu chỉnh sửa” và “Từ chối”.
+  - Nút “AI kiểm tra”, checklist ĐẠT/KHÔNG ĐẠT, nút “Phê duyệt”, “Yêu cầu chỉnh sửa”, “Từ chối” và “Thu hồi duyệt”.
 
 - Cách hoạt động:
 
@@ -228,6 +228,8 @@ Giao diện 3: Kiểm duyệt vấn đề dành cho quản trị viên
   - “Phê duyệt”: chuyển sang trạng thái Đã duyệt và cho phép công khai.
   - “Yêu cầu chỉnh sửa”: chuyển sang Cần chỉnh sửa, lưu lý do và thông báo doanh nghiệp.
   - “Từ chối”: chuyển sang Bị từ chối và lưu lý do.
+  - “AI kiểm tra”: chạy kiểm tra theo luật trước rồi hiển thị checklist AI; kết quả chỉ là gợi ý cho admin.
+  - “Thu hồi duyệt”: đưa bài toán Đã duyệt về Chờ duyệt và ghi nhật ký ghi đè.
   - Sau khi doanh nghiệp chỉnh sửa theo yêu cầu, vấn đề được gửi duyệt lại nếu cần.
 
 

@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ProblemReviewForm } from "@/components/admin/problem-review-form";
+import {
+  AiProblemReviewPanel,
+  ProblemOverrideForm,
+  ProblemReviewForm,
+} from "@/components/admin/problem-review-form";
 import { requireAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
@@ -33,6 +37,11 @@ export default async function AdminProblemDetailPage({
         },
       },
       attachments: { orderBy: { createdAt: "asc" } },
+      aiReviews: {
+        where: { feature: "PROBLEM_MODERATION" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
     },
   });
   if (!problem) {
@@ -173,15 +182,23 @@ export default async function AdminProblemDetailPage({
           </section>
         )}
 
+        {problem.aiReviews[0] && (
+          <AiProblemReviewPanel
+            problemId={problem.id}
+            initialResult={{
+              checklist: (problem.aiReviews[0].checklist as { key: string; passed: boolean; reason: string }[]),
+              conclusion: problem.aiReviews[0].conclusion ?? "UNCERTAIN",
+              reason: problem.aiReviews[0].reason ?? "",
+            }}
+          />
+        )}
         {problem.status === "PENDING_REVIEW" ? (
           <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">
             <h2 className="mb-5 text-lg font-semibold">Kết quả kiểm duyệt</h2>
             <ProblemReviewForm problemId={problem.id} />
           </section>
         ) : (
-          <p className="rounded-xl bg-muted p-4 text-sm text-muted-foreground">
-            Bài toán này không còn ở trạng thái chờ duyệt nên không thể thay đổi kết quả kiểm duyệt.
-          </p>
+          <ProblemOverrideForm problemId={problem.id} />
         )}
       </div>
     </main>

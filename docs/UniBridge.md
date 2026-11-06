@@ -57,7 +57,7 @@ Trong giai đoạn đầu, nền tảng có thể cho phép doanh nghiệp đăn
 
 ### Bước 2. Nền tảng kiểm duyệt vấn đề
 
-Sau khi doanh nghiệp hoàn thành việc đăng vấn đề, nội dung sẽ được chuyển đến nền tảng để kiểm duyệt trước khi công khai.
+Sau khi doanh nghiệp hoàn thành việc đăng vấn đề, nội dung sẽ được chuyển đến nền tảng để kiểm duyệt trước khi công khai. Nền tảng kiểm tra theo luật trước, sau đó AI có thể hỗ trợ kiểm tra độ rõ ràng và mức phù hợp; AI tự động duyệt mặc định nhưng quản trị viên giám sát, ghi đè hoặc thu hồi duyệt. Kết quả được lưu trong `AiReview` và nhật ký ghi rõ người thực hiện tự động là “AI”.
 
 Mục đích của bước này là đảm bảo vấn đề được đăng tải có nội dung rõ ràng, đầy đủ và phù hợp với quy định của nền tảng.
 
@@ -72,7 +72,7 @@ Nội dung kiểm duyệt có thể bao gồm:
 
 Nếu thông tin chưa đầy đủ, nền tảng yêu cầu doanh nghiệp bổ sung hoặc chỉnh sửa. Nếu vấn đề đáp ứng yêu cầu, nền tảng phê duyệt và công khai vấn đề.
 
-Sau khi được phê duyệt, vấn đề được đưa vào hệ thống Recommendation để đề xuất đến các nhóm sinh viên phù hợp.
+Sau khi được phê duyệt (có thể qua AI tự động kiểm tra theo luật và AI hỗ trợ, dưới sự giám sát/ghi đè của quản trị viên), vấn đề được đưa vào hệ thống Recommendation để đề xuất đến các nhóm sinh viên phù hợp.
 
 ### Bước 3. Recommendation vấn đề đến nhóm sinh viên phù hợp
 

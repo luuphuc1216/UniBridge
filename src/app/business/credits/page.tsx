@@ -4,6 +4,7 @@ import { BUSINESS_POST_CONFIG, POST_CREDIT_SOURCES } from "@/lib/business-post-c
 import { CreditPurchaseForm } from "@/components/business/credit-purchase-form";
 import { ensureBusinessCreditNotifications } from "@/lib/business-credit-notifications";
 import { formatVietnamDateTime, remainingWholeDays } from "@/lib/date-format";
+import { getAiUsageRemaining } from "@/lib/ai/usage";
 
 export const instant = false;
 
@@ -28,10 +29,11 @@ export default async function BusinessCreditsPage() {
     console.error("Không thể tạo thông báo hạn mức doanh nghiệp:", error);
   }
   const now = new Date();
-  const [credits, subscription, charges] = await Promise.all([
+  const [credits, subscription, charges, aiRemaining] = await Promise.all([
     prisma.postCredit.findMany({ where: { businessProfileId, remaining: { gt: 0 } }, orderBy: { source: "asc" } }),
     prisma.subscription.findUnique({ where: { businessProfileId_package: { businessProfileId, package: "PREMIUM" } } }),
     prisma.platformCharge.findMany({ where: { businessProfileId }, orderBy: { createdAt: "desc" }, take: 20 }),
+    getAiUsageRemaining(prisma, businessProfileId),
   ]);
   const totals = {
     free: credits.filter((credit) => credit.source === POST_CREDIT_SOURCES.FREE).reduce((sum, credit) => sum + credit.remaining, 0),
@@ -55,6 +57,13 @@ export default async function BusinessCreditsPage() {
         ].map(([label, value]) => <div className="rounded-2xl border border-border bg-card p-5" key={label}><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p></div>)}
       </section>
       <p className="mt-4 text-sm">{premiumActive ? `Premium đến ${formatVietnamDateTime(subscription.endsAt)} (${premiumRemainingDays === 0 ? "còn dưới 1 ngày" : `còn ${premiumRemainingDays} ngày`})` : "Bạn chưa có Premium đang hoạt động."}</p>
+      <section className="mt-6 rounded-2xl border border-primary/20 bg-primary/5 p-5">
+        <h2 className="font-semibold">Lượt AI Premium</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Còn {aiRemaining.daily} lượt hôm nay và {aiRemaining.monthly} lượt trong tháng.
+          {premiumActive ? "" : " Nâng cấp Premium còn hạn để sử dụng."}
+        </p>
+      </section>
       <div className="mt-6"><CreditPurchaseForm activePremiumEndsAt={premiumActive ? subscription.endsAt.toISOString() : null} maxQuantity={BUSINESS_POST_CONFIG.maxPurchasedCreditsPerOrder} postPrice={BUSINESS_POST_CONFIG.purchasedPostCreditPriceVnd} premiumDurationMonths={BUSINESS_POST_CONFIG.premiumDurationMonths} premiumPrice={BUSINESS_POST_CONFIG.premiumPriceVnd} /></div>
       <section className="mt-8 rounded-2xl border border-border bg-card p-5">
         <h2 className="font-semibold">Lịch sử mua</h2>

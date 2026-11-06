@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { AttachmentStorage } from "@/lib/storage/attachment-storage";
 import { isAdminRole } from "@/lib/admin-access";
+import {
+  ALLOWED_ATTACHMENT_TYPES,
+  MAX_ATTACHMENT_SIZE_BYTES,
+} from "@/lib/business-attachments/config";
 
 type Transaction = Prisma.TransactionClient;
 
@@ -16,6 +20,55 @@ export type ProposalHandoffFile = {
   sizeBytes: number;
   content: Uint8Array;
 };
+
+export function validateProposalHandoffCompleteness(input: {
+  type?: string;
+  description: string;
+  files: { originalName: string; contentType: string; sizeBytes: number }[];
+  deliverables: string;
+  deadline: Date;
+  submittedAt: Date;
+}) {
+  const normalizeMatchText = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("vi")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  const missingItems: string[] = [];
+  if (input.description.trim().length < 10) {
+    missingItems.push("Mô tả bàn giao tối thiểu 10 ký tự.");
+  }
+  const isPrototype = input.type?.toUpperCase().includes("PROTOTYPE") ?? true;
+  if (isPrototype && input.files.length === 0 && !/https?:\/\/\S+/i.test(input.description)) {
+    missingItems.push("Cần có ít nhất một tệp hoặc đường dẫn demo.");
+  }
+  for (const file of input.files) {
+    const extension = file.originalName.toLowerCase().slice(file.originalName.lastIndexOf("."));
+    if (!Object.hasOwn(ALLOWED_ATTACHMENT_TYPES, extension)) {
+      missingItems.push(`Loại tệp ${file.originalName} không được hỗ trợ.`);
+    }
+    if (file.sizeBytes <= 0 || file.sizeBytes > MAX_ATTACHMENT_SIZE_BYTES) {
+      missingItems.push(`Dung lượng tệp ${file.originalName} không hợp lệ.`);
+    }
+  }
+  if (input.deadline.getTime() > 0 && input.submittedAt > input.deadline) {
+    missingItems.push("Bàn giao được nộp sau thời hạn.");
+  }
+  const deliverables = input.deliverables
+    .split(/[,;\n]/)
+    .map(normalizeMatchText)
+    .filter(Boolean);
+  const submissionText = normalizeMatchText(
+    `${input.description} ${input.files.map((file) => file.originalName).join(" ")}`,
+  );
+  const unmatched = deliverables.filter((item) => !submissionText.includes(item));
+  if (unmatched.length > 0) {
+    missingItems.push(`Chưa thấy sản phẩm đầu ra: ${unmatched.join(", ")}.`);
+  }
+  return { passed: missingItems.length === 0, missingItems };
+}
 
 function isUniqueConstraintError(error: unknown): boolean {
   return (
@@ -408,6 +461,24 @@ export async function reviewProposalHandoff(
   const { proposal } = attempt;
   const { application } = proposal;
   const problem = application.problem;
+  const brief = await transaction.trialBriefVersion.findFirst({
+    where: { problemId: problem.id, lockedAt: { not: null } },
+    orderBy: { version: "desc" },
+    select: { deliverables: true, deadline: true },
+  });
+  const completeness = validateProposalHandoffCompleteness({
+    description: attempt.description,
+    type: proposal.type,
+    files: await transaction.proposalFile.findMany({
+      where: { attemptId: attempt.id },
+      select: { originalName: true, contentType: true, sizeBytes: true },
+    }),
+    deliverables: brief?.deliverables ?? "",
+    deadline: brief?.deadline ?? new Date(0),
+    submittedAt: attempt.submittedAt,
+  });
+  const effectiveMissingItems = [...new Set([...missingItems, ...completeness.missingItems])];
+  const effectiveAllPassed = allPassed && completeness.passed;
   const latestAttempt = await transaction.proposalSubmissionAttempt.findFirst({
     where: { proposalId: proposal.id },
     orderBy: { attempt: "desc" },
@@ -447,7 +518,7 @@ export async function reviewProposalHandoff(
         },
       },
     },
-    data: allPassed
+    data: effectiveAllPassed
       ? { handoffStatus: "APPROVED", status: "SUBMITTED" }
       : { handoffStatus: "RETURNED" },
   });
@@ -455,7 +526,7 @@ export async function reviewProposalHandoff(
     throw new Error("Lần nộp vừa được xử lý ở tab khác. Vui lòng tải lại trang.");
   }
 
-  if (allPassed) {
+  if (effectiveAllPassed) {
     const problemChanged = await transaction.problem.updateMany({
       where: {
         id: problem.id,
@@ -477,17 +548,17 @@ export async function reviewProposalHandoff(
       proposalId: proposal.id,
       attemptId: attempt.id,
       reviewedByUserId: input.reviewerId,
-      filesOrLinksComplete: input.filesOrLinksComplete,
+      filesOrLinksComplete: input.filesOrLinksComplete && completeness.passed,
       withinTrialBriefScope: input.withinTrialBriefScope,
       compliesWithRules: input.compliesWithRules,
       note,
-      missingItems: missingItems.length ? missingItems.join("\n") : null,
-      result: allPassed ? "APPROVED" : "RETURNED",
+      missingItems: effectiveMissingItems.length ? effectiveMissingItems.join("\n") : null,
+      result: effectiveAllPassed ? "APPROVED" : "RETURNED",
       createdAt: now,
     },
   });
 
-  if (allPassed) {
+  if (effectiveAllPassed) {
     await transaction.notification.create({
       data: {
         userId: application.problem.businessProfile.userId,
@@ -510,7 +581,7 @@ export async function reviewProposalHandoff(
       data: {
         userId: ownerId.ownerId,
         title: "Proposal cần bổ sung trước khi chuyển cho doanh nghiệp",
-        message: `Cần bổ sung: ${missingItems.join("; ")}`,
+        message: `Cần bổ sung: ${effectiveMissingItems.join("; ")}`,
         href: `/student/workspace/${problem.id}?applicationId=${application.id}`,
         dedupeKey: `proposal-handoff-returned-${attempt.id}`,
         createdAt: now,
@@ -518,5 +589,5 @@ export async function reviewProposalHandoff(
     });
   }
 
-  return { result: allPassed ? "APPROVED" : "RETURNED" };
+  return { result: effectiveAllPassed ? "APPROVED" : "RETURNED" };
 }

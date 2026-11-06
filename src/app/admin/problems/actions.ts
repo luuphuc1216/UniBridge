@@ -11,9 +11,19 @@ import {
   PROBLEM_REVIEWABLE_STATUS,
 } from "@/lib/problem-workflow";
 import { refundProblemCredit } from "@/lib/post-credits";
+import {
+  combineProblemReview,
+  reviewProblemWithAi,
+  saveAiReview,
+} from "@/lib/ai/problem-review";
 
 export type ReviewActionState = {
   error: string | null;
+  aiResult?: {
+    checklist: { key: string; passed: boolean; reason: string }[];
+    conclusion: string;
+    reason: string;
+  };
 };
 
 const checklistFields = [
@@ -137,4 +147,112 @@ export async function reviewProblemAction(
   revalidatePath(`/business/problems/${problemId}`);
   revalidatePath("/student/problems");
   redirect("/admin/problems");
+}
+
+export async function runAiProblemReviewAction(
+  _previousState: ReviewActionState,
+  formData: FormData,
+): Promise<ReviewActionState> {
+  await requireAdmin();
+  const problemId = getText(formData, "problemId");
+  try {
+    const problem = await prisma.problem.findUnique({
+      where: { id: problemId },
+      select: { businessProfileId: true },
+    });
+    if (!problem) throw new Error("Không tìm thấy bài toán.");
+    const reviewed = await reviewProblemWithAi(problemId, problem.businessProfileId);
+    const result = combineProblemReview(
+      reviewed.rules,
+      reviewed.kind === "AI" ? reviewed.ai : undefined,
+    );
+    await prisma.$transaction((transaction) =>
+      saveAiReview(transaction, {
+        problemId,
+        result,
+        status:
+          reviewed.kind === "AI" || reviewed.kind === "RULE_REJECT"
+            ? "COMPLETED"
+            : "UNAVAILABLE",
+        problemVersion: reviewed.mapped.problemVersion,
+      }),
+    );
+    return { error: null, aiResult: result };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Không thể chạy AI kiểm tra.",
+    };
+  }
+}
+
+export async function overrideProblemReviewAction(
+  _previousState: ReviewActionState,
+  formData: FormData,
+): Promise<ReviewActionState> {
+  const { userId } = await requireAdmin();
+  const problemId = getText(formData, "problemId");
+  const decision = getText(formData, "decision");
+  const reviewNote = getText(formData, "reviewNote");
+  const nextStatus =
+    decision === "withdraw" ? "PENDING_REVIEW" : decision === "approve" ? "APPROVED" : decision === "reject" ? "REJECTED" : "NEEDS_REVISION";
+  if (!problemId || (!isValidProblemReviewNote(reviewNote) && decision !== "approve" && decision !== "withdraw")) {
+    return { error: "Vui lòng nhập lý do xử lý hợp lệ." };
+  }
+  try {
+    await prisma.$transaction(async (transaction) => {
+      const problem = await transaction.problem.findUnique({
+        where: { id: problemId },
+        select: {
+          id: true,
+          title: true,
+          firstApprovedAt: true,
+          consumedCreditId: true,
+          businessProfile: { select: { userId: true } },
+        },
+      });
+      if (!problem) throw new Error("Không tìm thấy bài toán.");
+      const now = new Date();
+      await transaction.problem.update({
+        where: { id: problemId },
+        data: {
+          status: nextStatus,
+          reviewedById: userId,
+          reviewNote: decision === "approve" || decision === "withdraw" ? null : reviewNote,
+          approvedAt: decision === "approve" ? now : null,
+          ...(decision === "approve" && !problem.firstApprovedAt
+            ? { firstApprovedAt: now }
+            : {}),
+        },
+      });
+      if (decision === "reject" && !problem.firstApprovedAt && problem.consumedCreditId) {
+        await refundProblemCredit(transaction, { problemId });
+      }
+      await writeAuditLog(transaction, {
+        actorId: userId,
+        action: decision === "withdraw" ? "PROBLEM_APPROVAL_WITHDRAWN" : "PROBLEM_REVIEW_ADMIN_OVERRIDE",
+        targetType: "Problem",
+        targetId: problemId,
+        metadata: { decision, status: nextStatus, reason: reviewNote },
+      });
+      await transaction.notification.create({
+        data: {
+          userId: problem.businessProfile.userId,
+          title: decision === "withdraw" ? "Bài toán đã được thu hồi duyệt" : "Kết quả kiểm duyệt bài toán đã được cập nhật",
+          message:
+            decision === "approve"
+              ? `Bài toán “${problem.title}” đã được quản trị viên duyệt lại.`
+              : `Bài toán “${problem.title}” đã được quản trị viên cập nhật: ${reviewNote}`,
+          href: `/business/problems/${problemId}`,
+        },
+      });
+    });
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Không thể ghi đè kết quả kiểm duyệt.",
+    };
+  }
+  revalidatePath("/admin/problems");
+  revalidatePath(`/admin/problems/${problemId}`);
+  revalidatePath("/student/problems");
+  redirect(`/admin/problems/${problemId}`);
 }
