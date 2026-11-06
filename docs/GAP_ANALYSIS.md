@@ -1,5 +1,14 @@
 # Gap analysis — đối chiếu đặc tả và code hiện tại
 
+## Cập nhật Đợt 5B
+
+- Đã bổ sung lựa chọn sắp xếp “Mới nhất” và “Phù hợp nhất” tại trang khám phá bài toán; điểm được tính lại bằng công thức Recommendation hiện có, không thay đổi công thức.
+- Đã bổ sung khối “Cần xử lý” cho dashboard doanh nghiệp và các số liệu Proposal/Milestone/thoả thuận/tin nhắn dùng phạm vi đúng doanh nghiệp.
+- Đã hoàn thiện Portfolio nhóm: sửa, xoá, ẩn/hiện, đính kèm PNG/JPG/PDF, thêm dự án `COMPLETED` một lần bằng ràng buộc duy nhất `sourceProjectId`, và chỉ công khai tệp của mục đang hiển thị.
+- Đã bổ sung upload logo doanh nghiệp PNG/JPG qua storage an toàn, giữ tương thích logo URL cũ; URL logo mới chỉ nhận HTTPS.
+- Khi doanh nghiệp đóng bài, hồ sơ `SUBMITTED`/`UNDER_REVIEW` được chuyển `NOT_SELECTED`, nhóm liên quan nhận thông báo và thao tác bị chặn nếu còn lời mời chờ, nhóm đã chọn hoặc dự án đang chạy. `Problem.status = CLOSED` vẫn được giữ tương thích bằng `closedReason`/`closedAt` additive.
+- Bộ test tăng từ 216 lên 220 test pass. Các kiểm tra toàn bộ cần tiếp tục mở rộng thêm test tích hợp cho quyền hồ sơ, dashboard đa doanh nghiệp và upload tệp.
+
 > Phạm vi: đọc [UniBridge.md](./UniBridge.md), [ModuleKetNoi.md](./ModuleKetNoi.md), [ChiTietGiaoDienModuleKetNoi.md](./ChiTietGiaoDienModuleKetNoi.md), [ModuleGiaiPhapGiaoDich.md](./ModuleGiaiPhapGiaoDich.md) và đối chiếu với code/schema/seed/test đang có. Báo cáo chỉ ghi nhận, **không sửa code**. “Đã có” có thể là có một phần, không đồng nghĩa đã đáp ứng đầy đủ đặc tả.
 
 > Ghi chú phạm vi Đợt 1: tệp minh họa cho Approach qua file-picker được hoãn sang đợt sau; không triển khai dở dang trong đợt này.
