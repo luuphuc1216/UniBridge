@@ -12,7 +12,7 @@ import {
   getInvitationDeadline,
   getInvitationReminderAt,
 } from "@/lib/invitation-config";
-import { canCreatePendingInvitation } from "@/lib/problem-workflow";
+import { canCreatePendingInvitation, getBusinessCloseBlockReason } from "@/lib/problem-workflow";
 import { submitProblemForReview } from "@/lib/post-credits";
 
 export type ProblemActionState = {
@@ -568,7 +568,6 @@ export async function closeProblemAction(
         where: { problemId, status: "PENDING_CONFIRMATION" },
         select: { id: true },
       });
-      if (pendingInvitation) throw new Error("Không thể đóng: còn lời mời đang chờ nhóm phản hồi.");
       const runningProject = await transaction.project.findFirst({
         where: { application: { problemId }, status: { in: ["AGREEING", "IN_PROGRESS"] } },
         select: { id: true },
@@ -577,7 +576,12 @@ export async function closeProblemAction(
         where: { problemId, status: "SELECTED" },
         select: { id: true },
       });
-      if (runningProject || selected) throw new Error("Không thể đóng: bài toán đã có nhóm được chọn hoặc dự án đang thực hiện.");
+      const pendingReason = getBusinessCloseBlockReason({
+        hasPendingInvitation: Boolean(pendingInvitation),
+        hasSelectedApplication: Boolean(selected),
+        hasRunningProject: Boolean(runningProject),
+      });
+      if (pendingReason) throw new Error(pendingReason);
       const affectedApplications = await transaction.application.findMany({
         where: { problemId, status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
         select: {

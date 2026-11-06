@@ -123,6 +123,18 @@ export function isValidProblemReviewNote(note: string): boolean {
   return normalizedNote.length >= 3 && normalizedNote.length <= 2000;
 }
 
+export function getBusinessCloseBlockReason(input: {
+  hasPendingInvitation: boolean;
+  hasSelectedApplication: boolean;
+  hasRunningProject: boolean;
+}): string | null {
+  if (input.hasPendingInvitation) return "Không thể đóng: còn lời mời đang chờ nhóm phản hồi.";
+  if (input.hasSelectedApplication || input.hasRunningProject) {
+    return "Không thể đóng: bài toán đã có nhóm được chọn hoặc dự án đang thực hiện.";
+  }
+  return null;
+}
+
 export function getApplicationUnavailableReason(
   status: string,
   reviewNote: string | null,
