@@ -22,7 +22,7 @@ export function getOwnedTeam(userId: string) {
       skills: { select: { skill: { select: { name: true } } } },
       portfolioItems: {
         orderBy: { createdAt: "desc" },
-        select: { id: true, title: true, description: true, demoUrl: true, field: true, isVisible: true },
+        select: { id: true, title: true, description: true, demoUrl: true, field: true, isVisible: true, fileName: true, fileStorageKey: true },
       },
     },
   });

@@ -1,4 +1,5 @@
 import { requireStudent } from "@/lib/student-access";
+import { prisma } from "@/lib/prisma";
 import { getOwnedTeam } from "@/lib/student-team";
 import { TeamProfileForm } from "@/components/student/team-profile-form";
 import { ReputationSummary } from "@/components/reputation/reputation-summary";
@@ -10,7 +11,13 @@ import {
 } from "@/lib/reputation-data";
 import type { TeamReputation } from "@/lib/reputation";
 import type { ReviewPage, TeamHistoryEntry } from "@/lib/reputation-data";
-import { savePortfolioItem, togglePortfolioItem } from "./portfolio-actions";
+import {
+  addCompletedProjectToPortfolio,
+  deletePortfolioItem,
+  savePortfolioItem,
+  togglePortfolioItem,
+  updatePortfolioItem,
+} from "./portfolio-actions";
 
 export const instant = false;
 
@@ -36,6 +43,12 @@ export default async function StudentTeamPage({
     reviewPage = loadedReviews;
     history = loadedHistory;
   }
+  const completedProjects = team
+    ? await prisma.project.findMany({
+        where: { teamId: team.id, status: "COMPLETED", portfolioItem: null },
+        select: { id: true, title: true },
+      })
+    : [];
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
@@ -54,17 +67,42 @@ export default async function StudentTeamPage({
             <input name="teamId" type="hidden" value={team.id} />
             <input className="rounded-xl border border-border bg-background px-3 py-2" name="title" placeholder="Tên sản phẩm" required />
             <input className="rounded-xl border border-border bg-background px-3 py-2" name="field" placeholder="Lĩnh vực" />
-            <input className="rounded-xl border border-border bg-background px-3 py-2" name="demoUrl" placeholder="Liên kết demo (HTTPS)" type="url" />
+            <input className="rounded-xl border border-border bg-background px-3 py-2" name="demoUrl" placeholder="Liên kết demo" type="url" />
+            <input className="rounded-xl border border-border bg-background px-3 py-2" name="file" type="file" accept="image/png,image/jpeg,application/pdf" />
             <textarea className="rounded-xl border border-border bg-background p-3 sm:col-span-2" name="description" placeholder="Mô tả ngắn" required />
             <button className="w-fit rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground" type="submit">Thêm vào Portfolio</button>
           </form>
           <div className="mt-6 grid gap-3">
             {team.portfolioItems?.map((item) => (
               <div className="rounded-xl border border-border p-4" key={item.id}>
-                <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{item.title}</h3><p className="mt-1 text-sm text-muted-foreground">{item.description}</p></div><form action={togglePortfolioItem}><input name="id" type="hidden" value={item.id} /><button className="text-sm text-primary" type="submit">{item.isVisible ? "Ẩn" : "Hiện"}</button></form></div>
+                <form action={updatePortfolioItem} className="grid gap-2">
+                  <input name="id" type="hidden" value={item.id} />
+                  <input className="rounded-lg border border-border bg-background px-3 py-2 text-sm" defaultValue={item.title} name="title" required />
+                  <textarea className="rounded-lg border border-border bg-background p-2 text-sm" defaultValue={item.description} name="description" required />
+                  <input className="rounded-lg border border-border bg-background px-3 py-2 text-sm" defaultValue={item.field} name="field" placeholder="Lĩnh vực" />
+                  <input className="rounded-lg border border-border bg-background px-3 py-2 text-sm" defaultValue={item.demoUrl ?? ""} name="demoUrl" placeholder="Liên kết demo" type="url" />
+                  <input className="rounded-lg border border-border bg-background px-3 py-2 text-sm" name="file" type="file" accept="image/png,image/jpeg,application/pdf" />
+                  <div className="flex flex-wrap gap-3">
+                    <button className="text-sm font-semibold text-primary" type="submit">Lưu</button>
+                    <button className="text-sm text-primary" formAction={togglePortfolioItem} type="submit">{item.isVisible ? "Ẩn" : "Hiện"}</button>
+                    <button className="text-sm text-destructive" formAction={deletePortfolioItem} type="submit">Xóa</button>
+                  </div>
+                </form>
               </div>
             ))}
           </div>
+          {completedProjects.length > 0 && (
+            <div className="mt-6 border-t border-border pt-5">
+              <h3 className="font-semibold">Dự án đã hoàn tất</h3>
+              {completedProjects.map((project) => (
+                <form action={addCompletedProjectToPortfolio} className="mt-2 flex items-center justify-between gap-3 text-sm" key={project.id}>
+                  <span>{project.title}</span>
+                  <input name="projectId" type="hidden" value={project.id} />
+                  <button className="text-primary hover:underline" type="submit">Thêm vào Portfolio</button>
+                </form>
+              ))}
+            </div>
+          )}
         </section>
       )}
       {team && reviewPage && reputation && (

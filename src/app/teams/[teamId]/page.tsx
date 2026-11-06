@@ -40,7 +40,7 @@ export default async function TeamProfilePage({
       portfolioItems: {
         where: { isVisible: true },
         orderBy: { createdAt: "desc" },
-        select: { id: true, title: true, description: true, demoUrl: true, field: true },
+        select: { id: true, title: true, description: true, demoUrl: true, field: true, fileName: true },
       },
     },
   });
@@ -109,6 +109,7 @@ export default async function TeamProfilePage({
                 {item.field && <p className="mt-1 text-xs text-primary">{item.field}</p>}
                 <p className="mt-2 text-sm text-muted-foreground">{item.description}</p>
                 {item.demoUrl && <a className="mt-3 inline-block text-sm text-primary hover:underline" href={item.demoUrl} rel="noreferrer" target="_blank">Xem demo</a>}
+                {item.fileName && <a className="mt-3 ml-3 inline-block text-sm text-primary hover:underline" href={`/api/teams/portfolio/${item.id}`} rel="noreferrer" target="_blank">Mở tệp đính kèm</a>}
               </article>
             ))}
           </div>
