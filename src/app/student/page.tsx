@@ -12,7 +12,7 @@ export default async function StudentDashboard() {
   const [unreadMessages, pendingApplications, selectedProjects] = await Promise.all([
     getUnreadWorkspaceMessageCount(userId, "STUDENT"),
     prisma.application.count({ where: { team: { OR: [{ ownerId: userId }, { memberships: { some: { studentProfile: { userId } } } }] }, status: "PENDING_CONFIRMATION" } }),
-    prisma.project.count({ where: { team: { OR: [{ ownerId: userId }, { memberships: { some: { studentProfile: { userId } } } }] }, status: { in: ["AGREEING", "IN_PROGRESS"] } } }),
+    prisma.project.count({ where: { team: { OR: [{ ownerId: userId }, { memberships: { some: { studentProfile: { userId } } } }] }, status: { in: ["AGREEING", "AWAITING_PAYMENT", "IN_PROGRESS"] } } }),
   ]);
 
   return (
