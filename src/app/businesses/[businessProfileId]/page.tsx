@@ -5,6 +5,7 @@ import { ReviewList } from "@/components/reputation/review-list";
 import { prisma } from "@/lib/prisma";
 import { getBusinessReviewPage } from "@/lib/reputation-data";
 import { BusinessLogo } from "@/components/business/business-logo";
+import { canViewBusinessPrivateContact } from "@/lib/business-contact-access";
 
 export const instant = false;
 
@@ -22,6 +23,7 @@ export default async function BusinessProfilePage({
     where: { id: businessProfileId },
     select: {
       id: true,
+      userId: true,
       companyName: true,
       industry: true,
       website: true,
@@ -37,6 +39,32 @@ export default async function BusinessProfilePage({
     },
   });
   if (!business) notFound();
+  const hasSelectedApplication = session.user.role === "STUDENT"
+    ? Boolean(await prisma.application.findFirst({
+        where: {
+          status: "SELECTED",
+          problem: { businessProfileId: business.id },
+          team: {
+            OR: [
+              { ownerId: session.user.id },
+              { memberships: { some: { studentProfile: { userId: session.user.id } } } },
+            ],
+          },
+        },
+        select: { id: true },
+      }))
+    : false;
+  const canViewPrivateContact = canViewBusinessPrivateContact({
+    viewer: { userId: session.user.id, role: session.user.role },
+    businessOwnerId: business.userId,
+    hasSelectedApplication,
+  });
+  const privateContact = canViewPrivateContact
+    ? await prisma.businessProfile.findUnique({
+        where: { id: business.id },
+        select: { contactEmail: true, phone: true, representative: true },
+      })
+    : null;
 
   const reviewPage = await getBusinessReviewPage(business.id, Number(page ?? "1"));
   return (
@@ -52,6 +80,13 @@ export default async function BusinessProfilePage({
           <p className="mt-4 break-all text-sm text-muted-foreground">
             Trang web doanh nghiệp: {business.website}
           </p>
+        )}
+        {privateContact && (
+          <div className="mt-4 space-y-1 text-sm text-muted-foreground">
+            {privateContact.contactEmail && <p>Email liên hệ: {privateContact.contactEmail}</p>}
+            {privateContact.phone && <p>Số điện thoại: {privateContact.phone}</p>}
+            {privateContact.representative && <p>Người đại diện: {privateContact.representative}</p>}
+          </div>
         )}
       </header>
       <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">

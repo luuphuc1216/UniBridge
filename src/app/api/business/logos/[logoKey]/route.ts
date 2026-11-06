@@ -3,6 +3,8 @@ import { Buffer } from "node:buffer";
 import { attachmentStorage } from "@/lib/storage";
 import { prisma } from "@/lib/prisma";
 
+import { detectImageMime } from "@/lib/image-signature";
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ logoKey: string }> },
@@ -18,9 +20,11 @@ export async function GET(
     });
     if (!profile) return new NextResponse("Not found", { status: 404 });
     const content = await attachmentStorage.read(logoKey);
+    const contentType = profile.logoMimeType ?? detectImageMime(content);
+    if (!contentType) return new NextResponse("Not found", { status: 404 });
     return new NextResponse(Buffer.from(content), {
       headers: {
-        "Content-Type": profile.logoMimeType ?? "application/octet-stream",
+        "Content-Type": contentType,
         "Cache-Control": "public, max-age=3600",
         "X-Content-Type-Options": "nosniff",
       },
