@@ -20,6 +20,15 @@ export default async function StudentDashboard() {
       <p className="text-sm font-semibold text-primary">Khu vực sinh viên</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight">Tổng quan</h1>
       <RecommendedProblems hasTeam={hasTeam} problems={recommendations} />
+      <section className="mt-6 rounded-2xl border border-border bg-card p-6">
+        <h2 className="text-lg font-semibold">Cần xử lý</h2>
+        <div className="mt-4 grid gap-2 text-sm">
+          {pendingApplications > 0 && <Link className="text-primary hover:underline" href="/student/applications">Hồ sơ chờ phản hồi ({pendingApplications})</Link>}
+          {selectedProjects > 0 && <Link className="text-primary hover:underline" href="/student/projects">Dự án đang thực hiện ({selectedProjects})</Link>}
+          {unreadMessages > 0 && <Link className="text-primary hover:underline" href="/student/messages">Tin nhắn chưa đọc ({unreadMessages})</Link>}
+          {pendingApplications === 0 && selectedProjects === 0 && unreadMessages === 0 && <p className="text-muted-foreground">Không có việc cần xử lý.</p>}
+        </div>
+      </section>
       <section className="mt-6 grid gap-3 sm:grid-cols-3">
         <Link className="rounded-2xl border border-border bg-card p-5 hover:border-primary" href="/student/applications">
           Hồ sơ đang chờ phản hồi: <strong>{pendingApplications}</strong>
