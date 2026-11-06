@@ -9,6 +9,15 @@
 - Khi doanh nghiệp đóng bài, hồ sơ `SUBMITTED`/`UNDER_REVIEW` được chuyển `NOT_SELECTED`, nhóm liên quan nhận thông báo và thao tác bị chặn nếu còn lời mời chờ, nhóm đã chọn hoặc dự án đang chạy. `Problem.status = CLOSED` vẫn được giữ tương thích bằng `closedReason`/`closedAt` additive.
 - Bộ test tăng từ 216 lên 220 test pass. Các kiểm tra toàn bộ cần tiếp tục mở rộng thêm test tích hợp cho quyền hồ sơ, dashboard đa doanh nghiệp và upload tệp.
 
+## Cập nhật Đợt 5C
+
+- Dashboard doanh nghiệp nay đếm toàn bộ Problem thuộc doanh nghiệp đăng nhập; phân loại dùng nhóm trạng thái chung với bộ lọc trang “Bài toán của tôi”.
+- Số “Hồ sơ nhận được” dùng `getEffectiveApplicationCounts`, chỉ tính `SUBMITTED`, `PENDING_CONFIRMATION` và `SELECTED`, giống số hồ sơ trên từng bài.
+- “Cần xử lý” chỉ còn các việc doanh nghiệp phải hành động, có số lượng và liên kết; thông báo thông tin được giữ ở “Hoạt động gần đây”. Lời mời hiển thị hạn gần nhất.
+- Dashboard sinh viên tính cả Project `AWAITING_PAYMENT` trong nhóm đang thực hiện, phù hợp với danh sách dự án.
+- Thêm migration additive `20261106190000_dot5c_logo_mime` để trả MIME chính xác cho logo upload; route Portfolio yêu cầu tài khoản sinh viên có quyền quản lý nhóm, mục ẩn trả 404 và mọi route tệp có `nosniff`.
+- Test tăng từ 220 lên 222; thêm test SQLite độc lập cho tổng Problem mọi trạng thái và đối chiếu số hồ sơ hiệu lực giữa dashboard/danh sách.
+
 > Phạm vi: đọc [UniBridge.md](./UniBridge.md), [ModuleKetNoi.md](./ModuleKetNoi.md), [ChiTietGiaoDienModuleKetNoi.md](./ChiTietGiaoDienModuleKetNoi.md), [ModuleGiaiPhapGiaoDich.md](./ModuleGiaiPhapGiaoDich.md) và đối chiếu với code/schema/seed/test đang có. Báo cáo chỉ ghi nhận, **không sửa code**. “Đã có” có thể là có một phần, không đồng nghĩa đã đáp ứng đầy đủ đặc tả.
 
 > Ghi chú phạm vi Đợt 1: tệp minh họa cho Approach qua file-picker được hoãn sang đợt sau; không triển khai dở dang trong đợt này.
