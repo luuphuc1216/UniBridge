@@ -12,8 +12,9 @@ import {
   getInvitationDeadline,
   getInvitationReminderAt,
 } from "@/lib/invitation-config";
-import { canCreatePendingInvitation, getBusinessCloseBlockReason } from "@/lib/problem-workflow";
+import { canCreatePendingInvitation } from "@/lib/problem-workflow";
 import { submitProblemForReview } from "@/lib/post-credits";
+import { closeProblemCore } from "@/lib/close-problem-core";
 
 export type ProblemActionState = {
   error: string | null;
@@ -558,70 +559,7 @@ export async function closeProblemAction(
   const problemId = getText(formData, "problemId");
   try {
     const { userId, businessProfileId } = await getBusinessContext();
-    await prisma.$transaction(async (transaction) => {
-      const problem = await transaction.problem.findFirst({
-        where: { id: problemId, businessProfileId, status: { in: ["APPROVED", "PUBLISHED"] } },
-        select: { id: true, title: true },
-      });
-      if (!problem) throw new Error("Chỉ có thể đóng bài toán đã được duyệt và đang mở.");
-      const pendingInvitation = await transaction.applicationInvitation.findFirst({
-        where: { problemId, status: "PENDING_CONFIRMATION" },
-        select: { id: true },
-      });
-      const runningProject = await transaction.project.findFirst({
-        where: { application: { problemId }, status: { in: ["AGREEING", "IN_PROGRESS"] } },
-        select: { id: true },
-      });
-      const selected = await transaction.application.findFirst({
-        where: { problemId, status: "SELECTED" },
-        select: { id: true },
-      });
-      const pendingReason = getBusinessCloseBlockReason({
-        hasPendingInvitation: Boolean(pendingInvitation),
-        hasSelectedApplication: Boolean(selected),
-        hasRunningProject: Boolean(runningProject),
-      });
-      if (pendingReason) throw new Error(pendingReason);
-      const affectedApplications = await transaction.application.findMany({
-        where: { problemId, status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
-        select: {
-          id: true,
-          team: {
-            select: {
-              ownerId: true,
-              memberships: { select: { studentProfile: { select: { userId: true } } } },
-            },
-          },
-        },
-      });
-      await transaction.application.updateMany({
-        where: { problemId, status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
-        data: { status: "NOT_SELECTED" },
-      });
-      const studentUserIds = [...new Set(
-        affectedApplications.flatMap(({ team }) => [
-          team.ownerId,
-          ...team.memberships.map(({ studentProfile }) => studentProfile?.userId),
-        ]).filter((userId): userId is string => Boolean(userId)),
-      )];
-      if (studentUserIds.length > 0) {
-        await transaction.notification.createMany({
-          data: studentUserIds.map((userId) => ({
-            userId,
-            title: "Bài toán đã đóng",
-            message: `Bài toán “${problem.title}” đã được doanh nghiệp đóng và hồ sơ của nhóm không được chọn.`,
-            href: `/student/problems/${problemId}`,
-          })),
-        });
-      }
-      await transaction.problem.update({
-        where: { id: problemId },
-        data: { status: "CLOSED", closedReason: "BUSINESS_CLOSED", closedAt: new Date() },
-      });
-      await transaction.auditLog.create({
-        data: { actorId: userId, action: "BUSINESS_CLOSED_PROBLEM", targetType: "Problem", targetId: problemId, metadata: JSON.stringify({ title: problem.title }) },
-      });
-    });
+    await closeProblemCore(userId, businessProfileId, problemId, prisma);
   } catch (error) {
     if (error instanceof Error) return { error: error.message };
     console.error("Đóng bài toán thất bại:", error);
