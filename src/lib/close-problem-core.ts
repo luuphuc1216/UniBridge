@@ -3,11 +3,17 @@ import { getBusinessCloseBlockReason } from "@/lib/problem-workflow";
 
 type CloseDatabase = Pick<PrismaClient, "$transaction">;
 
+export type CloseProblemCoreHooks = {
+  beforeNotifications?: () => void | Promise<void>;
+  beforeAuditLog?: () => void | Promise<void>;
+};
+
 export async function closeProblemCore(
   userId: string,
   businessProfileId: string,
   problemId: string,
   database: CloseDatabase,
+  hooks?: CloseProblemCoreHooks,
 ) {
   return database.$transaction(async (transaction) => {
     const problem = await transaction.problem.findFirst({
@@ -50,6 +56,7 @@ export async function closeProblemCore(
         ...team.memberships.map(({ studentProfile }) => studentProfile?.userId),
       ]).filter((id): id is string => Boolean(id)),
     )];
+    await hooks?.beforeNotifications?.();
     if (studentUserIds.length > 0) {
       await transaction.notification.createMany({
         data: studentUserIds.map((id) => ({
@@ -64,6 +71,7 @@ export async function closeProblemCore(
       where: { id: problemId },
       data: { status: "CLOSED", closedReason: "BUSINESS_CLOSED", closedAt: new Date() },
     });
+    await hooks?.beforeAuditLog?.();
     await transaction.auditLog.create({
       data: {
         actorId: userId,
