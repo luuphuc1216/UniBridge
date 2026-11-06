@@ -210,10 +210,16 @@ async function getTrendCounts(database: DashboardDatabase, now: Date) {
         where: { createdAt: { gte: windows.previous.start, lt: windows.previous.end } },
       }),
       database.application.count({
-        where: { submittedAt: { gte: windows.current.start, lt: windows.current.end } },
+        where: {
+          status: { not: "DRAFT" },
+          submittedAt: { gte: windows.current.start, lt: windows.current.end },
+        },
       }),
       database.application.count({
-        where: { submittedAt: { gte: windows.previous.start, lt: windows.previous.end } },
+        where: {
+          status: { not: "DRAFT" },
+          submittedAt: { gte: windows.previous.start, lt: windows.previous.end },
+        },
       }),
       database.user.count({
         where: { createdAt: { gte: windows.current.start, lt: windows.current.end } },

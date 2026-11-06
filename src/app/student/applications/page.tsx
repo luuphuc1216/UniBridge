@@ -12,10 +12,18 @@ export default async function StudentApplicationsPage() {
   const team = await getOwnedTeam(userId);
   const applications = team
     ? await prisma.application.findMany({
-        where: { teamId: team.id },
+      where: { teamId: team.id, status: { not: "DRAFT" } },
         orderBy: { updatedAt: "desc" },
         include: {
-          problem: {
+        approachAttachments: {
+          select: {
+            id: true,
+            originalName: true,
+            sizeBytes: true,
+            submissionVersion: true,
+          },
+        },
+        problem: {
             select: {
               id: true,
               title: true,
@@ -85,6 +93,34 @@ export default async function StudentApplicationsPage() {
               <p className="mt-3 text-sm text-muted-foreground">
                 Thời gian dự kiến: {application.estimatedDuration}
               </p>
+              {application.approachAttachments.filter(
+                ({ submissionVersion }) =>
+                  submissionVersion === application.attachmentVersion,
+              ).length > 0 && (
+                <section className="mt-4 rounded-xl border border-border p-3">
+                  <h3 className="text-sm font-semibold">Tài liệu minh họa đã gửi</h3>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {application.approachAttachments
+                      .filter(
+                        ({ submissionVersion }) =>
+                          submissionVersion === application.attachmentVersion,
+                      )
+                      .map((attachment) => (
+                        <li key={attachment.id}>
+                          <a
+                            className="break-all text-primary hover:underline"
+                            href={`/api/approach/attachments/${attachment.id}`}
+                          >
+                            {attachment.originalName}
+                          </a>{" "}
+                          <span className="text-muted-foreground">
+                            ({(attachment.sizeBytes / 1024 / 1024).toFixed(2)} MB)
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                </section>
+              )}
               <Link
                 className="mt-4 inline-flex text-sm font-semibold text-primary hover:underline"
                 href={`/student/problems/${application.problem.id}`}

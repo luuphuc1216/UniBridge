@@ -35,6 +35,11 @@ type ApplicationCardData = {
     responseReason: string | null;
   } | null;
   approachLinks: unknown;
+  attachments: {
+    id: string;
+    originalName: string;
+    sizeBytes: number;
+  }[];
   team: {
     id: string;
     name: string;
@@ -70,6 +75,17 @@ function formatCurrency(amount: number | null): string {
         currency: "VND",
         maximumFractionDigits: 0,
       }).format(amount);
+}
+
+function getSafeHttpUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) && url.hostname
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function SelectTeamForm({
@@ -411,11 +427,42 @@ export function ApplicationComparison({
               <section className="mt-5 rounded-xl border border-border p-4">
                 <h3 className="text-sm font-semibold">Liên kết tham khảo</h3>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-                  {application.approachLinks.map((link) =>
-                    typeof link === "string" ? (
-                      <li key={link}><a className="text-primary hover:underline" href={link} rel="noreferrer" target="_blank">{link}</a></li>
-                    ) : null,
-                  )}
+                  {application.approachLinks.map((link) => {
+                    if (typeof link !== "string") return null;
+                    const safeUrl = getSafeHttpUrl(link);
+                    return safeUrl ? (
+                      <li key={link}>
+                        <a
+                          className="break-all text-primary hover:underline"
+                          href={safeUrl}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {link}
+                        </a>
+                      </li>
+                    ) : null;
+                  })}
+                </ul>
+              </section>
+            )}
+            {application.attachments.length > 0 && (
+              <section className="mt-5 rounded-xl border border-border p-4">
+                <h3 className="text-sm font-semibold">Tài liệu minh họa đã gửi</h3>
+                <ul className="mt-2 space-y-2 text-sm">
+                  {application.attachments.map((attachment) => (
+                    <li key={attachment.id}>
+                      <a
+                        className="break-all text-primary hover:underline"
+                        href={`/api/approach/attachments/${attachment.id}`}
+                      >
+                        {attachment.originalName}
+                      </a>{" "}
+                      <span className="text-muted-foreground">
+                        ({(attachment.sizeBytes / 1024 / 1024).toFixed(2)} MB)
+                      </span>
+                    </li>
+                  ))}
                 </ul>
               </section>
             )}

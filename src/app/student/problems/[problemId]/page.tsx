@@ -107,6 +107,16 @@ export default async function StudentProblemDetailPage({
             resources: true,
             estimatedDuration: true,
             proposedBudget: true,
+            approachLinks: true,
+            attachmentVersion: true,
+            approachAttachments: {
+              select: {
+                id: true,
+                originalName: true,
+                sizeBytes: true,
+                submissionVersion: true,
+              },
+            },
             invitations: {
               where: { status: "PENDING_CONFIRMATION" },
               orderBy: { createdAt: "desc" },
@@ -261,10 +271,14 @@ export default async function StudentProblemDetailPage({
               problemId={problem.id}
             />
           </div>
-        ) : application && (!ownedTeam || !["SUBMITTED", "WITHDRAWN"].includes(application.status)) ? (
+        ) : application &&
+          (!ownedTeam ||
+            !["DRAFT", "SUBMITTED", "WITHDRAWN"].includes(application.status)) ? (
           <p className="mt-3 rounded-xl bg-muted p-4 text-sm leading-6">
             {!ownedTeam
               ? "Chỉ trưởng nhóm mới có thể chỉnh sửa hoặc phản hồi hồ sơ này."
+              : application.status === "DRAFT"
+                ? "Bản nháp chưa được gửi."
               : application.status === "SELECTED"
               ? "Doanh nghiệp đã chọn nhóm cho bài toán này."
               : application.status === "DECLINED"
@@ -292,6 +306,14 @@ export default async function StudentProblemDetailPage({
                       resources: application.resources,
                       estimatedDuration: application.estimatedDuration,
                       proposedBudget: application.proposedBudget,
+                      approachLinks: Array.isArray(application.approachLinks)
+                        ? application.approachLinks.filter(
+                            (link): link is string => typeof link === "string",
+                          )
+                        : [],
+                      status: application.status,
+                      attachmentVersion: application.attachmentVersion,
+                      attachments: application.approachAttachments,
                     }
                   : null
               }

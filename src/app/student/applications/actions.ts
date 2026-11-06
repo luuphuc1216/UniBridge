@@ -1,15 +1,28 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireStudent } from "@/lib/student-access";
 import { requireOwnedTeam } from "@/lib/student-team";
+import { attachmentStorage } from "@/lib/storage";
+import { validateAttachment } from "@/lib/business-attachments/validation";
+import {
+  assertApproachAttachmentSetWithinLimits,
+  canReplaceApproachAttachments,
+  createApproachAttachmentRecords,
+  getApproachAttachmentFiles,
+} from "@/lib/approach-attachments";
 import {
   canEditApplication,
   PROBLEM_ACCEPTING_APPLICATION_STATUSES,
 } from "@/lib/problem-workflow";
 
-export type ApplicationActionState = { error: string | null; success?: boolean };
+export type ApplicationActionState = {
+  error: string | null;
+  success?: boolean;
+  message?: string;
+};
 
 const approachFields = [
   ["problemUnderstanding", "Cách nhóm hiểu vấn đề"],
@@ -43,10 +56,33 @@ function parseApproachLinks(formData: FormData): string[] {
     .map((link) => link.trim())
     .filter(Boolean);
   if (links.length > 3) throw new Error("Chỉ được thêm tối đa 3 liên kết tham khảo.");
-  if (links.some((link) => !/^https?:\/\/\S+$/i.test(link))) {
-    throw new Error("Liên kết tham khảo phải bắt đầu bằng http:// hoặc https://.");
+  if (
+    links.some((link) => {
+      try {
+        const url = new URL(link);
+        return !["http:", "https:"].includes(url.protocol) || !url.hostname;
+      } catch {
+        return true;
+      }
+    })
+  ) {
+    throw new Error("Liên kết tham khảo phải là địa chỉ HTTP hoặc HTTPS hợp lệ.");
   }
   return links;
+}
+
+async function removeStoredFiles(storageKeys: string[]) {
+  const results = await Promise.allSettled(
+    storageKeys.map((storageKey) => attachmentStorage.delete(storageKey)),
+  );
+  results.forEach((result, index) => {
+    if (result.status === "rejected") {
+      console.error(
+        `Không thể dọn tệp Approach ${storageKeys[index]}:`,
+        result.reason,
+      );
+    }
+  });
 }
 
 function revalidateApplicationPaths(problemId: string) {
@@ -62,24 +98,59 @@ export async function saveApplicationAction(
 ): Promise<ApplicationActionState> {
   const { userId } = await requireStudent();
   const problemId = readText(formData, "problemId");
+  const intent = readText(formData, "intent") || "submit";
   if (!problemId) {
     return { error: "Không tìm thấy bài toán." };
+  }
+  if (intent !== "draft" && intent !== "submit") {
+    return { error: "Thao tác lưu hồ sơ không hợp lệ." };
+  }
+  let team: Awaited<ReturnType<typeof requireOwnedTeam>>;
+  try {
+    team = await requireOwnedTeam(userId);
+  } catch (error) {
+    if (error instanceof Error) return { error: error.message };
+    console.error("Không thể xác minh quyền của nhóm khi gửi hồ sơ:", error);
+    return { error: "Không thể xác minh quyền của nhóm. Vui lòng thử lại." };
   }
 
   const values: Record<string, string> = Object.fromEntries(
     approachFields.map(([field]) => [field, readText(formData, field)]),
   );
+  const removedAttachmentIds = formData
+    .getAll("removeApproachAttachment")
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (
+    formData.getAll("removeApproachAttachment").some((value) => typeof value !== "string") ||
+    removedAttachmentIds.length > 3
+  ) {
+    return { error: "Danh sách tài liệu cần xóa không hợp lệ." };
+  }
   const estimatedDuration = readText(formData, "estimatedDuration");
   let proposedBudget: number | null;
   let approachLinks: string[];
+  let uploadedAttachments: Awaited<ReturnType<typeof validateAttachment>>[];
   try {
     proposedBudget = parseBudget(readText(formData, "proposedBudget"));
     approachLinks = parseApproachLinks(formData);
+    uploadedAttachments = await Promise.all(
+      getApproachAttachmentFiles(formData).map(validateAttachment),
+    );
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Chi phí đề xuất không hợp lệ." };
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Không thể kiểm tra tài liệu đính kèm.",
+    };
   }
 
-  if (approachFields.some(([field]) => !values[field]) || !estimatedDuration) {
+  if (
+    intent === "submit" &&
+    (approachFields.some(([field]) => !values[field]) || !estimatedDuration)
+  ) {
     return { error: "Vui lòng điền đầy đủ các nội dung Approach và thời gian dự kiến." };
   }
   if (
@@ -89,10 +160,31 @@ export async function saveApplicationAction(
     return { error: "Một số nội dung vượt quá độ dài cho phép." };
   }
 
+  const storedAttachmentRecords: {
+    applicationId: string;
+    submissionVersion: number;
+    originalName: string;
+    contentType: string;
+    sizeBytes: number;
+    storageKey: string;
+  }[] = [];
+  const obsoleteStorageKeys: string[] = [];
   let problemBusinessUserId = "";
   let wasNewSubmission = false;
   try {
-    const team = await requireOwnedTeam(userId);
+    for (const attachment of uploadedAttachments) {
+      const storageKey = randomUUID();
+      await attachmentStorage.save(storageKey, attachment.content);
+      storedAttachmentRecords.push({
+        applicationId: "",
+        submissionVersion: 0,
+        originalName: attachment.originalName,
+        contentType: attachment.contentType,
+        sizeBytes: attachment.sizeBytes,
+        storageKey,
+      });
+    }
+
     await prisma.$transaction(async (transaction) => {
       const problem = await transaction.problem.findFirst({
         where: {
@@ -111,16 +203,36 @@ export async function saveApplicationAction(
 
       const existing = await transaction.application.findUnique({
         where: { problemId_teamId: { problemId, teamId: team.id } },
-        select: { id: true, status: true, profileSnapshotVersion: true },
+        select: {
+          id: true,
+          status: true,
+          profileSnapshotVersion: true,
+          attachmentVersion: true,
+        },
       });
       if (existing && !canEditApplication(existing.status) && existing.status !== "WITHDRAWN") {
         throw new Error("Hồ sơ này đã được doanh nghiệp xử lý và không thể sửa.");
+      }
+      if (intent === "draft" && existing && existing.status !== "DRAFT") {
+        throw new Error("Chỉ có thể lưu nháp khi hồ sơ chưa được gửi.");
+      }
+      if (
+        (storedAttachmentRecords.length > 0 || removedAttachmentIds.length > 0) &&
+        !canReplaceApproachAttachments(existing?.status ?? null)
+      ) {
+        throw new Error("Tài liệu đã gửi bị khóa và không thể thêm, sửa hoặc xóa.");
+      }
+      if (removedAttachmentIds.length > 0 && existing?.status !== "DRAFT") {
+        throw new Error("Chỉ có thể xóa tài liệu trong bản nháp.");
       }
 
       const approach = approachFields
         .map(([field, label]) => `${label}:\n${values[field]}`)
         .join("\n\n");
-      const profileSnapshotVersion = (existing?.profileSnapshotVersion ?? 0) + 1;
+      const profileSnapshotVersion =
+        existing && existing.status !== "DRAFT"
+          ? existing.profileSnapshotVersion + 1
+          : existing?.profileSnapshotVersion ?? 1;
       const profileSnapshot = {
         version: profileSnapshotVersion,
         name: team.name,
@@ -138,30 +250,105 @@ export async function saveApplicationAction(
           isLead,
         })),
       };
+      const attachmentVersion =
+        intent === "draft"
+          ? 0
+          : existing?.status === "WITHDRAWN"
+            ? existing.attachmentVersion + 1
+            : existing?.status === "DRAFT"
+              ? 1
+              : existing?.attachmentVersion ?? 1;
       const applicationData = {
         ...values,
         approach,
         estimatedDuration,
         proposedBudget,
-        profileSnapshot,
         profileSnapshotVersion,
         approachLinks,
-        ...(existing?.status === "WITHDRAWN"
-          ? { status: "SUBMITTED", submittedAt: new Date() }
+        status: intent === "draft" ? "DRAFT" : "SUBMITTED",
+        attachmentVersion,
+        ...(intent === "submit" ? { profileSnapshot } : {}),
+        ...(intent === "submit" &&
+        (!existing || existing.status === "DRAFT" || existing.status === "WITHDRAWN")
+          ? { submittedAt: new Date() }
           : {}),
       };
 
+      let applicationId = existing?.id;
       if (existing) {
         await transaction.application.update({
           where: { id: existing.id },
           data: applicationData,
         });
-        wasNewSubmission = existing.status === "WITHDRAWN";
+        applicationId = existing.id;
       } else {
-        await transaction.application.create({
+        const created = await transaction.application.create({
           data: { problemId, teamId: team.id, ...applicationData },
+          select: { id: true },
         });
-        wasNewSubmission = true;
+        applicationId = created.id;
+      }
+      if (!applicationId) {
+        throw new Error("Không tìm thấy hồ sơ ứng tuyển cần lưu.");
+      }
+
+      if (existing?.status === "DRAFT") {
+        const previousFiles = await transaction.approachAttachment.findMany({
+          where: { applicationId, submissionVersion: 0 },
+          select: { id: true, storageKey: true, sizeBytes: true },
+        });
+        const filesToRemove = previousFiles.filter(({ id }) =>
+          removedAttachmentIds.includes(id),
+        );
+        if (filesToRemove.length !== removedAttachmentIds.length) {
+          throw new Error("Không tìm thấy tài liệu cần xóa trong bản nháp này.");
+        }
+        const remainingFiles = previousFiles.filter(
+          ({ id }) => !removedAttachmentIds.includes(id),
+        );
+        assertApproachAttachmentSetWithinLimits(
+          remainingFiles,
+          storedAttachmentRecords,
+        );
+        if (filesToRemove.length > 0) {
+          obsoleteStorageKeys.push(...filesToRemove.map(({ storageKey }) => storageKey));
+          await transaction.approachAttachment.deleteMany({
+            where: { id: { in: filesToRemove.map(({ id }) => id) }, applicationId },
+          });
+        }
+      }
+      if (intent === "submit" && existing?.status === "DRAFT") {
+        if (storedAttachmentRecords.length > 0) {
+          await createApproachAttachmentRecords(
+            transaction.approachAttachment,
+            storedAttachmentRecords.map((record) => ({
+              ...record,
+              applicationId,
+              submissionVersion: 1,
+            })),
+          );
+        }
+        await transaction.approachAttachment.updateMany({
+          where: { applicationId, submissionVersion: 0 },
+          data: { submissionVersion: 1 },
+        });
+      } else if (storedAttachmentRecords.length > 0) {
+        await createApproachAttachmentRecords(
+          transaction.approachAttachment,
+          storedAttachmentRecords.map((record) => ({
+            ...record,
+            applicationId,
+            submissionVersion:
+              intent === "draft" ? 0 : attachmentVersion,
+          })),
+        );
+      }
+
+      if (intent === "submit") {
+        wasNewSubmission =
+          !existing || existing.status === "DRAFT" || existing.status === "WITHDRAWN";
+      } else {
+        wasNewSubmission = false;
       }
       problemBusinessUserId = problem.businessProfile.userId;
 
@@ -177,6 +364,7 @@ export async function saveApplicationAction(
       }
     });
   } catch (error) {
+    await removeStoredFiles(storedAttachmentRecords.map(({ storageKey }) => storageKey));
     if (error instanceof Error) {
       return { error: error.message };
     }
@@ -184,8 +372,13 @@ export async function saveApplicationAction(
     return { error: "Không thể gửi hồ sơ. Vui lòng thử lại." };
   }
 
+  await removeStoredFiles([...new Set(obsoleteStorageKeys)]);
   revalidateApplicationPaths(problemId);
-  return { error: null, success: true };
+  return {
+    error: null,
+    success: true,
+    message: intent === "draft" ? "Đã lưu bản nháp." : "Đã gửi hồ sơ thành công.",
+  };
 }
 
 export async function withdrawApplicationAction(

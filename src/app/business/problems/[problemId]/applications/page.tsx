@@ -42,6 +42,14 @@ export default async function BusinessProblemApplicationsPage({
         where: displayApplicationsWhere,
         orderBy: { submittedAt: "asc" },
         include: {
+          approachAttachments: {
+            select: {
+              id: true,
+              originalName: true,
+              sizeBytes: true,
+              submissionVersion: true,
+            },
+          },
           invitations: {
             orderBy: { createdAt: "desc" },
             take: 1,
@@ -114,6 +122,10 @@ export default async function BusinessProblemApplicationsPage({
     businessReviewNote: application.businessReviewNote,
     invitation: application.invitations[0] ?? null,
     approachLinks: application.approachLinks,
+    attachments: application.approachAttachments.filter(
+      ({ submissionVersion }) =>
+        submissionVersion === application.attachmentVersion,
+    ),
     team: {
       id: application.team.id,
       name: snapshot?.name ?? application.team.name,

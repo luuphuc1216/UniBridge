@@ -2,7 +2,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { getEffectiveApplicationStatuses } from "@/lib/problem-workflow";
 
 export const displayApplicationsWhere = {
-  status: { not: "WITHDRAWN" },
+  status: { notIn: ["WITHDRAWN", "DRAFT"] },
 } satisfies Prisma.ApplicationWhereInput;
 
 export const effectiveApplicationsWhere = {
