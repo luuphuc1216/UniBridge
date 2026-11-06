@@ -9,6 +9,7 @@ import { requireStudent } from "@/lib/student-access";
 import { prisma } from "@/lib/prisma";
 import { getStudentDiscoverableProblemWhere } from "@/lib/problem-workflow";
 import { getStudentRecommendations } from "@/lib/student-recommendations";
+import { sortByRecommendationScore } from "@/lib/recommendation-scoring";
 
 export const instant = false;
 
@@ -108,12 +109,7 @@ export default async function StudentProblemsPage({
     }),
   ]);
   if (sort === "relevance" && recommendationData.hasTeam) {
-    problems.sort(
-      (left, right) =>
-        (recommendationData.scores[right.id] ?? 0) -
-          (recommendationData.scores[left.id] ?? 0) ||
-        right.createdAt.getTime() - left.createdAt.getTime(),
-    );
+    problems.splice(0, problems.length, ...sortByRecommendationScore(problems, recommendationData.scores));
   }
   const savedIds = new Set(savedRows.map(({ problemId }) => problemId));
   const sortParams = new URLSearchParams();
