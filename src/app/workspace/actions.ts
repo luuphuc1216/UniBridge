@@ -12,6 +12,7 @@ import {
   isFinalWorkspaceStatus,
   isWorkspaceMessageWritableApplicationStatus,
 } from "@/lib/workspace-access";
+import { validateWorkspaceMessageContent } from "@/lib/workspace-message-validation";
 import {
   proposalEvaluationFields,
   proposalTypes,
@@ -176,9 +177,8 @@ export async function sendWorkspaceMessageAction(
 ): Promise<WorkspaceActionState> {
   const problemId = readText(formData, "problemId");
   const content = readText(formData, "content");
-  if (!content || content.length > 4000) {
-    return { error: "Tin nhắn phải có nội dung và không vượt quá 4.000 ký tự." };
-  }
+  const contentError = validateWorkspaceMessageContent(content);
+  if (contentError) return { error: contentError };
   try {
     const { session, workspace, application } = await requireWorkspace(
       problemId,

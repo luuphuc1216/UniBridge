@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { WorkspaceView } from "@/components/workspace/workspace-view";
 import { findAuthorizedWorkspace } from "@/lib/workspace-access";
 import { canRespondForTeam } from "@/lib/team-permissions";
+import { markWorkspaceRead } from "@/lib/workspace-messages";
 import {
   ensureGroupSubmissionReminders,
   getWorkspacePrototypeOverdueStatus,
@@ -33,6 +34,7 @@ export default async function StudentWorkspacePage({
   if (!problem || !application) {
     notFound();
   }
+  await markWorkspaceRead(application.id, session.user.id);
   const now = new Date();
   try {
     await ensureGroupSubmissionReminders(problem.id, {

@@ -123,9 +123,22 @@ export function isValidProblemReviewNote(note: string): boolean {
   return normalizedNote.length >= 3 && normalizedNote.length <= 2000;
 }
 
+export function getBusinessCloseBlockReason(input: {
+  hasPendingInvitation: boolean;
+  hasSelectedApplication: boolean;
+  hasRunningProject: boolean;
+}): string | null {
+  if (input.hasPendingInvitation) return "Không thể đóng: còn lời mời đang chờ nhóm phản hồi.";
+  if (input.hasSelectedApplication || input.hasRunningProject) {
+    return "Không thể đóng: bài toán đã có nhóm được chọn hoặc dự án đang thực hiện.";
+  }
+  return null;
+}
+
 export function getApplicationUnavailableReason(
   status: string,
   reviewNote: string | null,
+  closedReason?: string | null,
 ): string {
   switch (status) {
     case "REJECTED":
@@ -141,7 +154,9 @@ export function getApplicationUnavailableReason(
     case "NOT_SELECTED":
       return "Hồ sơ của nhóm không được chọn cho bài toán này.";
     case "CLOSED":
-      return "Bài toán đã kết thúc sau giai đoạn Prototype và không nhận hồ sơ mới.";
+      return closedReason === "BUSINESS_CLOSED"
+        ? "Bài toán đã được doanh nghiệp đóng và không nhận hồ sơ mới."
+        : "Bài toán đã kết thúc sau giai đoạn Prototype và không nhận hồ sơ mới.";
     case "TEAM_SELECTED":
       return "Doanh nghiệp đã chọn nhóm cho bài toán này nên bài toán không nhận hồ sơ mới.";
     case "PROTOTYPING":

@@ -13,6 +13,7 @@ export type StudentProblemCard = {
   businessProfile: { companyName: string };
   skills: { skill: { name: string } }[];
   saved: boolean;
+  relevanceScore?: number;
 };
 
 function formatCurrency(amount: number | null): string {
@@ -56,6 +57,11 @@ export function ProblemResults({ problems }: { problems: StudentProblemCard[] })
           <span className="mt-2 w-fit rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
             {statusLabels[problem.status] ?? problem.status}
           </span>
+          {problem.relevanceScore !== undefined && (
+            <span className="mt-2 w-fit text-xs font-semibold text-primary">
+              Mức phù hợp: {problem.relevanceScore}
+            </span>
+          )}
           <p className="mt-2 text-sm font-medium text-muted-foreground">
             {problem.businessProfile.companyName}
           </p>

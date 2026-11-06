@@ -6,6 +6,7 @@ import {
   ensureBusinessPrototypeReminders,
   getWorkspacePrototypeOverdueStatus,
 } from "@/lib/prototype-reminders";
+import { markWorkspaceRead } from "@/lib/workspace-messages";
 
 export const instant = false;
 
@@ -32,6 +33,7 @@ export default async function BusinessWorkspacePage({
   if (!problem || !application) {
     notFound();
   }
+  await markWorkspaceRead(application.id, session.user.id);
   const now = new Date();
   try {
     await ensureBusinessPrototypeReminders(problem.id, session.user.id, {

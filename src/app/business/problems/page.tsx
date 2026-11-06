@@ -1,8 +1,12 @@
 import Link from "next/link";
-import { activeApplicationsWhere } from "@/lib/applications";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
+import {
+  BUSINESS_PROBLEM_STATUS_GROUPS,
+  getBusinessProblemStatusFilter,
+  getEffectiveApplicationCounts,
+} from "@/lib/business-dashboard";
 
 export const instant = false;
 
@@ -21,20 +25,28 @@ const statusClasses: Record<string, string> = {
   READY_FOR_IMPLEMENTATION: "bg-emerald-100 text-emerald-800",
 };
 
-export default async function BusinessProblemsPage() {
+export default async function BusinessProblemsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; field?: string; query?: string }>;
+}) {
   const { businessProfileId } = await requireBusinessProfile();
+  const filters = await searchParams;
   const problems = await prisma.problem.findMany({
-    where: { businessProfileId },
+    where: {
+      businessProfileId,
+      ...(filters.status ? { status: getBusinessProblemStatusFilter(filters.status) } : {}),
+      ...(filters.field ? { field: filters.field } : {}),
+      ...(filters.query ? { title: { contains: filters.query } } : {}),
+    },
     orderBy: { updatedAt: "desc" },
     include: {
-      _count: {
-        select: {
-          applications: { where: activeApplicationsWhere },
-          attachments: true,
-        },
-      },
+      _count: { select: { attachments: true } },
     },
   });
+  const effectiveApplicationCounts = await getEffectiveApplicationCounts(
+    problems.map(({ id }) => id),
+  );
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
@@ -46,6 +58,15 @@ export default async function BusinessProblemsPage() {
             Quản lý nội dung, hồ sơ ứng tuyển và trạng thái duyệt của các bài toán.
           </p>
         </div>
+        <form className="mt-6 grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-4" method="get">
+          <input className="rounded-xl border border-border bg-background px-3 py-2 text-sm" defaultValue={filters.query} name="query" placeholder="Tìm theo tên bài toán" />
+          <input className="rounded-xl border border-border bg-background px-3 py-2 text-sm" defaultValue={filters.field} name="field" placeholder="Lĩnh vực" />
+          <select className="rounded-xl border border-border bg-background px-3 py-2 text-sm" defaultValue={filters.status ?? ""} name="status">
+            <option value="">Tất cả trạng thái</option>
+            {BUSINESS_PROBLEM_STATUS_GROUPS.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
+          </select>
+          <button className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground" type="submit">Lọc</button>
+        </form>
         <Link
           className="rounded-xl bg-primary px-5 py-3 text-center text-sm font-semibold text-primary-foreground hover:opacity-90"
           href="/business/problems/new"
@@ -86,7 +107,7 @@ export default async function BusinessProblemsPage() {
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>{problem.field}</span>
                     <span>
-                      {problem.status === "REJECTED" ? 0 : problem._count.applications} hồ sơ
+                      {effectiveApplicationCounts.get(problem.id) ?? 0} hồ sơ
                     </span>
                     <span>{problem._count.attachments} tài liệu</span>
                     <span>

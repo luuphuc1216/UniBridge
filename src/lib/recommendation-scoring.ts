@@ -33,6 +33,17 @@ export type ScoredRecommendation<T extends RecommendationProblem = Recommendatio
   reasons: string[];
 };
 
+export function sortByRecommendationScore<T extends { id: string; createdAt: Date }>(
+  items: T[],
+  scores: Record<string, number>,
+): T[] {
+  return [...items].sort(
+    (left, right) =>
+      (scores[right.id] ?? 0) - (scores[left.id] ?? 0) ||
+      right.createdAt.getTime() - left.createdAt.getTime(),
+  );
+}
+
 function normalize(value: string): string {
   return value
     .normalize("NFD")

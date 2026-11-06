@@ -14,6 +14,7 @@ import {
 } from "@/lib/invitation-config";
 import { canCreatePendingInvitation } from "@/lib/problem-workflow";
 import { submitProblemForReview } from "@/lib/post-credits";
+import { closeProblemCore } from "@/lib/close-problem-core";
 
 export type ProblemActionState = {
   error: string | null;
@@ -95,7 +96,7 @@ async function getBusinessContext() {
   if (!profile) {
     throw new Error("Không tìm thấy hồ sơ doanh nghiệp.");
   }
-  return { businessProfileId: profile.id };
+  return { userId: session.user.id, businessProfileId: profile.id };
 }
 
 function makeSlug(title: string): string {
@@ -548,5 +549,23 @@ export async function updateApplicationReviewAction(
     return { error: "Không thể cập nhật ghi chú hồ sơ. Vui lòng thử lại." };
   }
   revalidatePath(`/business/problems/${problemId}/applications`);
+  return { error: null };
+}
+
+export async function closeProblemAction(
+  _previousState: ProblemActionState,
+  formData: FormData,
+): Promise<ProblemActionState> {
+  const problemId = getText(formData, "problemId");
+  try {
+    const { userId, businessProfileId } = await getBusinessContext();
+    await closeProblemCore(userId, businessProfileId, problemId, prisma);
+  } catch (error) {
+    if (error instanceof Error) return { error: error.message };
+    console.error("Đóng bài toán thất bại:", error);
+    return { error: "Không thể đóng bài toán. Vui lòng thử lại." };
+  }
+  revalidatePath("/business/problems");
+  revalidatePath(`/business/problems/${problemId}`);
   return { error: null };
 }

@@ -75,7 +75,7 @@ export default async function StudentProblemDetailPage({
       ],
     },
     include: {
-      businessProfile: { select: { companyName: true, industry: true } },
+      businessProfile: { select: { id: true, companyName: true, industry: true } },
       attachments: { orderBy: { createdAt: "asc" } },
     },
   });
@@ -130,7 +130,10 @@ export default async function StudentProblemDetailPage({
       <p className="mt-4 text-sm font-semibold text-primary">{problem.field}</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight">{problem.title}</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        {problem.businessProfile.companyName} · {problem.businessProfile.industry}
+        <Link className="hover:underline" href={`/businesses/${problem.businessProfile.id}`}>
+          {problem.businessProfile.companyName}
+        </Link>{" "}
+        · {problem.businessProfile.industry}
       </p>
       {!problem.hiddenByAdmin && (
         <ReportContentButton targetType="PROBLEM" targetId={problem.id} />
@@ -235,7 +238,7 @@ export default async function StudentProblemDetailPage({
               className="rounded-xl bg-muted p-4 text-sm leading-6 text-muted-foreground"
               id="application-unavailable-reason"
             >
-              {getApplicationUnavailableReason(problem.status, problem.reviewNote)}
+              {getApplicationUnavailableReason(problem.status, problem.reviewNote, problem.closedReason)}
             </p>
           </div>
         ) : !team ? (

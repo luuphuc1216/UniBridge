@@ -4,6 +4,7 @@ import { activeApplicationsWhere } from "@/lib/applications";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
+import { CloseProblemButton } from "@/components/business/close-problem-button";
 
 export const instant = false;
 
@@ -98,6 +99,9 @@ export default async function BusinessProblemDetailPage({
             >
               Mở không gian làm việc
             </Link>
+          )}
+          {["APPROVED", "PUBLISHED"].includes(problem.status) && (
+            <CloseProblemButton problemId={problem.id} />
           )}
         </div>
       </div>

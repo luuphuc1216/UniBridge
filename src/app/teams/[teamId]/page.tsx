@@ -37,6 +37,11 @@ export default async function TeamProfilePage({
         orderBy: [{ isLead: "desc" }, { joinedAt: "asc" }],
         select: { name: true, major: true },
       },
+      portfolioItems: {
+        where: { isVisible: true },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, title: true, description: true, demoUrl: true, field: true, fileName: true },
+      },
     },
   });
   if (!team) notFound();
@@ -92,6 +97,24 @@ export default async function TeamProfilePage({
         </section>
         <ReportContentButton targetType="TEAM" targetId={team.id} />
       </header>
+      <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">
+        <h2 className="text-xl font-semibold">Portfolio</h2>
+        {team.portfolioItems.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">Nhóm chưa công khai sản phẩm nào.</p>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {team.portfolioItems.map((item) => (
+              <article className="rounded-xl border border-border p-4" key={item.id}>
+                <h3 className="font-semibold">{item.title}</h3>
+                {item.field && <p className="mt-1 text-xs text-primary">{item.field}</p>}
+                <p className="mt-2 text-sm text-muted-foreground">{item.description}</p>
+                {item.demoUrl && <a className="mt-3 inline-block text-sm text-primary hover:underline" href={item.demoUrl} rel="noreferrer" target="_blank">Xem demo</a>}
+                {item.fileName && <a className="mt-3 ml-3 inline-block text-sm text-primary hover:underline" href={`/api/teams/portfolio/${item.id}`} rel="noreferrer" target="_blank">Mở tệp đính kèm</a>}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
       <ReputationSummary reputation={reputation} />
       <ReviewList basePath={`/teams/${team.id}`} reviewPage={reviewPage} />
       <TeamHistory entries={history} />

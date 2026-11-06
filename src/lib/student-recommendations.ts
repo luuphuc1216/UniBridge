@@ -46,7 +46,7 @@ export async function getStudentRecommendations(userId: string) {
   ]);
 
   if (!team) {
-    return { hasTeam: false, recommendations: [] };
+    return { hasTeam: false, recommendations: [], scores: {} as Record<string, number> };
   }
   const reputation = (await getTeamReputations([team.id])).get(team.id);
 
@@ -184,5 +184,6 @@ export async function getStudentRecommendations(userId: string) {
   return {
     hasTeam: true,
     recommendations: recommendationCards,
+    scores: Object.fromEntries(scored.map(({ problem, score }) => [problem.id, score])),
   };
 }
