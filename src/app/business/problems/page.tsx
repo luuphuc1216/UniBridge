@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { activeApplicationsWhere } from "@/lib/applications";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
+import { getEffectiveApplicationCounts } from "@/lib/business-dashboard";
 
 export const instant = false;
 
@@ -37,14 +37,12 @@ export default async function BusinessProblemsPage({
     },
     orderBy: { updatedAt: "desc" },
     include: {
-      _count: {
-        select: {
-          applications: { where: activeApplicationsWhere },
-          attachments: true,
-        },
-      },
+      _count: { select: { attachments: true } },
     },
   });
+  const effectiveApplicationCounts = await getEffectiveApplicationCounts(
+    problems.map(({ id }) => id),
+  );
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
@@ -105,7 +103,7 @@ export default async function BusinessProblemsPage({
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>{problem.field}</span>
                     <span>
-                      {problem.status === "REJECTED" ? 0 : problem._count.applications} hồ sơ
+                      {effectiveApplicationCounts.get(problem.id) ?? 0} hồ sơ
                     </span>
                     <span>{problem._count.attachments} tài liệu</span>
                     <span>

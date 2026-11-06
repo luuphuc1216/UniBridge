@@ -3,6 +3,10 @@ import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 import { ensureBusinessCreditNotifications } from "@/lib/business-credit-notifications";
 import { getUnreadWorkspaceMessageCount } from "@/lib/workspace-messages";
+import {
+  BUSINESS_PROBLEM_STATUSES,
+  getEffectiveApplicationCounts,
+} from "@/lib/business-dashboard";
 
 export default async function BusinessDashboard() {
   const { businessProfileId } = await requireBusinessProfile();
@@ -25,30 +29,45 @@ export default async function BusinessDashboard() {
     _sum: { remaining: true },
   });
   const remaining = credits._sum.remaining ?? 0;
-  const [problems, receivedApplications, activeProjects, completedProjects, subscription, notifications, unreadMessages, pendingReview, pendingInvitations, pendingProposals, pendingMilestones, pendingAgreements] =
+  const [problems, activeProjects, completedProjects, subscription, notifications, unreadMessages, pendingReview, pendingInvitations, pendingInvitationDeadline, pendingProposals, pendingMilestones, pendingAgreements] =
     await Promise.all([
-      prisma.problem.groupBy({ by: ["status"], where: { businessProfileId }, _count: { _all: true } }),
-      prisma.application.count({ where: { problem: { businessProfileId }, status: { notIn: ["WITHDRAWN", "REJECTED"] } } }),
-      prisma.project.count({ where: { application: { problem: { businessProfileId } }, status: { in: ["IN_PROGRESS", "PROTOTYPING"] } } }),
+      prisma.problem.findMany({ where: { businessProfileId }, select: { id: true, status: true } }),
+      prisma.project.count({ where: { application: { problem: { businessProfileId } }, status: { in: ["AGREEING", "PROTOTYPING", "IN_PROGRESS"] } } }),
       prisma.project.count({ where: { application: { problem: { businessProfileId } }, status: "COMPLETED" } }),
       prisma.subscription.findFirst({ where: { businessProfileId, status: "ACTIVE", endsAt: { gt: new Date() } }, orderBy: { endsAt: "desc" } }),
       prisma.notification.findMany({ where: { userId: sessionProfile.userId }, orderBy: { createdAt: "desc" }, take: 8 }),
       getUnreadWorkspaceMessageCount(sessionProfile.userId, "BUSINESS"),
       prisma.application.count({ where: { problem: { businessProfileId }, needsReview: true, status: { in: ["SUBMITTED", "PENDING_CONFIRMATION", "SELECTED"] } } }),
       prisma.applicationInvitation.count({ where: { invitedByBusinessProfileId: businessProfileId, status: "PENDING_CONFIRMATION" } }),
+      prisma.applicationInvitation.findFirst({ where: { invitedByBusinessProfileId: businessProfileId, status: "PENDING_CONFIRMATION" }, orderBy: { expiresAt: "asc" }, select: { expiresAt: true } }),
       prisma.proposal.count({ where: { application: { problem: { businessProfileId } }, status: { in: ["SUBMITTED", "EVALUATING"] } } }),
       prisma.milestone.count({ where: { project: { application: { problem: { businessProfileId } } }, status: "SUBMITTED" } }),
       prisma.project.count({ where: { application: { problem: { businessProfileId } }, status: "AGREEING" } }),
     ]);
-  const statusCounts = new Map(problems.map((item) => [item.status, item._count._all]));
+  const effectiveApplicationCounts = await getEffectiveApplicationCounts(
+    problems.map(({ id }) => id),
+  );
+  const statusCounts = new Map<string, number>();
+  for (const problem of problems) {
+    statusCounts.set(problem.status, (statusCounts.get(problem.status) ?? 0) + 1);
+  }
+  const totalEffectiveApplications = [...effectiveApplicationCounts.values()].reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  const problemStatusLinks = BUSINESS_PROBLEM_STATUSES.map(([status, label]) => ({
+    status,
+    label,
+    count: statusCounts.get(status) ?? 0,
+  }));
   return (
     <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <p className="text-sm font-semibold text-primary">Khu vực doanh nghiệp</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight">Tổng quan</h1>
       <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Bài toán", (statusCounts.get("DRAFT") ?? 0) + (statusCounts.get("APPROVED") ?? 0) + (statusCounts.get("CLOSED") ?? 0)],
-          ["Hồ sơ nhận được", receivedApplications],
+          ["Bài toán", problems.length],
+          ["Hồ sơ nhận được", totalEffectiveApplications],
           ["Dự án đang thực hiện", activeProjects],
           ["Dự án hoàn tất", completedProjects],
         ].map(([label, value]) => (
@@ -59,19 +78,31 @@ export default async function BusinessDashboard() {
         ))}
       </section>
       <section className="mt-6 rounded-2xl border border-border bg-card p-6">
+        <h2 className="text-lg font-semibold">Phân loại bài toán</h2>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {problemStatusLinks.map(({ status, label, count }) => (
+            <Link
+              className="flex items-center justify-between rounded-xl border border-border px-4 py-3 text-sm hover:bg-muted"
+              href={`/business/problems?status=${status}`}
+              key={status}
+            >
+              <span>{label}</span>
+              <strong>{count}</strong>
+            </Link>
+          ))}
+        </div>
+      </section>
+      <section className="mt-6 rounded-2xl border border-border bg-card p-6">
         <h2 className="text-lg font-semibold">Cần xử lý</h2>
         <div className="mt-4 grid gap-2 text-sm">
-          {(statusCounts.get("NEEDS_REVISION") ?? 0) > 0 && <Link className="text-primary hover:underline" href="/business/problems?status=NEEDS_REVISION">Bài toán cần chỉnh sửa</Link>}
+          {(statusCounts.get("NEEDS_REVISION") ?? 0) > 0 && <Link className="text-primary hover:underline" href="/business/problems?status=NEEDS_REVISION">Bài toán cần chỉnh sửa ({statusCounts.get("NEEDS_REVISION") ?? 0})</Link>}
           {pendingReview > 0 && <Link className="text-primary hover:underline" href="/business/problems">Hồ sơ cần xem xét ({pendingReview})</Link>}
-          {pendingInvitations > 0 && <Link className="text-primary hover:underline" href="/business/problems">Lời mời đang chờ phản hồi ({pendingInvitations})</Link>}
+          {pendingInvitations > 0 && <Link className="text-primary hover:underline" href="/business/problems">Lời mời đang chờ nhóm phản hồi ({pendingInvitations}) — hạn gần nhất: {pendingInvitationDeadline ? new Intl.DateTimeFormat("vi-VN").format(pendingInvitationDeadline.expiresAt) : "chưa xác định"}</Link>}
           {pendingProposals > 0 && <Link className="text-primary hover:underline" href="/business/projects">Proposal chờ đánh giá ({pendingProposals})</Link>}
           {pendingMilestones > 0 && <Link className="text-primary hover:underline" href="/business/projects">Milestone chờ nghiệm thu ({pendingMilestones})</Link>}
           {pendingAgreements > 0 && <Link className="text-primary hover:underline" href="/business/problems">Thỏa thuận chờ xác nhận ({pendingAgreements})</Link>}
           {unreadMessages > 0 && <Link className="text-primary hover:underline" href="/business/messages">Tin nhắn chưa đọc ({unreadMessages})</Link>}
-          {notifications.filter((notification) => !notification.readAt).map((notification) => (
-            <Link className="text-primary hover:underline" href={notification.href} key={notification.id}>{notification.title}</Link>
-          ))}
-          {pendingReview === 0 && pendingInvitations === 0 && pendingProposals === 0 && pendingMilestones === 0 && pendingAgreements === 0 && unreadMessages === 0 && !notifications.some((notification) => !notification.readAt) && <p className="text-muted-foreground">Không có việc cần xử lý.</p>}
+          {pendingReview === 0 && pendingInvitations === 0 && pendingProposals === 0 && pendingMilestones === 0 && pendingAgreements === 0 && unreadMessages === 0 && (statusCounts.get("NEEDS_REVISION") ?? 0) === 0 && <p className="text-muted-foreground">Không có việc cần xử lý.</p>}
         </div>
       </section>
       <section className="mt-6 rounded-2xl border border-border bg-card p-6">
