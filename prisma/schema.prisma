@@ -218,6 +218,8 @@ model Problem {
   budgetMin                     Int?
   budgetMax                     Int?
   status                        String                  @default("PENDING_REVIEW")
+  closedReason                  String?
+  closedAt                      DateTime?
   hiddenByAdmin                 Boolean                 @default(false)
   reviewNote                    String?
   submittedAt                   DateTime?

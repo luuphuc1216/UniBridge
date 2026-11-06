@@ -126,6 +126,7 @@ export function isValidProblemReviewNote(note: string): boolean {
 export function getApplicationUnavailableReason(
   status: string,
   reviewNote: string | null,
+  closedReason?: string | null,
 ): string {
   switch (status) {
     case "REJECTED":
@@ -141,7 +142,9 @@ export function getApplicationUnavailableReason(
     case "NOT_SELECTED":
       return "Hồ sơ của nhóm không được chọn cho bài toán này.";
     case "CLOSED":
-      return "Bài toán đã kết thúc sau giai đoạn Prototype và không nhận hồ sơ mới.";
+      return closedReason === "BUSINESS_CLOSED"
+        ? "Bài toán đã được doanh nghiệp đóng và không nhận hồ sơ mới."
+        : "Bài toán đã kết thúc sau giai đoạn Prototype và không nhận hồ sơ mới.";
     case "TEAM_SELECTED":
       return "Doanh nghiệp đã chọn nhóm cho bài toán này nên bài toán không nhận hồ sơ mới.";
     case "PROTOTYPING":

@@ -8,6 +8,7 @@ import {
 import { requireStudent } from "@/lib/student-access";
 import { prisma } from "@/lib/prisma";
 import { getStudentDiscoverableProblemWhere } from "@/lib/problem-workflow";
+import { getStudentRecommendations } from "@/lib/student-recommendations";
 
 export const instant = false;
 
@@ -36,6 +37,8 @@ export default async function StudentProblemsPage({
 }) {
   const { userId } = await requireStudent();
   const params = await searchParams;
+  const recommendationData = await getStudentRecommendations(userId);
+  const sort = getParameter(params, "sort") || "newest";
   const values: ProblemSearchValues = {
     query: getParameter(params, "query"),
     field: getParameter(params, "field"),
@@ -104,7 +107,19 @@ export default async function StudentProblemsPage({
       select: { problemId: true },
     }),
   ]);
+  if (sort === "relevance" && recommendationData.hasTeam) {
+    problems.sort(
+      (left, right) =>
+        (recommendationData.scores[right.id] ?? 0) -
+          (recommendationData.scores[left.id] ?? 0) ||
+        right.createdAt.getTime() - left.createdAt.getTime(),
+    );
+  }
   const savedIds = new Set(savedRows.map(({ problemId }) => problemId));
+  const sortParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string" && key !== "sort") sortParams.set(key, value);
+  }
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
@@ -130,12 +145,34 @@ export default async function StudentProblemsPage({
         skills={skills.map(({ skill }) => skill.name)}
         values={values}
       />
+      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+        <span className="font-medium">Sắp xếp:</span>
+        <Link
+          className={sort === "newest" ? "font-semibold text-primary" : "text-muted-foreground"}
+          href={`/student/problems?${new URLSearchParams(sortParams).toString()}`}
+        >
+          Mới nhất
+        </Link>
+        {recommendationData.hasTeam ? (
+          <Link
+            className={sort === "relevance" ? "font-semibold text-primary" : "text-muted-foreground"}
+            href={`/student/problems?${new URLSearchParams([...sortParams, ["sort", "relevance"]]).toString()}`}
+          >
+            Phù hợp nhất
+          </Link>
+        ) : (
+          <span className="text-muted-foreground" title="Hoàn thiện hồ sơ nhóm để dùng">
+            Phù hợp nhất (hoàn thiện hồ sơ nhóm để dùng)
+          </span>
+        )}
+      </div>
       <section className="mt-6">
         <ProblemResults
           problems={problems.map((problem) => ({
             ...problem,
               status: problem.status,
               saved: savedIds.has(problem.id),
+              relevanceScore: recommendationData.hasTeam ? recommendationData.scores[problem.id] ?? 0 : undefined,
           }))}
         />
       </section>

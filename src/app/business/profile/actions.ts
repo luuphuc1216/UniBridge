@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  isBusinessLogoUrl,
+  isBusinessWebsiteUrl,
+} from "@/lib/business-profile-validation";
 
 export type BusinessProfileActionState = { error: string | null };
 
@@ -28,7 +32,11 @@ export async function saveBusinessProfileAction(
   if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
     return { error: "Email liên hệ không hợp lệ." };
   }
-  if (website && !/^https?:\/\/\S+$/i.test(website)) {
+  const logo = text(formData, "logo");
+  if (logo && !isBusinessLogoUrl(logo)) {
+    return { error: "Logo phải là URL HTTPS hợp lệ và không vượt quá 2.048 ký tự." };
+  }
+  if (website && !isBusinessWebsiteUrl(website)) {
     return { error: "Website phải bắt đầu bằng http:// hoặc https://." };
   }
   if (phone && !/^[+]?[0-9 ()-]{8,20}$/.test(phone)) {
@@ -42,7 +50,7 @@ export async function saveBusinessProfileAction(
         companyName,
         industry: industry || "Chưa cập nhật",
         industries: text(formData, "industries"),
-        logo: text(formData, "logo") || null,
+        logo: logo || null,
         website: website || null,
         description: text(formData, "description"),
         address: text(formData, "address"),
@@ -54,7 +62,7 @@ export async function saveBusinessProfileAction(
         companyName,
         industry: industry || "Chưa cập nhật",
         industries: text(formData, "industries"),
-        logo: text(formData, "logo") || null,
+        logo: logo || null,
         website: website || null,
         description: text(formData, "description"),
         address: text(formData, "address"),

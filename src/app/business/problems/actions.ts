@@ -578,7 +578,42 @@ export async function closeProblemAction(
         select: { id: true },
       });
       if (runningProject || selected) throw new Error("Không thể đóng: bài toán đã có nhóm được chọn hoặc dự án đang thực hiện.");
-      await transaction.problem.update({ where: { id: problemId }, data: { status: "CLOSED" } });
+      const affectedApplications = await transaction.application.findMany({
+        where: { problemId, status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
+        select: {
+          id: true,
+          team: {
+            select: {
+              ownerId: true,
+              memberships: { select: { studentProfile: { select: { userId: true } } } },
+            },
+          },
+        },
+      });
+      await transaction.application.updateMany({
+        where: { problemId, status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
+        data: { status: "NOT_SELECTED" },
+      });
+      const studentUserIds = [...new Set(
+        affectedApplications.flatMap(({ team }) => [
+          team.ownerId,
+          ...team.memberships.map(({ studentProfile }) => studentProfile?.userId),
+        ]).filter((userId): userId is string => Boolean(userId)),
+      )];
+      if (studentUserIds.length > 0) {
+        await transaction.notification.createMany({
+          data: studentUserIds.map((userId) => ({
+            userId,
+            title: "Bài toán đã đóng",
+            message: `Bài toán “${problem.title}” đã được doanh nghiệp đóng và hồ sơ của nhóm không được chọn.`,
+            href: `/student/problems/${problemId}`,
+          })),
+        });
+      }
+      await transaction.problem.update({
+        where: { id: problemId },
+        data: { status: "CLOSED", closedReason: "BUSINESS_CLOSED", closedAt: new Date() },
+      });
       await transaction.auditLog.create({
         data: { actorId: userId, action: "BUSINESS_CLOSED_PROBLEM", targetType: "Problem", targetId: problemId, metadata: JSON.stringify({ title: problem.title }) },
       });

@@ -238,7 +238,7 @@ export default async function StudentProblemDetailPage({
               className="rounded-xl bg-muted p-4 text-sm leading-6 text-muted-foreground"
               id="application-unavailable-reason"
             >
-              {getApplicationUnavailableReason(problem.status, problem.reviewNote)}
+              {getApplicationUnavailableReason(problem.status, problem.reviewNote, problem.closedReason)}
             </p>
           </div>
         ) : !team ? (

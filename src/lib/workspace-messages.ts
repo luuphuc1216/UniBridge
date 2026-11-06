@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getUnreadMessageCount } from "@/lib/workspace-message-scope";
 
 export async function markWorkspaceRead(applicationId: string, userId: string) {
   await prisma.workspaceReadCursor.upsert({
@@ -32,13 +33,12 @@ export async function getUnreadWorkspaceMessageCount(userId: string, role: strin
   });
   const cursorMap = new Map(cursors.map((cursor) => [cursor.applicationId, cursor.lastReadAt]));
   const counts = await Promise.all(applications.map(({ id }) =>
-    prisma.workspaceMessage.count({
-      where: {
-        applicationId: id,
-        senderId: { not: userId },
-        ...(cursorMap.get(id) ? { createdAt: { gt: cursorMap.get(id)! } } : {}),
-      },
-    }),
+    prisma.workspaceMessage.findMany({
+      where: { applicationId: id },
+      select: { senderId: true, createdAt: true },
+    }).then((messages) =>
+      getUnreadMessageCount(messages, userId, cursorMap.get(id) ?? null),
+    ),
   ));
   return counts.reduce((total, count) => total + count, 0);
 }
