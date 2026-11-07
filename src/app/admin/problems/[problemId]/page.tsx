@@ -260,35 +260,25 @@ export default async function AdminProblemDetailPage({
             </dl>
           </Card>
 
-          {problem.aiReviews[0] ? (
-            <AiProblemReviewPanel
-              initialResult={{
-                checklist: problem.aiReviews[0].checklist as {
-                  key: string;
-                  passed: boolean;
-                  reason: string;
-                }[],
-                conclusion: problem.aiReviews[0].conclusion ?? "UNCERTAIN",
-                reason: problem.aiReviews[0].reason ?? "",
-              }}
-              problemId={problem.id}
-            />
-          ) : (
-            <section
-              aria-labelledby="ai-review-empty-heading"
-              className="min-w-0 rounded-2xl border border-primary/20 bg-primary/5 p-5 sm:p-6"
-            >
-              <Badge className="mb-3" variant="outline">
-                Công cụ hỗ trợ
-              </Badge>
-              <h2 className="text-lg font-semibold" id="ai-review-empty-heading">
-                AI hỗ trợ kiểm duyệt
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Chưa có kết quả AI được lưu cho vấn đề này. AI chỉ mang tính tham khảo và không thay thế quyết định của Admin.
-              </p>
-            </section>
-          )}
+          <AiProblemReviewPanel
+            initialResult={
+              problem.aiReviews[0]
+                ? {
+                    checklist: problem.aiReviews[0].checklist as {
+                      key: string;
+                      passed: boolean;
+                      reason: string;
+                    }[],
+                    conclusion: problem.aiReviews[0].conclusion ?? "UNCERTAIN",
+                    reason: problem.aiReviews[0].reason ?? "",
+                  }
+                : undefined
+            }
+            initialReviewStatus={problem.aiReviews[0]?.status}
+            initialReviewVersion={problem.aiReviews[0]?.problemVersion}
+            problemId={problem.id}
+            problemVersion={problem.version}
+          />
 
           <section className="min-w-0 rounded-2xl border-2 border-primary/20 bg-card p-5 shadow-sm sm:p-6">
             <div className="mb-5">

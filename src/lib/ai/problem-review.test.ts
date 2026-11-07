@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { combineProblemReview, isAutomaticProblemReviewEnabled, runProblemRules } from "./problem-review";
-import { applyAutomaticProblemReview } from "./problem-review";
+import {
+  applyAutomaticProblemReview,
+  combineProblemReview,
+  isAutomaticProblemReviewEnabled,
+  runProblemRules,
+  saveAiReview,
+} from "./problem-review";
 import { isAiReviewResult } from "./review-schema";
 import { createTestDatabase } from "@/lib/test-database";
 
@@ -200,6 +205,72 @@ test("CAS stores a stale review but does not apply it after an edit during AI ex
     assert.equal(problem.status, "PENDING_REVIEW");
     assert.equal(review.status, "STALE");
     assert.equal(review.problemVersion, 1);
+  } finally {
+    await database.close();
+  }
+});
+
+test("saving Admin AI Assist evidence does not change the problem decision or checklist", async () => {
+  const database = await createTestDatabase("admin-ai-assist-no-decision");
+  try {
+    await database.prisma.user.create({
+      data: {
+        id: "assist-business-user",
+        email: "assist-business@example.com",
+        name: "AI Assist Business",
+        passwordHash: "test",
+        role: "BUSINESS",
+        updatedAt: new Date(),
+      },
+    });
+    await database.prisma.businessProfile.create({
+      data: {
+        id: "assist-business",
+        userId: "assist-business-user",
+        companyName: "AI Assist",
+        industry: "Công nghệ",
+        description: "Doanh nghiệp kiểm thử AI Assist",
+      },
+    });
+    await database.prisma.problem.create({
+      data: {
+        id: "assist-problem",
+        businessProfileId: "assist-business",
+        title: "Bài toán AI Assist",
+        slug: "bai-toan-ai-assist",
+        description: baseProblem.description,
+        goal: baseProblem.goal,
+        field: baseProblem.field,
+        requirements: baseProblem.requirements,
+        expectedDuration: baseProblem.expectedDuration,
+        status: "PENDING_REVIEW",
+        version: 4,
+      },
+    });
+    await database.prisma.$transaction((transaction) =>
+      saveAiReview(transaction, {
+        problemId: "assist-problem",
+        result: {
+          checklist: [{ key: "clarity", passed: true, reason: "Nội dung có bối cảnh cụ thể." }],
+          conclusion: "UNCERTAIN",
+          reason: "Admin cần tự xác minh thêm.",
+        },
+        status: "COMPLETED",
+        problemVersion: 4,
+      }),
+    );
+
+    const problem = await database.prisma.problem.findUniqueOrThrow({
+      where: { id: "assist-problem" },
+    });
+    const review = await database.prisma.aiReview.findFirstOrThrow({
+      where: { problemId: "assist-problem", feature: "PROBLEM_MODERATION" },
+    });
+    assert.equal(problem.status, "PENDING_REVIEW");
+    assert.equal(problem.version, 4);
+    assert.equal(problem.reviewNote, null);
+    assert.equal(review.conclusion, "UNCERTAIN");
+    assert.equal(review.problemVersion, 4);
   } finally {
     await database.close();
   }

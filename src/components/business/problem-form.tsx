@@ -44,6 +44,13 @@ type ExistingAttachment = {
   sizeBytes: number;
 };
 
+type AiDraftField = "description" | "goal" | "requirements";
+type AiDraftSuggestion = Record<AiDraftField, string>;
+type AiDraftFeedback = {
+  kind: "success" | "unavailable" | "quota" | "access" | "validation" | "error";
+  message: string;
+};
+
 type ProblemFormProps = {
   action: (
     state: ProblemActionState,
@@ -54,9 +61,68 @@ type ProblemFormProps = {
 };
 
 const fieldClass = "text-base motion-reduce:transition-none sm:text-sm";
+const aiDraftFields: {
+  key: AiDraftField;
+  label: string;
+  applyLabel: string;
+}[] = [
+  { key: "description", label: "Mô tả vấn đề", applyLabel: "Áp dụng vào mô tả" },
+  { key: "goal", label: "Mục tiêu mong muốn", applyLabel: "Áp dụng vào mục tiêu" },
+  {
+    key: "requirements",
+    label: "Yêu cầu đối với nhóm sinh viên",
+    applyLabel: "Áp dụng vào yêu cầu",
+  },
+];
+
+function isAiDraftSuggestion(value: unknown): value is AiDraftSuggestion {
+  if (!value || typeof value !== "object") return false;
+  const suggestion = value as Record<string, unknown>;
+  return ["description", "goal", "requirements"].every((field) => {
+    const content = suggestion[field];
+    return typeof content === "string" && content.trim().length > 0;
+  });
+}
 
 function formatSize(size: number): string {
   return `${(size / 1024 / 1024).toFixed(size < 1024 * 1024 ? 2 : 1)} MB`;
+}
+
+function getAiDraftFeedback(status: number, message: string): AiDraftFeedback {
+  const safeMessage = message.trim();
+  if (status === 400) {
+    return {
+      kind: "validation",
+      message: safeMessage.startsWith("Ý ngắn")
+        ? safeMessage
+        : "Vui lòng nhập ý chính về bài toán và thử lại.",
+    };
+  }
+  if (status === 403) {
+    if (/hết lượt AI/i.test(safeMessage)) {
+      return { kind: "quota", message: safeMessage };
+    }
+    if (/Premium|đăng nhập|hồ sơ/i.test(safeMessage)) {
+      return { kind: "access", message: safeMessage };
+    }
+    return {
+      kind: "access",
+      message: "Tài khoản hiện không đủ điều kiện sử dụng chức năng AI này.",
+    };
+  }
+  if (
+    status === 502 &&
+    /dịch vụ AI hiện chưa được bật|AI chưa được cấu hình/i.test(safeMessage)
+  ) {
+    return {
+      kind: "unavailable",
+      message: "AI hiện chưa khả dụng. Bạn vẫn có thể tiếp tục điền biểu mẫu.",
+    };
+  }
+  return {
+    kind: "error",
+    message: "AI tạm thời không thể xử lý yêu cầu. Vui lòng thử lại sau.",
+  };
 }
 
 export function ProblemForm({
@@ -69,13 +135,15 @@ export function ProblemForm({
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [clientError, setClientError] = useState<string | null>(null);
   const [aiBrief, setAiBrief] = useState("");
-  const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<AiDraftSuggestion | null>(null);
+  const [aiAppliedFields, setAiAppliedFields] = useState<
+    Record<AiDraftField, boolean>
+  >({ description: false, goal: false, requirements: false });
+  const [aiFeedback, setAiFeedback] = useState<AiDraftFeedback | null>(null);
   const [aiPending, setAiPending] = useState(false);
-  const [aiMessageType, setAiMessageType] = useState<"success" | "error" | null>(
-    null,
-  );
   const aiBriefId = useId();
   const aiBriefHelpId = useId();
+  const aiSuggestionId = useId();
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const goalRef = useRef<HTMLTextAreaElement>(null);
   const requirementsRef = useRef<HTMLTextAreaElement>(null);
@@ -86,30 +154,93 @@ export function ProblemForm({
   async function handleAiDraft() {
     if (aiPending) return;
     setAiPending(true);
-    setAiMessage(null);
-    setAiMessageType(null);
+    setAiSuggestion(null);
+    setAiAppliedFields({ description: false, goal: false, requirements: false });
+    setAiFeedback(null);
     try {
       const response = await fetch("/api/business/ai/problem-draft", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ brief: aiBrief }),
       });
-      const result = (await response.json()) as {
-        error?: string;
-        suggestion?: { description: string; goal: string; requirements: string };
-      };
-      if (!response.ok || !result.suggestion) throw new Error(result.error ?? "Không thể dùng AI.");
-      if (descriptionRef.current) descriptionRef.current.value = result.suggestion.description;
-      if (goalRef.current) goalRef.current.value = result.suggestion.goal;
-      if (requirementsRef.current) requirementsRef.current.value = result.suggestion.requirements;
-      setAiMessage("AI đã điền gợi ý. Bạn hãy kiểm tra và chỉnh sửa trước khi lưu.");
-      setAiMessageType("success");
-    } catch (error) {
-      setAiMessage(error instanceof Error ? error.message : "Không thể dùng AI lúc này.");
-      setAiMessageType("error");
+      const result = (await response.json().catch(() => null)) as
+        | {
+            error?: unknown;
+            suggestion?: unknown;
+          }
+        | null;
+      if (!response.ok) {
+        setAiFeedback(
+          getAiDraftFeedback(
+            response.status,
+            typeof result?.error === "string" ? result.error : "",
+          ),
+        );
+        return;
+      }
+
+      if (!isAiDraftSuggestion(result?.suggestion)) {
+        setAiFeedback({
+          kind: "error",
+          message: "AI trả về nội dung không hợp lệ. Biểu mẫu của bạn chưa bị thay đổi.",
+        });
+        return;
+      }
+
+      setAiSuggestion({
+        description: result.suggestion.description,
+        goal: result.suggestion.goal,
+        requirements: result.suggestion.requirements,
+      });
+      setAiFeedback({
+        kind: "success",
+        message:
+          "Đề xuất đã sẵn sàng để xem. Chưa có nội dung nào trong biểu mẫu bị thay đổi.",
+      });
+    } catch {
+      setAiFeedback({
+        kind: "error",
+        message: "Không thể kết nối dịch vụ AI lúc này. Vui lòng thử lại sau.",
+      });
     } finally {
       setAiPending(false);
     }
+  }
+
+  function applyAiSuggestion(field: AiDraftField) {
+    if (!aiSuggestion) return;
+    const target = {
+      description: descriptionRef.current,
+      goal: goalRef.current,
+      requirements: requirementsRef.current,
+    }[field];
+    if (!target) return;
+
+    target.value = aiSuggestion[field];
+    setAiAppliedFields((current) => ({ ...current, [field]: true }));
+    setAiFeedback({
+      kind: "success",
+      message: `Đã áp dụng gợi ý vào trường “${aiDraftFields.find((item) => item.key === field)?.label}”. Bạn vẫn có thể chỉnh sửa trước khi lưu.`,
+    });
+  }
+
+  function handleAiDraftFieldChange(field: AiDraftField) {
+    setAiAppliedFields((current) => ({ ...current, [field]: false }));
+    setAiFeedback((current) =>
+      current?.kind === "success" ? null : current,
+    );
+  }
+
+  function discardAiSuggestion() {
+    const hasAppliedFields = Object.values(aiAppliedFields).some(Boolean);
+    setAiSuggestion(null);
+    setAiAppliedFields({ description: false, goal: false, requirements: false });
+    setAiFeedback({
+      kind: "success",
+      message: hasAppliedFields
+        ? "Đã đóng phần gợi ý. Nội dung bạn đã áp dụng hoặc chỉnh sửa vẫn được giữ nguyên."
+        : "Đã bỏ qua đề xuất. Nội dung hiện có trong biểu mẫu được giữ nguyên.",
+    });
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -230,6 +361,7 @@ export function ProblemForm({
               <Textarea
                 className={`${fieldClass} min-h-36 resize-y`}
                 defaultValue={problem?.description}
+                onChange={() => handleAiDraftFieldChange("description")}
                 ref={descriptionRef}
                 minLength={2}
                 name="description"
@@ -242,6 +374,7 @@ export function ProblemForm({
               <Textarea
                 className={`${fieldClass} min-h-28 resize-y`}
                 defaultValue={problem?.goal}
+                onChange={() => handleAiDraftFieldChange("goal")}
                 ref={goalRef}
                 minLength={2}
                 name="goal"
@@ -267,6 +400,7 @@ export function ProblemForm({
             <Textarea
               className={`${fieldClass} min-h-28 resize-y`}
               defaultValue={problem?.requirements}
+              onChange={() => handleAiDraftFieldChange("requirements")}
               ref={requirementsRef}
               minLength={2}
               name="requirements"
@@ -280,6 +414,7 @@ export function ProblemForm({
       <Card>
         <section
           aria-labelledby="problem-ai-title"
+          aria-busy={aiPending}
           className="space-y-5 p-5 sm:p-6"
         >
           <div className="flex items-start gap-3">
@@ -315,9 +450,19 @@ export function ProblemForm({
             <Textarea
               aria-describedby={aiBriefHelpId}
               className={`${fieldClass} min-h-28 resize-y`}
+              disabled={aiPending}
               id={aiBriefId}
               maxLength={4000}
-              onChange={(event) => setAiBrief(event.target.value)}
+              onChange={(event) => {
+                setAiBrief(event.target.value);
+                setAiSuggestion(null);
+                setAiAppliedFields({
+                  description: false,
+                  goal: false,
+                  requirements: false,
+                });
+                setAiFeedback(null);
+              }}
               placeholder="Ví dụ: Cần tìm cách giúp khách hàng dễ tìm và lựa chọn sản phẩm trên website."
               value={aiBrief}
             />
@@ -327,7 +472,7 @@ export function ProblemForm({
             >
               <span>
                 Nêu bối cảnh, vấn đề đang gặp và kết quả mong muốn. Gợi ý sẽ
-                được điền vào các trường để bạn xem lại và chỉnh sửa.
+                hiển thị riêng để bạn xem và chọn áp dụng từng trường.
               </span>
               <span
                 aria-label={`${aiBrief.length} trên 4000 ký tự`}
@@ -378,17 +523,74 @@ export function ProblemForm({
               Đang tạo nội dung đề xuất...
             </p>
           )}
-          {aiMessage && (
-            <p
-              aria-live={aiMessageType === "error" ? "assertive" : "polite"}
-              className={`rounded-xl border px-3 py-2 text-sm ${
-                aiMessageType === "error"
-                  ? "border-destructive/20 bg-destructive/5 text-destructive"
-                  : "border-success/20 bg-success/5 text-foreground"
-              }`}
-              role={aiMessageType === "error" ? "alert" : "status"}
+          {aiSuggestion && (
+            <section
+              aria-labelledby={aiSuggestionId}
+              className="space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5"
             >
-              {aiMessage}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <h3 className="font-semibold" id={aiSuggestionId}>
+                    Nội dung gợi ý
+                  </h3>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    Xem từng phần bên dưới. Chỉ trường bạn chọn mới được thay đổi;
+                    các phần còn lại và dữ liệu hiện có sẽ được giữ nguyên.
+                  </p>
+                </div>
+                <Button
+                  className="w-full shrink-0 motion-reduce:transition-none sm:w-auto"
+                  onClick={discardAiSuggestion}
+                  type="button"
+                  variant="outline"
+                >
+                  {Object.values(aiAppliedFields).some(Boolean)
+                    ? "Đóng phần gợi ý"
+                    : "Bỏ qua toàn bộ gợi ý"}
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {aiDraftFields.map(({ key, label, applyLabel }) => (
+                  <article
+                    className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4"
+                    key={key}
+                  >
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-semibold">{label}</h4>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
+                        {aiSuggestion[key]}
+                      </p>
+                    </div>
+                    <Button
+                      className="min-h-11 w-full motion-reduce:transition-none sm:w-auto"
+                      disabled={aiAppliedFields[key] || aiPending}
+                      onClick={() => applyAiSuggestion(key)}
+                      type="button"
+                      variant="outline"
+                    >
+                      {aiAppliedFields[key] ? "Đã áp dụng" : applyLabel}
+                    </Button>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+          {aiFeedback && (
+            <p
+              aria-live={aiFeedback.kind === "success" ? "polite" : "assertive"}
+              className={`rounded-xl border px-3 py-2 text-sm ${
+                aiFeedback.kind === "success"
+                  ? "border-success/20 bg-success/5 text-foreground"
+                  : aiFeedback.kind === "quota" ||
+                      aiFeedback.kind === "unavailable" ||
+                      aiFeedback.kind === "validation"
+                    ? "border-warning/40 bg-warning/10 text-foreground"
+                    : "border-destructive/20 bg-destructive/5 text-destructive"
+              }`}
+              role={aiFeedback.kind === "success" ? "status" : "alert"}
+            >
+              {aiFeedback.message}
             </p>
           )}
         </section>

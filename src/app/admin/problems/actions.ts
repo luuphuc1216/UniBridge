@@ -16,9 +16,16 @@ import {
   reviewProblemWithAi,
   saveAiReview,
 } from "@/lib/ai/problem-review";
+import {
+  getAdminAiAssistFailure,
+  getAdminAiAssistStatus,
+  type AdminAiAssistStatus,
+} from "@/lib/ai/admin-assist";
 
 export type ReviewActionState = {
   error: string | null;
+  aiStatus?: AdminAiAssistStatus;
+  aiMessage?: string;
   aiResult?: {
     checklist: { key: string; passed: boolean; reason: string }[];
     conclusion: string;
@@ -155,6 +162,8 @@ export async function runAiProblemReviewAction(
 ): Promise<ReviewActionState> {
   await requireAdmin();
   const problemId = getText(formData, "problemId");
+  if (!problemId) return { error: "Yêu cầu kiểm tra AI không hợp lệ." };
+
   try {
     const problem = await prisma.problem.findUnique({
       where: { id: problemId },
@@ -166,21 +175,54 @@ export async function runAiProblemReviewAction(
       reviewed.rules,
       reviewed.kind === "AI" ? reviewed.ai : undefined,
     );
-    await prisma.$transaction((transaction) =>
-      saveAiReview(transaction, {
+    const savedStatus = await prisma.$transaction(async (transaction) => {
+      const currentProblem = await transaction.problem.findUnique({
+        where: { id: problemId },
+        select: { version: true },
+      });
+      if (!currentProblem) return null;
+
+      const status = getAdminAiAssistStatus(
+        reviewed.kind,
+        reviewed.mapped.problemVersion,
+        currentProblem.version,
+      );
+      await saveAiReview(transaction, {
         problemId,
         result,
         status:
-          reviewed.kind === "AI" || reviewed.kind === "RULE_REJECT"
+          status === "AI"
             ? "COMPLETED"
-            : "UNAVAILABLE",
+            : status,
         problemVersion: reviewed.mapped.problemVersion,
-      }),
-    );
-    return { error: null, aiResult: result };
-  } catch (error) {
+      });
+      return status;
+    });
+    if (savedStatus === null) {
+      return { error: "Không tìm thấy bài toán để lưu kết quả kiểm tra." };
+    }
+
+    const aiMessage =
+      savedStatus === "UNAVAILABLE"
+        ? reviewed.kind === "AI_UNAVAILABLE"
+          ? `AI hiện không khả dụng: ${reviewed.error}`
+          : undefined
+        : savedStatus === "RULES_ONLY"
+          ? "Các nhận xét này đến từ kiểm tra theo quy tắc; chưa có phản hồi từ provider AI."
+          : savedStatus === "STALE"
+            ? "Bài toán đã thay đổi trong khi phân tích. Kết quả này thuộc phiên bản cũ, không dùng để quyết định hiện tại."
+            : undefined;
     return {
-      error: error instanceof Error ? error.message : "Không thể chạy AI kiểm tra.",
+      error: null,
+      aiStatus: savedStatus,
+      ...(aiMessage ? { aiMessage } : {}),
+      aiResult: result,
+    };
+  } catch (error) {
+    const failure = getAdminAiAssistFailure(error);
+    return {
+      error: failure.message,
+      aiStatus: failure.status,
     };
   }
 }
