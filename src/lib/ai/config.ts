@@ -4,6 +4,7 @@ export const AI_LIMITS = {
   timeoutMs: 15_000,
   maxInputChars: 4_000,
   maxOutputChars: 8_000,
+  maxOutputTokens: 2_000,
 } as const;
 
 export const AI_FEATURES = {

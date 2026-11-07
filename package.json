@@ -19,7 +19,7 @@
     "admin:create": "tsx prisma/create-admin.ts",
     "db:studio": "prisma studio",
     "jobs:expire": "tsx src/jobs/expire-invitations.ts",
-    "test": "tsx --test src/lib/*.test.ts"
+    "test": "tsx --test src/lib/*.test.ts src/lib/ai/provider.test.ts src/lib/ai/admin-assist.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

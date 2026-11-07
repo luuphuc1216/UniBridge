@@ -9,6 +9,7 @@ import {
 } from "@/app/admin/problems/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getStoredAdminAiAssistStatus } from "@/lib/ai/admin-assist";
 
 const checklist = [
   ["businessInfo", "Thông tin doanh nghiệp"],
@@ -137,18 +138,46 @@ export function ProblemReviewForm({ problemId }: { problemId: string }) {
 export function AiProblemReviewPanel({
   problemId,
   initialResult,
+  initialReviewStatus,
+  initialReviewVersion,
+  problemVersion,
 }: {
   problemId: string;
   initialResult?: ReviewActionState["aiResult"];
+  initialReviewStatus?: string;
+  initialReviewVersion?: number | null;
+  problemVersion: number;
 }) {
+  const initialAiStatus =
+    initialResult && initialReviewStatus
+      ? getStoredAdminAiAssistStatus(
+          initialReviewStatus,
+          initialReviewVersion ?? null,
+          problemVersion,
+        )
+      : undefined;
   const [state, action, isPending] = useActionState(runAiProblemReviewAction, {
     error: null,
+    aiStatus: initialAiStatus,
     aiResult: initialResult,
   });
+  const currentAiStatus = state.aiStatus ?? initialAiStatus;
+  const currentAiMessage =
+    state.aiMessage ??
+    (currentAiStatus === "AI"
+      ? "Kết quả AI chỉ mang tính tham khảo; Admin tự kiểm tra và quyết định."
+      : currentAiStatus === "RULES_ONLY"
+        ? "Đây là kết quả kiểm tra theo quy tắc, không phải phản hồi từ provider AI."
+        : currentAiStatus === "UNAVAILABLE"
+          ? "AI hiện không khả dụng. Các nhận xét theo quy tắc (nếu có) chỉ mang tính tham khảo."
+          : currentAiStatus === "STALE"
+            ? "Kết quả thuộc phiên bản bài toán cũ. Không dùng kết quả này để đưa ra quyết định hiện tại."
+            : null);
 
   return (
     <section
       aria-labelledby="ai-review-heading"
+      aria-busy={isPending}
       className="min-w-0 rounded-2xl border border-primary/20 bg-primary/5 p-5 sm:p-6"
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -161,6 +190,7 @@ export function AiProblemReviewPanel({
           </h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
             AI chỉ đưa ra gợi ý tham khảo; Admin tự kiểm tra và quyết định kết quả.
+            Kết quả không tự cập nhật trạng thái bài toán hoặc checklist kiểm duyệt.
           </p>
         </div>
         <form action={action} className="shrink-0">
@@ -178,11 +208,24 @@ export function AiProblemReviewPanel({
       )}
       {state.error && (
         <p
-          aria-live="polite"
+          aria-live="assertive"
           className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
           role="alert"
         >
           {state.error}
+        </p>
+      )}
+      {!state.error && currentAiMessage && (
+        <p
+          aria-live="polite"
+          className={`mt-4 rounded-xl border p-3 text-sm leading-6 ${
+            currentAiStatus === "UNAVAILABLE" || currentAiStatus === "STALE"
+              ? "border-warning/40 bg-warning/10 text-foreground"
+              : "border-primary/20 bg-background text-muted-foreground"
+          }`}
+          role="status"
+        >
+          {currentAiMessage}
         </p>
       )}
       {state.aiResult ? (
@@ -191,7 +234,13 @@ export function AiProblemReviewPanel({
             {aiConclusionLabels[state.aiResult.conclusion] ??
               state.aiResult.conclusion}
             <span className="ml-2 font-normal text-muted-foreground">
-              (gợi ý của AI)
+              {currentAiStatus === "RULES_ONLY"
+                ? "(kiểm tra theo quy tắc)"
+                : currentAiStatus === "UNAVAILABLE"
+                  ? "(không có phản hồi AI)"
+                  : currentAiStatus === "STALE"
+                    ? "(phiên bản cũ)"
+                    : "(gợi ý tham khảo)"}
             </span>
           </p>
           {state.aiResult.checklist.length > 0 ? (
