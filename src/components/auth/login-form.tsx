@@ -3,6 +3,8 @@
 import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { getRoleHome, isRole } from "@/lib/roles";
 
 type LoginFormProps = {
@@ -61,9 +63,9 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
     <form className="space-y-5" onSubmit={handleSubmit}>
       <label className="block space-y-2 text-sm font-medium">
         Email
-        <input
+        <Input
           autoComplete="email"
-          className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+          className="h-12 text-base font-normal sm:text-sm"
           name="email"
           placeholder="ban@example.com"
           required
@@ -72,9 +74,9 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
       </label>
       <label className="block space-y-2 text-sm font-medium">
         Mật khẩu
-        <input
+        <Input
           autoComplete="current-password"
-          className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+          className="h-12 text-base font-normal sm:text-sm"
           name="password"
           placeholder="Nhập mật khẩu"
           required
@@ -82,17 +84,17 @@ export function LoginForm({ callbackUrl }: LoginFormProps) {
         />
       </label>
       {error && (
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+        <p className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm leading-6 text-destructive" role="alert">
           {error}
         </p>
       )}
-      <button
-        className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+      <Button
+        className="h-12 w-full rounded-xl text-base font-semibold"
         disabled={isPending}
         type="submit"
       >
         {isPending ? "Đang đăng nhập..." : "Đăng nhập"}
-      </button>
+      </Button>
     </form>
   );
 }

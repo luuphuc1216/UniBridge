@@ -321,7 +321,7 @@ describe("Prototype handoff workflow", () => {
       data: { evaluationResult: "REVISION_REQUESTED" },
     });
     const submitted = await submit({ proposalId: first.proposalId });
-    await review(submitted.attemptId, "APPROVED");
+    const reviewResult = await review(submitted.attemptId, "APPROVED");
     const proposal = await database.prisma.proposal.findUniqueOrThrow({
       where: { id: submitted.proposalId },
     });
@@ -329,6 +329,7 @@ describe("Prototype handoff workflow", () => {
     const handoffReview = await database.prisma.proposalHandoffReview.findFirstOrThrow({
       where: { attemptId: submitted.attemptId },
     });
+    assert.equal(reviewResult.result, "APPROVED");
     assert.equal(proposal.handoffStatus, "APPROVED");
     assert.equal(proposal.status, "SUBMITTED");
     assert.equal(problem.status, "EVALUATING");
@@ -339,6 +340,54 @@ describe("Prototype handoff workflow", () => {
     assert.equal(await database.prisma.project.count(), 0);
     assert.equal(await database.prisma.projectTransaction.count(), 0);
     assert.equal(await database.prisma.platformCharge.count(), 0);
+  });
+
+  it("returns the persisted outcome when automatic completeness blocks Admin approval", async () => {
+    const submitted = await submit();
+    await database.prisma.trialBriefVersion.create({
+      data: {
+        problemId,
+        version: 1,
+        objective: "Mục tiêu",
+        scope: "Phạm vi",
+        deliverables: "Sơ đồ kiến trúc chưa được nộp",
+        deadline: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        evaluationCriteria: "Tiêu chí",
+        maxRevisionRequests: 2,
+        createdByUserId: "business-owner",
+        createdAt: now,
+        lockedAt: now,
+        confidentialityTerms: "Bảo mật",
+        ownershipTerms: "Quyền sở hữu",
+      },
+    });
+
+    const reviewResult = await review(submitted.attemptId, "APPROVED");
+    const proposal = await database.prisma.proposal.findUniqueOrThrow({
+      where: { id: submitted.proposalId },
+    });
+    const problem = await database.prisma.problem.findUniqueOrThrow({
+      where: { id: problemId },
+    });
+    const handoffReview = await database.prisma.proposalHandoffReview.findFirstOrThrow({
+      where: { attemptId: submitted.attemptId },
+    });
+
+    assert.equal(reviewResult.result, "RETURNED");
+    assert.equal(proposal.handoffStatus, "RETURNED");
+    assert.equal(proposal.status, "DRAFT");
+    assert.equal(problem.status, "PROTOTYPING");
+    assert.equal(handoffReview.result, "RETURNED");
+    assert.match(handoffReview.missingItems ?? "", /Chưa thấy sản phẩm đầu ra/);
+    assert.equal(
+      await database.prisma.notification.count({
+        where: {
+          userId: "team-owner",
+          title: "Proposal cần bổ sung trước khi chuyển cho doanh nghiệp",
+        },
+      }),
+      1,
+    );
   });
 
   it("does not allow approval when any checklist item is false", async () => {
@@ -365,7 +414,7 @@ describe("Prototype handoff workflow", () => {
 
   it("returns handoff without incrementing prototype revision request count", async () => {
     const submitted = await submit();
-    await review(submitted.attemptId, "RETURNED", {
+    const reviewResult = await review(submitted.attemptId, "RETURNED", {
       withinTrialBriefScope: false,
       missingItems: ["Phạm vi bàn giao"],
     });
@@ -373,6 +422,7 @@ describe("Prototype handoff workflow", () => {
     const notification = await database.prisma.notification.findFirstOrThrow({
       where: { userId: "team-owner", title: "Proposal cần bổ sung trước khi chuyển cho doanh nghiệp" },
     });
+    assert.equal(reviewResult.result, "RETURNED");
     assert.equal(problem.status, "PROTOTYPING");
     assert.equal(problem.prototypeRevisionRequestCount, 0);
     assert.match(notification.message, /Phạm vi bàn giao/);

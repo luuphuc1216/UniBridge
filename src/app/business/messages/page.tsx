@@ -10,7 +10,7 @@ export default async function BusinessMessagesPage() {
   if (!session?.user || session.user.role !== "BUSINESS") return null;
   const applications = await prisma.application.findMany({
     where: { problem: { businessProfile: { userId: session.user.id } }, status: { in: ["PENDING_CONFIRMATION", "SELECTED"] } },
-    include: { problem: { select: { id: true, title: true } }, team: { select: { name: true } }, workspaceMessages: { orderBy: { createdAt: "desc" }, take: 1 } },
+    include: { problem: { select: { id: true, title: true } }, team: { select: { name: true } }, workspaceMessages: { where: { hiddenByAdmin: false }, orderBy: { createdAt: "desc" }, take: 1 } },
     orderBy: { updatedAt: "desc" },
   });
   const unread = await getUnreadWorkspaceMessageCount(session.user.id, "BUSINESS");

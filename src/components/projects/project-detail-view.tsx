@@ -310,7 +310,9 @@ export function ProjectDetailView({
           [
             "Tổng phí nền tảng đã ghi nhận",
             formatCurrency(summary.fees),
-            "Gồm phụ phí doanh nghiệp 10% ghi nhận lúc nạp và phí nhóm 5% ghi nhận khi giải ngân.",
+            role === "STUDENT"
+              ? `Bao gồm phụ phí doanh nghiệp ${(paymentBreakdown.businessFeeBasisPoints ?? 0) / 100}% và phí nhóm ${(paymentBreakdown.studentFeeBasisPoints ?? 0) / 100}% theo cấu hình hiện tại hoặc đã ghi nhận.`
+              : "Gồm phụ phí doanh nghiệp 10% ghi nhận lúc nạp và phí nhóm 5% ghi nhận khi giải ngân.",
           ],
         ].map(([label, value, description]) => (
           <article className="rounded-xl border border-border bg-card p-4" key={label}>
@@ -327,7 +329,9 @@ export function ProjectDetailView({
           <h2 className="font-semibold">Tiền còn trong escrow</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {isLegacyDeposit
-              ? "Áp dụng phí cũ 15% · Giữ nguyên đến khi dự án hoàn tất."
+              ? role === "STUDENT"
+                ? "Áp dụng chính sách phí được ghi nhận trước đây · Giữ nguyên đến khi dự án hoàn tất."
+                : "Áp dụng phí cũ 15% · Giữ nguyên đến khi dự án hoàn tất."
               : `Phụ phí doanh nghiệp ${(paymentBreakdown.businessFeeBasisPoints ?? 0) / 100}% · Phí nhóm ${(paymentBreakdown.studentFeeBasisPoints ?? 0) / 100}% · Tỷ lệ được chụp tại thời điểm nạp.`}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -335,7 +339,9 @@ export function ProjectDetailView({
           </p>
           {summary.refunded > 0 && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Đã hoàn lại {formatCurrency(summary.refunded)}; phụ phí doanh nghiệp 10% không hoàn.
+              {role === "STUDENT"
+                ? `Đã hoàn lại ${formatCurrency(summary.refunded)}; phụ phí doanh nghiệp theo giao dịch không được hoàn.`
+                : `Đã hoàn lại ${formatCurrency(summary.refunded)}; phụ phí doanh nghiệp 10% không hoàn.`}
             </p>
           )}
         </div>
@@ -654,7 +660,10 @@ export function ProjectDetailView({
                       <span>Thanh toán: {milestone.paymentPercent}%</span>
                       <span>Giá trị Milestone: {formatCurrency(allocation?.grossAmount ?? milestone.amount ?? 0)}</span>
                       {isLegacyDeposit ? (
-                        <span>Áp dụng phí cũ 15%: {formatCurrency(allocation?.platformFee ?? 0)}</span>
+                        <span>
+                          {role === "STUDENT" ? "Phí theo chính sách cũ" : "Áp dụng phí cũ 15%"}:{" "}
+                          {formatCurrency(allocation?.platformFee ?? 0)}
+                        </span>
                       ) : (
                         <>
                           <span>Phụ phí doanh nghiệp: {formatCurrency(allocation?.businessFee ?? 0)}</span>
@@ -972,7 +981,8 @@ export function ProjectDetailView({
                                 {formatCurrency(transaction.amount)}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                Áp dụng phí cũ 15%: {formatCurrency(transaction.platformFee)}
+                                {role === "STUDENT" ? "Phí theo chính sách cũ" : "Áp dụng phí cũ 15%"}:{" "}
+                                {formatCurrency(transaction.platformFee)}
                               </p>
                             </>
                           ) : transaction.type === "DEPOSIT" ? (

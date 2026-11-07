@@ -17,6 +17,7 @@ import {
   canEditApplication,
   PROBLEM_ACCEPTING_APPLICATION_STATUSES,
 } from "@/lib/problem-workflow";
+import { expireInvitationDuringResponse } from "@/lib/invitation-response";
 
 export type ApplicationActionState = {
   error: string | null;
@@ -422,7 +423,7 @@ export async function acceptInvitationAction(
   const problemId = readText(formData, "problemId");
   try {
     const team = await requireOwnedTeam(userId);
-    await prisma.$transaction(async (transaction) => {
+    const expired = await prisma.$transaction(async (transaction) => {
       const invitation = await transaction.applicationInvitation.findFirst({
         where: {
           applicationId,
@@ -434,6 +435,7 @@ export async function acceptInvitationAction(
           id: true,
           expiresAt: true,
           applicationId: true,
+          problemId: true,
           application: { select: { status: true } },
           problem: { select: { title: true, businessProfile: { select: { userId: true } } } },
         },
@@ -444,21 +446,20 @@ export async function acceptInvitationAction(
       if (invitation.application.status !== "PENDING_CONFIRMATION") {
         throw new Error("Hồ sơ không còn ở trạng thái chờ xác nhận.");
       }
-      if (new Date(invitation.expiresAt) <= new Date()) {
-        await transaction.application.update({
-          where: { id: invitation.applicationId },
-          data: { status: "EXPIRED" },
+      const now = new Date();
+      if (invitation.expiresAt <= now) {
+        const expired = await expireInvitationDuringResponse(transaction, {
+          invitationId: invitation.id,
+          applicationId: invitation.applicationId,
+          problemId: invitation.problemId,
+          businessUserId: invitation.problem.businessProfile.userId,
+          problemTitle: invitation.problem.title,
+          now,
         });
-        await transaction.applicationInvitation.update({
-          where: { id: invitation.id },
-          data: {
-            status: "EXPIRED",
-            respondedAt: new Date(),
-            responseStatus: "EXPIRED",
-            responseReason: "Hết hạn phản hồi",
-          },
-        });
-        throw new Error("Lời mời hợp tác đã hết hạn trước khi bạn phản hồi.");
+        if (!expired) {
+          throw new Error("Lời mời hợp tác không còn hiệu lực hoặc không thuộc về nhóm của bạn.");
+        }
+        return true;
       }
 
       await transaction.application.updateMany({
@@ -493,7 +494,12 @@ export async function acceptInvitationAction(
           href: `/business/problems/${problemId}/workspace`,
         },
       });
+      return false;
     });
+    if (expired) {
+      revalidateApplicationPaths(problemId);
+      return { error: "Lời mời hợp tác đã hết hạn trước khi bạn phản hồi." };
+    }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message };
@@ -516,7 +522,7 @@ export async function declineInvitationAction(
   const reason = readText(formData, "declineReason") || "Nhóm không đồng ý với lời mời hợp tác.";
   try {
     const team = await requireOwnedTeam(userId);
-    await prisma.$transaction(async (transaction) => {
+    const expired = await prisma.$transaction(async (transaction) => {
       const invitation = await transaction.applicationInvitation.findFirst({
         where: {
           applicationId,
@@ -527,6 +533,7 @@ export async function declineInvitationAction(
         select: {
           id: true,
           applicationId: true,
+          problemId: true,
           expiresAt: true,
           application: { select: { status: true } },
           problem: { select: { title: true, businessProfile: { select: { userId: true } } } },
@@ -538,21 +545,20 @@ export async function declineInvitationAction(
       if (invitation.application.status !== "PENDING_CONFIRMATION") {
         throw new Error("Hồ sơ không còn ở trạng thái chờ xác nhận.");
       }
-      if (invitation.expiresAt <= new Date()) {
-        await transaction.application.update({
-          where: { id: invitation.applicationId },
-          data: { status: "EXPIRED" },
+      const now = new Date();
+      if (invitation.expiresAt <= now) {
+        const expired = await expireInvitationDuringResponse(transaction, {
+          invitationId: invitation.id,
+          applicationId: invitation.applicationId,
+          problemId: invitation.problemId,
+          businessUserId: invitation.problem.businessProfile.userId,
+          problemTitle: invitation.problem.title,
+          now,
         });
-        await transaction.applicationInvitation.update({
-          where: { id: invitation.id },
-          data: {
-            status: "EXPIRED",
-            respondedAt: new Date(),
-            responseStatus: "EXPIRED",
-            responseReason: "Hết hạn phản hồi",
-          },
-        });
-        throw new Error("Lời mời hợp tác đã hết hạn trước khi bạn phản hồi.");
+        if (!expired) {
+          throw new Error("Lời mời hợp tác không còn hiệu lực hoặc không thuộc về nhóm của bạn.");
+        }
+        return true;
       }
       await transaction.application.update({
         where: { id: invitation.applicationId },
@@ -575,7 +581,12 @@ export async function declineInvitationAction(
           href: `/business/problems/${problemId}/applications`,
         },
       });
+      return false;
     });
+    if (expired) {
+      revalidateApplicationPaths(problemId);
+      return { error: "Lời mời hợp tác đã hết hạn trước khi bạn phản hồi." };
+    }
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message };

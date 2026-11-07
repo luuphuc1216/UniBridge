@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { searchProblemsAction } from "@/app/student/problems/actions";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 export type ProblemSearchValues = {
   query: string;
@@ -24,12 +28,12 @@ export function ProblemSearchForm({
   return (
     <form
       action={searchProblemsAction}
-      className="mt-6 grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3"
+      className="grid gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:grid-cols-2 sm:p-5 lg:grid-cols-3"
     >
       <label className="grid gap-1.5 text-sm font-medium sm:col-span-2 lg:col-span-3">
         Từ khóa
-        <input
-          className="rounded-xl border border-border bg-background px-3 py-2.5 font-normal"
+        <Input
+          className="text-base motion-reduce:transition-none sm:text-sm"
           defaultValue={values.query}
           maxLength={160}
           name="query"
@@ -38,8 +42,8 @@ export function ProblemSearchForm({
       </label>
       <label className="grid gap-1.5 text-sm font-medium">
         Lĩnh vực
-        <select
-          className="rounded-xl border border-border bg-background px-3 py-2.5 font-normal"
+        <Select
+          className="text-base motion-reduce:transition-none sm:text-sm"
           defaultValue={values.field}
           name="field"
         >
@@ -49,12 +53,12 @@ export function ProblemSearchForm({
               {field}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="grid gap-1.5 text-sm font-medium">
         Kỹ năng
-        <select
-          className="rounded-xl border border-border bg-background px-3 py-2.5 font-normal"
+        <Select
+          className="text-base motion-reduce:transition-none sm:text-sm"
           defaultValue={values.skill}
           name="skill"
         >
@@ -64,12 +68,12 @@ export function ProblemSearchForm({
               {skill}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="grid gap-1.5 text-sm font-medium">
         Thời gian dự kiến
-        <select
-          className="rounded-xl border border-border bg-background px-3 py-2.5 font-normal"
+        <Select
+          className="text-base motion-reduce:transition-none sm:text-sm"
           defaultValue={values.duration}
           name="duration"
         >
@@ -79,12 +83,12 @@ export function ProblemSearchForm({
               {duration}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="grid gap-1.5 text-sm font-medium">
         Ngân sách từ (đồng)
-        <input
-          className="rounded-xl border border-border bg-background px-3 py-2.5 font-normal"
+        <Input
+          className="text-base motion-reduce:transition-none sm:text-sm"
           defaultValue={values.budgetMin}
           min="0"
           name="budgetMin"
@@ -94,8 +98,8 @@ export function ProblemSearchForm({
       </label>
       <label className="grid gap-1.5 text-sm font-medium">
         Ngân sách đến (đồng)
-        <input
-          className="rounded-xl border border-border bg-background px-3 py-2.5 font-normal"
+        <Input
+          className="text-base motion-reduce:transition-none sm:text-sm"
           defaultValue={values.budgetMax}
           min="0"
           name="budgetMax"
@@ -104,14 +108,14 @@ export function ProblemSearchForm({
         />
       </label>
       <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-1">
-        <button
-          className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
-          type="submit"
-        >
+        <Button className="flex-1 motion-reduce:transition-none" type="submit">
           Tìm bài toán
-        </button>
+        </Button>
         <Link
-          className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-muted"
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "px-4 motion-reduce:transition-none",
+          )}
           href="/student/problems"
         >
           Xóa lọc

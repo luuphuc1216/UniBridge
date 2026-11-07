@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
-import { updateReport, reportStatuses, type ReportStatus } from "@/lib/reports";
+import {
+  updateReport,
+  reportActionStatuses,
+  type ReportActionStatus,
+} from "@/lib/reports";
 
 export async function updateReportAction(formData: FormData): Promise<void> {
   const { userId } = await requireAdmin();
@@ -15,7 +19,7 @@ export async function updateReportAction(formData: FormData): Promise<void> {
   if (
     typeof reportId !== "string" ||
     typeof status !== "string" ||
-    !reportStatuses.includes(status as ReportStatus) ||
+    !reportActionStatuses.includes(status as ReportActionStatus) ||
     typeof reason !== "string" ||
     reason.trim().length === 0 ||
     reason.trim().length > 500
@@ -26,7 +30,7 @@ export async function updateReportAction(formData: FormData): Promise<void> {
   const result = await updateReport(prisma, {
     actorId: userId,
     reportId,
-    nextStatus: status as ReportStatus,
+    nextStatus: status as ReportActionStatus,
     reason,
     hideContent,
   });

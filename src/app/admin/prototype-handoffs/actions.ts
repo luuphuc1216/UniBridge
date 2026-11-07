@@ -62,5 +62,5 @@ export async function reviewProposalHandoffAction(
   revalidatePath(`/admin/prototype-handoffs/${attemptId}`);
   revalidatePath(`/business/problems/${problemId}/workspace`);
   revalidatePath(`/student/workspace/${problemId}`);
-  redirect(`/admin/prototype-handoffs?result=${decision === "APPROVED" ? "approved" : "returned"}`);
+  redirect(`/admin/prototype-handoffs/${attemptId}`);
 }

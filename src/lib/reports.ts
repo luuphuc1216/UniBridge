@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { reputationConfig } from "@/lib/reputation-config";
@@ -9,8 +9,24 @@ export const reportTargetTypes = ["PROBLEM", "TEAM", "MESSAGE", "REVIEW"] as con
 export type ReportTargetType = (typeof reportTargetTypes)[number];
 export const reportStatuses = ["NEW", "IN_PROGRESS", "RESOLVED", "DISMISSED"] as const;
 export type ReportStatus = (typeof reportStatuses)[number];
+export const reportActionStatuses = ["IN_PROGRESS", "RESOLVED", "DISMISSED"] as const;
+export type ReportActionStatus = (typeof reportActionStatuses)[number];
 
 export type SubmitReportResult = "created" | "duplicate" | "target_unavailable";
+
+const reportStatusLabels: Record<ReportStatus, string> = {
+  NEW: "Mới",
+  IN_PROGRESS: "Đang xử lý",
+  RESOLVED: "Đã xử lý",
+  DISMISSED: "Bác bỏ",
+};
+
+function getReporterHome(role: string): string {
+  if (role === "BUSINESS") return "/business";
+  if (role === "STUDENT") return "/student";
+  if (role === "ADMIN") return "/admin";
+  return "/";
+}
 
 function openKey(reporterId: string, targetType: string, targetId: string): string {
   return createHash("sha256")
@@ -215,6 +231,7 @@ export async function updateReport(
 ): Promise<"updated" | "unchanged" | "missing" | "conflict" | "invalid"> {
   const resolutionReason = reason.trim();
   if (
+    !reportActionStatuses.includes(nextStatus as ReportActionStatus) ||
     resolutionReason.length === 0 ||
     resolutionReason.length > 500 ||
     (hideContent && nextStatus !== "RESOLVED")
@@ -226,7 +243,13 @@ export async function updateReport(
     return await client.$transaction(async (transaction) => {
     const report = await transaction.report.findUnique({
       where: { id: reportId },
-      select: { id: true, status: true, targetType: true, targetId: true },
+      select: {
+        id: true,
+        status: true,
+        targetType: true,
+        targetId: true,
+        reporter: { select: { id: true, role: true } },
+      },
     });
     if (!report) return "missing";
     if (report.status === nextStatus) return "unchanged";
@@ -295,6 +318,15 @@ export async function updateReport(
       targetType: "Report",
       targetId: report.id,
       metadata: { status: nextStatus, contentHidden: hideContent },
+    });
+    await transaction.notification.create({
+      data: {
+        userId: report.reporter.id,
+        title: "Báo cáo của bạn đã được cập nhật",
+        message: `Trạng thái báo cáo hiện tại: ${reportStatusLabels[nextStatus]}.`,
+        href: getReporterHome(report.reporter.role),
+        dedupeKey: `report-update:${report.id}:${randomUUID()}`,
+      },
     });
     return "updated";
     });

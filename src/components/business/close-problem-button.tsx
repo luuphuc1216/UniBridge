@@ -16,7 +16,7 @@ export function CloseProblemButton({ problemId }: { problemId: string }) {
         }
       }}>
         <input name="problemId" type="hidden" value={problemId} />
-        <button className="rounded-xl border border-destructive px-4 py-2.5 text-sm font-semibold text-destructive hover:bg-destructive/10 disabled:opacity-60" disabled={pending} type="submit">
+        <button className="rounded-xl border border-destructive px-4 py-2.5 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2 disabled:opacity-60 motion-reduce:transition-none" disabled={pending} type="submit">
           {pending ? "Đang đóng..." : "Đóng vấn đề"}
         </button>
       </form>

@@ -12,6 +12,10 @@ import {
   formatInvitationExpiry,
   formatInvitationRemaining,
 } from "@/lib/application-status";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 export function InvitationResponse({
   applicationId,
@@ -43,32 +47,37 @@ export function InvitationResponse({
 
   if (!canRespond) {
     return (
-      <p className="mt-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
+      <p className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-foreground">
         Nhóm trưởng mới có thể phản hồi lời mời này.
       </p>
     );
   }
 
   return (
-    <div className="mt-4 space-y-4">
-      <div className="text-sm font-medium text-amber-800">
-        <p>{formatInvitationRemaining(expiresAt)}</p>
-        <p className="mt-1 text-xs font-normal">{formatInvitationExpiry(expiresAt)}</p>
+    <section aria-label="Phản hồi lời mời hợp tác" className="mt-4 space-y-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge className="motion-reduce:transition-none" variant="warning">
+          {formatInvitationRemaining(expiresAt)}
+        </Badge>
+        <p className="text-xs text-muted-foreground">{formatInvitationExpiry(expiresAt)}</p>
       </div>
       <div className="flex flex-wrap gap-3">
         <form action={acceptAction}>
           <input name="applicationId" type="hidden" value={applicationId} />
           <input name="problemId" type="hidden" value={problemId} />
-          <button
-            className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+          <Button
+            className="motion-reduce:transition-none"
             disabled={accepting || declining}
             type="submit"
           >
             {accepting ? "Đang đồng ý..." : "Đồng ý hợp tác"}
-          </button>
+          </Button>
         </form>
         <Link
-          className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-muted"
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "motion-reduce:transition-none",
+          )}
           href={`/student/workspace/${problemId}?applicationId=${applicationId}`}
         >
           Mở chat
@@ -79,26 +88,32 @@ export function InvitationResponse({
         <input name="problemId" type="hidden" value={problemId} />
         <label className="grid gap-2 text-sm font-medium">
           Lý do từ chối (không bắt buộc)
-          <textarea
-            className="min-h-20 rounded-xl border border-border bg-background px-3 py-2 font-normal"
+          <Textarea
+            className="text-base motion-reduce:transition-none sm:text-sm"
             name="declineReason"
             onChange={(event) => setReason(event.target.value)}
             value={reason}
           />
         </label>
-        <button
-          className="rounded-xl border border-destructive px-4 py-2.5 text-sm font-semibold text-destructive disabled:opacity-60"
+        <Button
+          className="motion-reduce:transition-none"
+          variant="destructive"
           disabled={accepting || declining}
           type="submit"
         >
           {declining ? "Đang từ chối..." : "Từ chối lời mời"}
-        </button>
+        </Button>
       </form>
       {(acceptState.error || declineState.error) && (
-        <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+        <p className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive" role="alert">
           {acceptState.error ?? declineState.error}
         </p>
       )}
-    </div>
+      {declineState.success && (
+        <p className="rounded-xl border border-success/20 bg-success/10 p-4 text-sm text-success" role="status">
+          Đã gửi phản hồi từ chối lời mời.
+        </p>
+      )}
+    </section>
   );
 }

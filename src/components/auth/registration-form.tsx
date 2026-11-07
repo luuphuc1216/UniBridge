@@ -4,6 +4,9 @@ import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { getRoleHome, type SelfRegistrationRole } from "@/lib/roles";
 
 export function RegistrationForm() {
@@ -60,7 +63,7 @@ export function RegistrationForm() {
         <div className="grid grid-cols-2 gap-3">
           {(["STUDENT", "BUSINESS"] as const).map((option) => (
             <label
-              className={`cursor-pointer rounded-xl border p-3 text-sm font-medium transition ${
+              className={`flex min-h-12 cursor-pointer items-center rounded-xl border px-4 py-3 text-sm font-medium transition focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 ${
                 role === option
                   ? "border-primary bg-primary/5 text-primary"
                   : "border-border hover:border-primary/40"
@@ -84,9 +87,9 @@ export function RegistrationForm() {
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="space-y-2 text-sm font-medium sm:col-span-2">
           Họ và tên
-          <input
+          <Input
             autoComplete="name"
-            className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+            className="h-12 text-base font-normal sm:text-sm"
             maxLength={100}
             minLength={2}
             name="name"
@@ -96,9 +99,9 @@ export function RegistrationForm() {
         </label>
         <label className="space-y-2 text-sm font-medium sm:col-span-2">
           Email
-          <input
+          <Input
             autoComplete="email"
-            className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+            className="h-12 text-base font-normal sm:text-sm"
             name="email"
             placeholder="ban@example.com"
             required
@@ -107,9 +110,9 @@ export function RegistrationForm() {
         </label>
         <label className="space-y-2 text-sm font-medium sm:col-span-2">
           Mật khẩu
-          <input
+          <Input
             autoComplete="new-password"
-            className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+            className="h-12 text-base font-normal sm:text-sm"
             minLength={8}
             name="password"
             placeholder="Ít nhất 8 ký tự"
@@ -121,8 +124,8 @@ export function RegistrationForm() {
           <>
             <label className="space-y-2 text-sm font-medium">
               Chuyên ngành
-              <input
-                className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              <Input
+                className="h-12 text-base font-normal sm:text-sm"
                 minLength={2}
                 name="major"
                 placeholder="Công nghệ thông tin"
@@ -131,8 +134,8 @@ export function RegistrationForm() {
             </label>
             <label className="space-y-2 text-sm font-medium">
               Trường đại học
-              <input
-                className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              <Input
+                className="h-12 text-base font-normal sm:text-sm"
                 minLength={2}
                 name="university"
                 placeholder="Tên trường"
@@ -144,8 +147,8 @@ export function RegistrationForm() {
           <>
             <label className="space-y-2 text-sm font-medium">
               Tên doanh nghiệp
-              <input
-                className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              <Input
+                className="h-12 text-base font-normal sm:text-sm"
                 minLength={2}
                 name="companyName"
                 placeholder="Tên doanh nghiệp"
@@ -154,8 +157,8 @@ export function RegistrationForm() {
             </label>
             <label className="space-y-2 text-sm font-medium">
               Lĩnh vực hoạt động
-              <input
-                className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              <Input
+                className="h-12 text-base font-normal sm:text-sm"
                 minLength={2}
                 name="industry"
                 placeholder="Công nghệ, giáo dục..."
@@ -164,8 +167,8 @@ export function RegistrationForm() {
             </label>
             <label className="space-y-2 text-sm font-medium sm:col-span-2">
               Giới thiệu doanh nghiệp
-              <textarea
-                className="min-h-24 w-full resize-y rounded-xl border border-border bg-background px-4 py-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              <Textarea
+                className="min-h-28 text-base font-normal sm:text-sm"
                 minLength={10}
                 name="description"
                 placeholder="Giới thiệu ngắn về doanh nghiệp"
@@ -177,20 +180,20 @@ export function RegistrationForm() {
       </div>
 
       {error && (
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+        <p className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm leading-6 text-destructive" role="alert">
           {error}
         </p>
       )}
-      <button
-        className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+      <Button
+        className="h-12 w-full rounded-xl text-base font-semibold"
         disabled={isPending}
         type="submit"
       >
         {isPending ? "Đang tạo tài khoản..." : "Tạo tài khoản"}
-      </button>
+      </Button>
       <p className="text-center text-sm text-muted-foreground">
         Đã có tài khoản?{" "}
-        <Link className="font-semibold text-primary hover:underline" href="/dang-nhap">
+        <Link className="rounded-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" href="/dang-nhap">
           Đăng nhập
         </Link>
       </p>

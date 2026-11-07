@@ -6,7 +6,9 @@ import {
   useTransition,
   type FormEvent,
   useRef,
+  useId,
 } from "react";
+import { LoaderCircle, Sparkles } from "lucide-react";
 import {
   MAX_ATTACHMENT_COUNT,
   MAX_ATTACHMENT_SIZE_BYTES,
@@ -14,6 +16,11 @@ import {
 } from "@/lib/business-attachments/config";
 import { validateSelectedAttachments } from "@/lib/business-attachments/client-validation";
 import type { ProblemActionState } from "@/app/business/problems/actions";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { FilePicker } from "@/components/uploads/file-picker";
 
 type ProblemFormValues = {
@@ -46,8 +53,7 @@ type ProblemFormProps = {
   attachments?: ExistingAttachment[];
 };
 
-const inputClass =
-  "w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15";
+const fieldClass = "text-base motion-reduce:transition-none sm:text-sm";
 
 function formatSize(size: number): string {
   return `${(size / 1024 / 1024).toFixed(size < 1024 * 1024 ? 2 : 1)} MB`;
@@ -65,6 +71,11 @@ export function ProblemForm({
   const [aiBrief, setAiBrief] = useState("");
   const [aiMessage, setAiMessage] = useState<string | null>(null);
   const [aiPending, setAiPending] = useState(false);
+  const [aiMessageType, setAiMessageType] = useState<"success" | "error" | null>(
+    null,
+  );
+  const aiBriefId = useId();
+  const aiBriefHelpId = useId();
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const goalRef = useRef<HTMLTextAreaElement>(null);
   const requirementsRef = useRef<HTMLTextAreaElement>(null);
@@ -76,6 +87,7 @@ export function ProblemForm({
     if (aiPending) return;
     setAiPending(true);
     setAiMessage(null);
+    setAiMessageType(null);
     try {
       const response = await fetch("/api/business/ai/problem-draft", {
         method: "POST",
@@ -91,8 +103,10 @@ export function ProblemForm({
       if (goalRef.current) goalRef.current.value = result.suggestion.goal;
       if (requirementsRef.current) requirementsRef.current.value = result.suggestion.requirements;
       setAiMessage("AI đã điền gợi ý. Bạn hãy kiểm tra và chỉnh sửa trước khi lưu.");
+      setAiMessageType("success");
     } catch (error) {
       setAiMessage(error instanceof Error ? error.message : "Không thể dùng AI lúc này.");
+      setAiMessageType("error");
     } finally {
       setAiPending(false);
     }
@@ -154,199 +168,413 @@ export function ProblemForm({
         </div>
       )}
 
-      <div className="grid gap-5 sm:grid-cols-2">
-        <label className="space-y-2 text-sm font-semibold sm:col-span-2">
-          Tên vấn đề
-          <input
-            className={inputClass}
-            defaultValue={problem?.title}
-            maxLength={200}
-            minLength={2}
-            name="title"
-            placeholder="Ví dụ: Xây dựng website bán hàng trực tuyến"
-            required
-          />
-        </label>
-        <label className="space-y-2 text-sm font-semibold sm:col-span-2">
-          Mô tả vấn đề
-          <textarea
-            className={`${inputClass} min-h-32 resize-y`}
-            defaultValue={problem?.description}
-            ref={descriptionRef}
-            minLength={2}
-            name="description"
-            placeholder="Mô tả thực trạng và vấn đề doanh nghiệp đang gặp phải"
-            required
-          />
-        </label>
-        <label className="space-y-2 text-sm font-semibold sm:col-span-2">
-          Mục tiêu mong muốn
-          <textarea
-            className={`${inputClass} min-h-24 resize-y`}
-            defaultValue={problem?.goal}
-            ref={goalRef}
-            minLength={2}
-            name="goal"
-            placeholder="Kết quả doanh nghiệp mong muốn đạt được"
-            required
-          />
-        </label>
-        <label className="space-y-2 text-sm font-semibold">
-          Lĩnh vực
-          <input
-            className={inputClass}
-            defaultValue={problem?.field}
-            maxLength={100}
-            minLength={2}
-            name="field"
-            placeholder="Công nghệ thông tin, Marketing..."
-            required
-          />
-        </label>
-        <label className="space-y-2 text-sm font-semibold">
-          Thời gian dự kiến
-          <input
-            className={inputClass}
-            defaultValue={problem?.expectedDuration}
-            minLength={2}
-            name="expectedDuration"
-            placeholder="6-8 tuần"
-            required
-          />
-        </label>
-        <label className="space-y-2 text-sm font-semibold sm:col-span-2">
-          Yêu cầu đối với nhóm sinh viên
-          <textarea
-            className={`${inputClass} min-h-24 resize-y`}
-            defaultValue={problem?.requirements}
-            ref={requirementsRef}
-            minLength={2}
-            name="requirements"
-            placeholder="Kiến thức, kỹ năng hoặc kinh nghiệm cần thiết"
-            required
-          />
-        </label>
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 sm:col-span-2">
-          <p className="text-sm font-semibold">AI viết giúp (Premium)</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Nhập ý ngắn, AI chỉ điền gợi ý vào biểu mẫu để bạn chỉnh sửa; không tự lưu hay gửi duyệt.
-          </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <input
-              className={inputClass}
+      <Card>
+        <div className="space-y-5 p-5 sm:p-6">
+          <div>
+            <h2 className="text-lg font-semibold">Thông tin cơ bản</h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Đặt tên rõ ràng và xác định lĩnh vực, thời gian dự kiến của bài toán.
+            </p>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <label className="space-y-2 text-sm font-medium sm:col-span-2">
+              <span>Tên vấn đề</span>
+              <Input
+                className={fieldClass}
+                defaultValue={problem?.title}
+                maxLength={200}
+                minLength={2}
+                name="title"
+                placeholder="Ví dụ: Xây dựng website bán hàng trực tuyến"
+                required
+              />
+            </label>
+            <label className="space-y-2 text-sm font-medium">
+              <span>Lĩnh vực</span>
+              <Input
+                className={fieldClass}
+                defaultValue={problem?.field}
+                maxLength={100}
+                minLength={2}
+                name="field"
+                placeholder="Công nghệ thông tin, Marketing..."
+                required
+              />
+            </label>
+            <label className="space-y-2 text-sm font-medium">
+              <span>Thời gian dự kiến</span>
+              <Input
+                className={fieldClass}
+                defaultValue={problem?.expectedDuration}
+                minLength={2}
+                name="expectedDuration"
+                placeholder="6-8 tuần"
+                required
+              />
+            </label>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="space-y-5 p-5 sm:p-6">
+          <div>
+            <h2 className="text-lg font-semibold">Mô tả bài toán</h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Mô tả bối cảnh và kết quả doanh nghiệp mong muốn đạt được.
+            </p>
+          </div>
+          <div className="space-y-5">
+            <label className="block space-y-2 text-sm font-medium">
+              <span>Mô tả vấn đề</span>
+              <Textarea
+                className={`${fieldClass} min-h-36 resize-y`}
+                defaultValue={problem?.description}
+                ref={descriptionRef}
+                minLength={2}
+                name="description"
+                placeholder="Mô tả thực trạng và vấn đề doanh nghiệp đang gặp phải"
+                required
+              />
+            </label>
+            <label className="block space-y-2 text-sm font-medium">
+              <span>Mục tiêu mong muốn</span>
+              <Textarea
+                className={`${fieldClass} min-h-28 resize-y`}
+                defaultValue={problem?.goal}
+                ref={goalRef}
+                minLength={2}
+                name="goal"
+                placeholder="Kết quả doanh nghiệp mong muốn đạt được"
+                required
+              />
+            </label>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="space-y-5 p-5 sm:p-6">
+          <div>
+            <h2 className="text-lg font-semibold">Yêu cầu đối với nhóm</h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Nêu kiến thức, kỹ năng hoặc kinh nghiệm cần thiết để thực hiện bài
+              toán.
+            </p>
+          </div>
+          <label className="block space-y-2 text-sm font-medium">
+            <span>Yêu cầu đối với nhóm sinh viên</span>
+            <Textarea
+              className={`${fieldClass} min-h-28 resize-y`}
+              defaultValue={problem?.requirements}
+              ref={requirementsRef}
+              minLength={2}
+              name="requirements"
+              placeholder="Kiến thức, kỹ năng hoặc kinh nghiệm cần thiết"
+              required
+            />
+          </label>
+        </div>
+      </Card>
+
+      <Card>
+        <section
+          aria-labelledby="problem-ai-title"
+          className="space-y-5 p-5 sm:p-6"
+        >
+          <div className="flex items-start gap-3">
+            <span className="shrink-0 rounded-xl bg-primary/10 p-2.5 text-primary">
+              <Sparkles aria-hidden="true" className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-semibold" id="problem-ai-title">
+                  Hỗ trợ soạn thảo bằng AI
+                </h2>
+                <Badge
+                  className="motion-reduce:transition-none"
+                  variant="outline"
+                >
+                  Premium
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Nhập ý chính về bài toán. AI có thể đề xuất nội dung cho mô tả,
+                mục tiêu và yêu cầu đối với nhóm.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Chức năng dành cho tài khoản doanh nghiệp Premium.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor={aiBriefId}>
+              Ý chính về bài toán
+            </label>
+            <Textarea
+              aria-describedby={aiBriefHelpId}
+              className={`${fieldClass} min-h-28 resize-y`}
+              id={aiBriefId}
               maxLength={4000}
               onChange={(event) => setAiBrief(event.target.value)}
-              placeholder="Ví dụ: Cần website giới thiệu sản phẩm thân thiện trên điện thoại"
+              placeholder="Ví dụ: Cần tìm cách giúp khách hàng dễ tìm và lựa chọn sản phẩm trên website."
               value={aiBrief}
             />
-            <button
-              className="rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+            <div
+              className="flex flex-col gap-1 text-xs leading-5 text-muted-foreground sm:flex-row sm:items-start sm:justify-between"
+              id={aiBriefHelpId}
+            >
+              <span>
+                Nêu bối cảnh, vấn đề đang gặp và kết quả mong muốn. Gợi ý sẽ
+                được điền vào các trường để bạn xem lại và chỉnh sửa.
+              </span>
+              <span
+                aria-label={`${aiBrief.length} trên 4000 ký tự`}
+                className="shrink-0 tabular-nums"
+              >
+                {aiBrief.length}/4000
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Button
+              className="w-full motion-reduce:transition-none sm:w-auto"
               disabled={aiPending || !aiBrief.trim()}
               onClick={handleAiDraft}
               type="button"
             >
-              {aiPending ? "Đang viết..." : "AI viết giúp"}
-            </button>
+              {aiPending ? (
+                <>
+                  <LoaderCircle
+                    aria-hidden="true"
+                    className="h-4 w-4 animate-spin motion-reduce:animate-none"
+                  />
+                  Đang tạo đề xuất...
+                </>
+              ) : (
+                <>
+                  <Sparkles aria-hidden="true" className="h-4 w-4" />
+                  Tạo đề xuất
+                </>
+              )}
+            </Button>
+            <p className="text-xs leading-5 text-muted-foreground">
+              AI chỉ hỗ trợ soạn thảo, không tự lưu hoặc gửi duyệt bài toán.
+            </p>
           </div>
-          {aiMessage && <p className="mt-2 text-xs text-muted-foreground" role="status">{aiMessage}</p>}
-        </div>
-        <fieldset className="space-y-2 sm:col-span-2">
-          <legend className="text-sm font-semibold">Ngân sách tham khảo (VNĐ)</legend>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1 text-xs text-muted-foreground">
-              Tối thiểu
-              <input
-                className={inputClass}
-                defaultValue={problem?.budgetMin ?? ""}
-                min={0}
-                name="budgetMin"
-                placeholder="Ví dụ: 5000000"
-                type="number"
-              />
-            </label>
-            <label className="space-y-1 text-xs text-muted-foreground">
-              Tối đa
-              <input
-                className={inputClass}
-                defaultValue={problem?.budgetMax ?? ""}
-                min={0}
-                name="budgetMax"
-                placeholder="Ví dụ: 15000000"
-                type="number"
-              />
-            </label>
-          </div>
-        </fieldset>
-      </div>
 
-      <section className="space-y-3 rounded-2xl border border-border bg-muted/20 p-4 sm:p-5">
-        <div>
-          <h2 className="font-semibold">Tài liệu liên quan</h2>
-        </div>
-        {visibleAttachments.length > 0 && (
-          <ul className="space-y-2">
-            {visibleAttachments.map((attachment) => (
-              <li
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm"
-                key={attachment.id}
-              >
-                <span className="min-w-0 break-all">
-                  <Link
-                    className="font-medium text-primary hover:underline"
-                    href={`/api/business/attachments/${attachment.id}`}
-                    target="_blank"
-                  >
-                    {attachment.originalName}
-                  </Link>
-                  <span className="ml-2 text-muted-foreground">
-                    {formatSize(attachment.sizeBytes)}
-                  </span>
-                </span>
-                <button
-                  className="rounded-lg px-2 py-1 text-sm font-medium text-destructive hover:bg-destructive/10"
-                  onClick={() =>
-                    setDeletedIds((current) => [...current, attachment.id])
-                  }
-                  type="button"
-                >
-                  Gỡ tệp
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {deletedIds.length > 0 && (
-          <p className="text-xs text-muted-foreground">
-            Tệp được gỡ khỏi bài toán khi bạn lưu thay đổi.
-          </p>
-        )}
-        <FilePicker
-          existingBytes={visibleAttachments.reduce(
-            (total, attachment) => total + attachment.sizeBytes,
-            0,
+          {aiPending && (
+            <p
+              aria-live="polite"
+              className="flex items-center gap-2 text-sm text-muted-foreground"
+              role="status"
+            >
+              <LoaderCircle
+                aria-hidden="true"
+                className="h-4 w-4 animate-spin motion-reduce:animate-none"
+              />
+              Đang tạo nội dung đề xuất...
+            </p>
           )}
-          existingCount={visibleAttachments.length}
-          label="Tài liệu mới"
-          limits={{
-            count: MAX_ATTACHMENT_COUNT,
-            fileSizeBytes: MAX_ATTACHMENT_SIZE_BYTES,
-            totalBytes: MAX_ATTACHMENT_TOTAL_BYTES,
-          }}
-          name="attachments"
-          onFilesChange={() => {
-            setClientError(null);
-            setState({ error: null });
-          }}
-        />
-      </section>
+          {aiMessage && (
+            <p
+              aria-live={aiMessageType === "error" ? "assertive" : "polite"}
+              className={`rounded-xl border px-3 py-2 text-sm ${
+                aiMessageType === "error"
+                  ? "border-destructive/20 bg-destructive/5 text-destructive"
+                  : "border-success/20 bg-success/5 text-foreground"
+              }`}
+              role={aiMessageType === "error" ? "alert" : "status"}
+            >
+              {aiMessage}
+            </p>
+          )}
+        </section>
+      </Card>
 
-      {(clientError || state.error) && (
+      <Card>
+        <div className="space-y-4 p-5 sm:p-6">
+          <div>
+            <h2 className="text-lg font-semibold">Ngân sách tham khảo</h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Tùy chọn · Đơn vị Việt Nam đồng (VNĐ)
+            </p>
+          </div>
+          <fieldset>
+            <legend className="sr-only">Ngân sách tham khảo (VNĐ)</legend>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2 text-sm font-medium">
+                <span>Tối thiểu</span>
+                <Input
+                  className={fieldClass}
+                  defaultValue={problem?.budgetMin ?? ""}
+                  min={0}
+                  name="budgetMin"
+                  placeholder="Ví dụ: 5000000"
+                  type="number"
+                />
+              </label>
+              <label className="space-y-2 text-sm font-medium">
+                <span>Tối đa</span>
+                <Input
+                  className={fieldClass}
+                  defaultValue={problem?.budgetMax ?? ""}
+                  min={0}
+                  name="budgetMax"
+                  placeholder="Ví dụ: 15000000"
+                  type="number"
+                />
+              </label>
+            </div>
+          </fieldset>
+        </div>
+      </Card>
+
+      <Card>
+        <section
+          aria-labelledby="problem-attachments-title"
+          className="space-y-5 p-5 sm:p-6"
+        >
+          <div>
+            <h2 className="text-lg font-semibold" id="problem-attachments-title">
+              Tài liệu đính kèm
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Cung cấp tài liệu hỗ trợ sinh viên hiểu rõ hơn về bài toán.
+            </p>
+          </div>
+
+          {attachments.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Tệp đã lưu</h3>
+              <ul aria-label="Danh sách tệp đã lưu" className="space-y-3">
+                {attachments.map((attachment) => {
+                  const isMarkedForDeletion = deletedIds.includes(attachment.id);
+                  const extension = attachment.originalName.split(".").pop();
+                  return (
+                    <li
+                      className={`flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-3 sm:px-4 ${
+                        isMarkedForDeletion
+                          ? "border-warning/40 bg-warning/5"
+                          : "border-border bg-background"
+                      }`}
+                      key={attachment.id}
+                    >
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <span className="mt-0.5 shrink-0 rounded-lg bg-muted p-2 text-muted-foreground">
+                          <span aria-hidden="true" className="text-sm font-semibold">
+                            {extension?.slice(0, 4).toUpperCase() ?? "TỆP"}
+                          </span>
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <Link
+                            className="block break-all text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            href={`/api/business/attachments/${attachment.id}`}
+                            target="_blank"
+                          >
+                            {attachment.originalName}
+                          </Link>
+                          <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatSize(attachment.sizeBytes)}</span>
+                            {extension && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span>{extension.toUpperCase()}</span>
+                              </>
+                            )}
+                          </span>
+                          {isMarkedForDeletion && (
+                            <span className="mt-2 block text-xs text-foreground">
+                              Chưa xóa khỏi bài toán; thay đổi chỉ được áp dụng khi lưu.
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex w-full shrink-0 items-center justify-between gap-2 sm:w-auto sm:justify-end">
+                        {isMarkedForDeletion ? (
+                          <Badge
+                            className="motion-reduce:transition-none"
+                            variant="warning"
+                          >
+                            Đã đánh dấu gỡ
+                          </Badge>
+                        ) : (
+                          <>
+                            <Badge
+                              className="motion-reduce:transition-none"
+                              variant="secondary"
+                            >
+                              Đã lưu
+                            </Badge>
+                            <button
+                              aria-label={`Gỡ tệp ${attachment.originalName}`}
+                              className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+                              onClick={() =>
+                                setDeletedIds((current) => [...current, attachment.id])
+                              }
+                              type="button"
+                            >
+                              Gỡ tệp
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {deletedIds.length > 0 && (
+            <p
+              className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground"
+              role="status"
+            >
+              Tệp được đánh dấu gỡ chỉ bị xóa khỏi bài toán sau khi lưu thay đổi.
+            </p>
+          )}
+
+          <FilePicker
+            existingBytes={visibleAttachments.reduce(
+              (total, attachment) => total + attachment.sizeBytes,
+              0,
+            )}
+            existingCount={visibleAttachments.length}
+            label="Tài liệu mới"
+            limits={{
+              count: MAX_ATTACHMENT_COUNT,
+              fileSizeBytes: MAX_ATTACHMENT_SIZE_BYTES,
+              totalBytes: MAX_ATTACHMENT_TOTAL_BYTES,
+            }}
+            name="attachments"
+            onFilesChange={() => {
+              setClientError(null);
+              setState({ error: null });
+            }}
+            presentation="business-problem"
+          />
+
+          {clientError && (
+            <p
+              className="rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+              role="alert"
+            >
+              {clientError}
+            </p>
+          )}
+        </section>
+      </Card>
+
+      {state.error && (
         <p
           className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive"
           role="alert"
         >
-          {clientError || state.error}
-          {!clientError && state.actionHref && (
+          {state.error}
+          {state.actionHref && (
             <>
               {" "}
               <Link className="font-semibold underline" href="/business/credits">
@@ -360,32 +588,35 @@ export function ProblemForm({
           )}
         </p>
       )}
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+      <div className="flex flex-col-reverse gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <Link
-          className="rounded-xl border border-border px-5 py-3 text-center text-sm font-semibold hover:bg-muted"
+          className={`${buttonVariants({ variant: "outline" })}
+            w-full motion-reduce:transition-none sm:w-auto`}
           href={problem ? `/business/problems/${problem.id}` : "/business/problems"}
         >
           Hủy
         </Link>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <button
-            className="rounded-xl border border-primary px-5 py-3 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-60"
+          <Button
+            className="w-full motion-reduce:transition-none sm:w-auto"
             disabled={isPending}
             name="intent"
+            variant="outline"
             type="submit"
             value="draft"
           >
             {isPending ? "Đang lưu..." : "Lưu nháp"}
-          </button>
-          <button
-            className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-60"
+          </Button>
+          <Button
+            className="w-full motion-reduce:transition-none sm:w-auto"
             disabled={isPending}
             name="intent"
+            variant="default"
             type="submit"
             value="submit"
           >
             {isPending ? "Đang gửi..." : "Gửi duyệt"}
-          </button>
+          </Button>
         </div>
       </div>
     </form>
