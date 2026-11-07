@@ -38,6 +38,7 @@ export async function AdminNavigation() {
         { href: "/admin/problems", label: "Duyệt bài toán" },
         { href: "/admin/reports", label: "Báo cáo vi phạm" },
         { href: "/admin/prototype-handoffs", label: "Kiểm tra bàn giao Prototype" },
+        { href: "/admin/audit-logs", label: "Nhật ký hoạt động" },
       ]}
       tools={
         session?.user?.role === "ADMIN" ? (
@@ -45,6 +46,7 @@ export async function AdminNavigation() {
         ) : undefined
       }
       title="Quản trị viên"
+      variant="admin"
     />
   );
 }

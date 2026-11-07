@@ -8,6 +8,15 @@ import { getTeamReputations } from "@/lib/reputation-data";
 import { expireInvitations } from "@/jobs/expire-invitations";
 import { getAiUsageRemaining } from "@/lib/ai/usage";
 import { scoreTeamForProblem } from "@/lib/recommendation-scoring";
+import { Badge } from "@/components/ui/badge";
+
+const problemStatusLabels: Record<string, string> = {
+  APPROVED: "Đã duyệt",
+  PUBLISHED: "Đang mở nhận hồ sơ",
+  TEAM_SELECTED: "Đã chọn nhóm",
+  PROTOTYPING: "Đang thực hiện Prototype",
+  EVALUATING: "Đang đánh giá giải pháp",
+};
 
 export const instant = false;
 
@@ -42,6 +51,14 @@ export default async function BusinessProblemApplicationsPage({
         where: displayApplicationsWhere,
         orderBy: { submittedAt: "asc" },
         include: {
+          approachAttachments: {
+            select: {
+              id: true,
+              originalName: true,
+              sizeBytes: true,
+              submissionVersion: true,
+            },
+          },
           invitations: {
             orderBy: { createdAt: "desc" },
             take: 1,
@@ -100,6 +117,14 @@ export default async function BusinessProblemApplicationsPage({
     );
     return {
     id: application.id,
+    submittedAtLabel: new Intl.DateTimeFormat("vi-VN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Ho_Chi_Minh",
+    }).format(application.submittedAt),
+    submittedAtIso: application.submittedAt.toISOString(),
+    profileSnapshotVersion: application.profileSnapshotVersion,
+    hasProfileSnapshot: Boolean(snapshot),
     approach: application.approach,
     problemUnderstanding: application.problemUnderstanding,
     solutionDirection: application.solutionDirection,
@@ -114,6 +139,10 @@ export default async function BusinessProblemApplicationsPage({
     businessReviewNote: application.businessReviewNote,
     invitation: application.invitations[0] ?? null,
     approachLinks: application.approachLinks,
+    attachments: application.approachAttachments.filter(
+      ({ submissionVersion }) =>
+        submissionVersion === application.attachmentVersion,
+    ),
     team: {
       id: application.team.id,
       name: snapshot?.name ?? application.team.name,
@@ -125,8 +154,18 @@ export default async function BusinessProblemApplicationsPage({
       interests: snapshot?.interests ?? application.team.interests,
       reputation: reputations.get(application.team.id),
       skills: snapshot?.skills ?? application.team.skills.map(({ skill }) => skill.name),
-      members: snapshot?.members?.map(({ name, major }) => ({ name, major })) ??
-        application.team.memberships.map(({ name, major }) => ({ name, major })),
+      members: snapshot?.members?.map(({ name, major, title, isLead }) => ({
+        name,
+        major,
+        title,
+        isLead,
+      })) ??
+        application.team.memberships.map(({ name, major, title, isLead }) => ({
+          name,
+          major,
+          title,
+          isLead,
+        })),
       projects: application.team.projects,
     },
     recommendationScore: recommendation.score,
@@ -139,17 +178,34 @@ export default async function BusinessProblemApplicationsPage({
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <Link
-        className="text-sm font-semibold text-primary hover:underline"
+        className="inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         href={`/business/problems/${problem.id}`}
       >
-        ← Chi tiết bài toán
+        <span aria-hidden="true">←</span> Chi tiết bài toán
       </Link>
-      <p className="mt-4 text-sm font-semibold text-primary">{problem.field}</p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight">So sánh nhóm ứng tuyển</h1>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{problem.title}</p>
-      <div className="mt-6 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6">
-        So sánh hồ sơ theo kỹ năng, chuyên môn, kinh nghiệm, Approach, Reputation,
-        thời gian và chi phí. Việc chọn nhóm sẽ kết thúc nhận hồ sơ cho bài toán này.
+      <header className="mt-5 max-w-4xl">
+        <p className="text-sm font-semibold text-primary">{problem.field}</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+          So sánh nhóm ứng tuyển
+        </h1>
+        <p className="mt-3 break-words text-base leading-7 text-muted-foreground">
+          {problem.title}
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Badge variant="outline">
+            {problemStatusLabels[problem.status] ?? problem.status}
+          </Badge>
+          <Badge variant="secondary">{applications.length} hồ sơ</Badge>
+          <Badge variant="outline">Sắp xếp theo điểm Recommendation</Badge>
+        </div>
+      </header>
+      <div className="mt-6 max-w-4xl rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 sm:p-5">
+        <p className="font-semibold text-foreground">Cách xem xét hồ sơ</p>
+        <p className="mt-1 text-muted-foreground">
+          Đối chiếu Profile, Approach, kỹ năng, Reputation, thời gian và chi phí.
+          Gửi lời mời chưa đồng nghĩa nhóm đã được chọn; nhóm cần phản hồi trước
+          khi việc lựa chọn được hoàn tất.
+        </p>
       </div>
       <section className="mt-6">
         <ApplicationComparison

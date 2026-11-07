@@ -85,10 +85,11 @@ export async function BusinessNavigation() {
       ]}
       tools={
         session?.user?.role === "BUSINESS" ? (
-          <NotificationBell notifications={notifications} />
+          <NotificationBell notifications={notifications} variant="business" />
         ) : undefined
       }
       title="Doanh nghiệp"
+      variant="business"
     />
   );
 }

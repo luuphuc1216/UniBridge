@@ -7,7 +7,8 @@ Ghi chú triển khai Đợt 1 — ứng tuyển và mời nhóm:
 - Hết hạn lời mời phải có script `npm run jobs:expire` và kiểm tra lazy khi truy cập; không dựng cron trong đợt này.
 - Chat chỉ mở cho nhóm đang có lời mời chờ hoặc đã được chọn; nhóm DECLINED/EXPIRED/NOT_SELECTED chỉ đọc.
 - Application lưu snapshot Profile JSON có version khi gửi; snapshot không đổi nếu nhóm chỉnh sửa hồ sơ sau đó.
-- Approach hỗ trợ tối đa 3 liên kết tham khảo HTTP/HTTPS; doanh nghiệp có thể đánh dấu hồ sơ cần xem xét và lưu ghi chú nội bộ.
+- Approach hỗ trợ tối đa 3 liên kết tham khảo HTTP/HTTPS và tối đa 3 tệp minh họa (PDF, PNG/JPG, DOCX, XLSX, PPTX, CSV; tối đa 20 MB/tệp, tổng 60 MB). Tệp được lưu riêng ngoài `public`, khóa theo phiên bản gửi và chỉ tải qua route kiểm tra quyền.
+- Nháp Approach có thể chỉnh sửa; sau khi gửi, nhóm không thể thay đổi hoặc xóa tệp của phiên bản đó. Khi rút hồ sơ, tệp cũ được giữ lại theo phiên bản để bảo toàn lịch sử, không xóa vật lý.
 - Job hết hạn cũng gửi nhắc sắp hết hạn một lần theo mốc cấu hình tập trung, cùng thông báo khi lời mời được đồng ý, từ chối hoặc hết hạn.
 
 Ý tưởng đề xuất xây dựng một nền tảng trực tuyến kết nối doanh nghiệp có nhu cầu giải quyết các vấn đề thực tế với các nhóm sinh viên có năng lực và mong muốn tham gia giải quyết những vấn đề đó.

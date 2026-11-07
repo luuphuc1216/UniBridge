@@ -42,6 +42,10 @@ export const ALLOWED_ATTACHMENT_TYPES = {
     contentType: "image/jpeg",
     label: "JPG",
   },
+  ".jpeg": {
+    contentType: "image/jpeg",
+    label: "JPEG",
+  },
 } as const;
 
 export const ALLOWED_ATTACHMENT_EXTENSIONS = Object.keys(

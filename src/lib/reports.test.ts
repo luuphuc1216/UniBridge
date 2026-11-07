@@ -123,14 +123,60 @@ describe("Violation reports", () => {
       "invalid",
     );
     assert.equal(
+      await database.prisma.notification.count({ where: { userId: "buyer" } }),
+      0,
+    );
+    assert.equal(
       await updateReport(database.prisma, { ...input, reason: "a".repeat(500) }),
       "updated",
     );
+    const notification = await database.prisma.notification.findFirstOrThrow({
+      where: { userId: "buyer" },
+    });
+    assert.equal(notification.title, "Báo cáo của bạn đã được cập nhật");
+    assert.equal(
+      notification.message,
+      "Trạng thái báo cáo hiện tại: Đang xử lý.",
+    );
+    assert.equal(notification.href, "/student");
+    assert.ok(notification.dedupeKey?.startsWith(`report-update:${report.id}:`));
     assert.equal(
       (await database.prisma.report.findUniqueOrThrow({ where: { id: report.id } }))
         .resolutionReason,
       "a".repeat(500),
     );
+  });
+
+  it("rejects a forged transition back to the initial NEW status", async () => {
+    await submitReport(database.prisma, {
+      reporterId: "buyer",
+      reporterRole: "STUDENT",
+      targetType: "PROBLEM",
+      targetId: "reported-problem",
+      reason: "Bài toán cần được xem xét.",
+    });
+    const report = await database.prisma.report.findFirstOrThrow({
+      where: { targetId: "reported-problem" },
+    });
+
+    assert.equal(
+      await updateReport(database.prisma, {
+        actorId: "business-owner",
+        reportId: report.id,
+        nextStatus: "NEW",
+        reason: "Đưa báo cáo về trạng thái khởi tạo.",
+        hideContent: false,
+      }),
+      "invalid",
+    );
+    const unchanged = await database.prisma.report.findUniqueOrThrow({
+      where: { id: report.id },
+    });
+    assert.equal(unchanged.status, "NEW");
+    assert.equal(unchanged.handlerId, null);
+    assert.equal(unchanged.resolutionReason, null);
+    assert.equal(await database.prisma.auditLog.count({ where: { action: "REPORT_UPDATED" } }), 0);
+    assert.equal(await database.prisma.notification.count(), 0);
   });
 
   it("snapshots supported targets, rejects duplicate open reports, and limits private message access", async () => {
@@ -219,6 +265,7 @@ describe("Violation reports", () => {
     };
     assert.equal(await updateReport(database.prisma, adminInput), "updated");
     assert.equal(await updateReport(database.prisma, adminInput), "unchanged");
+    assert.equal(await database.prisma.notification.count(), 1);
     assert.equal(
       await submitReport(database.prisma, {
         reporterId: "buyer",
@@ -238,6 +285,7 @@ describe("Violation reports", () => {
       }),
       "updated",
     );
+    assert.equal(await database.prisma.notification.count(), 2);
     const review = await database.prisma.review.findUniqueOrThrow({
       where: { id: "reported-review" },
     });

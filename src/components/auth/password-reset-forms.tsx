@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function RequestPasswordResetForm() {
   const [message, setMessage] = useState("");
@@ -29,28 +31,28 @@ export function RequestPasswordResetForm() {
   }
 
   return (
-    <form className="mt-6 space-y-4" onSubmit={submit}>
+    <form className="space-y-5" onSubmit={submit}>
       <label className="block space-y-2 text-sm font-medium">
         Email
-        <input
+        <Input
           autoComplete="email"
-          className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal"
+          className="h-12 text-base font-normal sm:text-sm"
           maxLength={254}
           name="email"
           required
           type="email"
         />
       </label>
-      {message && <p aria-live="polite" className="rounded-lg bg-muted p-3 text-sm">{message}</p>}
-      <button
-        className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60"
+      {message && <p aria-live="polite" className="rounded-xl border border-border bg-muted/70 px-4 py-3 text-sm leading-6">{message}</p>}
+      <Button
+        className="h-12 w-full rounded-xl text-base font-semibold"
         disabled={pending}
         type="submit"
       >
         {pending ? "Đang gửi..." : "Gửi hướng dẫn"}
-      </button>
+      </Button>
       <p className="text-center text-sm">
-        <Link className="font-semibold text-primary hover:underline" href="/dang-nhap">
+        <Link className="rounded-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" href="/dang-nhap">
           Quay lại đăng nhập
         </Link>
       </p>
@@ -95,12 +97,12 @@ export function CompletePasswordResetForm({ token }: { token: string }) {
   }
 
   return (
-    <form className="mt-6 space-y-4" onSubmit={submit}>
+    <form className="space-y-5" onSubmit={submit}>
       <label className="block space-y-2 text-sm font-medium">
         Mật khẩu mới
-        <input
+        <Input
           autoComplete="new-password"
-          className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal"
+          className="h-12 text-base font-normal sm:text-sm"
           minLength={8}
           name="password"
           required
@@ -109,28 +111,28 @@ export function CompletePasswordResetForm({ token }: { token: string }) {
       </label>
       <label className="block space-y-2 text-sm font-medium">
         Xác nhận mật khẩu
-        <input
+        <Input
           autoComplete="new-password"
-          className="w-full rounded-xl border border-border bg-background px-4 py-3 font-normal"
+          className="h-12 text-base font-normal sm:text-sm"
           minLength={8}
           name="confirmPassword"
           required
           type="password"
         />
       </label>
-      {message && <p aria-live="polite" className="rounded-lg bg-muted p-3 text-sm">{message}</p>}
+      {message && <p aria-live="polite" className="rounded-xl border border-border bg-muted/70 px-4 py-3 text-sm leading-6">{message}</p>}
       {completed ? (
-        <Link className="block text-center font-semibold text-primary" href="/dang-nhap">
+        <Link className="block rounded-sm text-center font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" href="/dang-nhap">
           Đăng nhập bằng mật khẩu mới
         </Link>
       ) : (
-        <button
-          className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60"
+        <Button
+          className="h-12 w-full rounded-xl text-base font-semibold"
           disabled={pending}
           type="submit"
         >
           {pending ? "Đang cập nhật..." : "Đặt lại mật khẩu"}
-        </button>
+        </Button>
       )}
     </form>
   );

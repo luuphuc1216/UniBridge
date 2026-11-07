@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 export { canRespondForTeam } from "./team-permissions";
 
-export function getOwnedTeam(userId: string) {
-  return prisma.studentTeam.findUnique({
+export async function getOwnedTeam(userId: string) {
+  const team = await prisma.studentTeam.findUnique({
     where: { ownerId: userId },
     select: {
       id: true,
@@ -17,7 +17,13 @@ export function getOwnedTeam(userId: string) {
       interests: true,
       memberships: {
         orderBy: [{ isLead: "desc" }, { joinedAt: "asc" }],
-        select: { name: true, major: true, title: true, isLead: true },
+        select: {
+          studentProfileId: true,
+          name: true,
+          major: true,
+          title: true,
+          isLead: true,
+        },
       },
       skills: { select: { skill: { select: { name: true } } } },
       portfolioItems: {
@@ -26,6 +32,15 @@ export function getOwnedTeam(userId: string) {
       },
     },
   });
+  if (!team) return null;
+
+  return {
+    ...team,
+    memberships: team.memberships.map(({ studentProfileId, ...membership }) => ({
+      ...membership,
+      isLinked: studentProfileId !== null,
+    })),
+  };
 }
 
 export async function requireOwnedTeam(userId: string) {

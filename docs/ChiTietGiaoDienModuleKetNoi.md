@@ -329,6 +329,7 @@ Giao diện 3: Vấn đề đã lưu và đề xuất dành cho nhóm
   - Nguồn lực cần thiết: không bắt buộc.
   - Thời gian dự kiến: bắt buộc.
   - Tài liệu minh họa hoặc đường dẫn tham khảo: không bắt buộc.
+  - Tệp: tối đa 3 tệp PDF, PNG/JPG, DOCX, XLSX, PPTX hoặc CSV; tối đa 20 MB mỗi tệp và 60 MB tổng. Liên kết tham khảo tối đa 3 địa chỉ HTTP/HTTPS.
 
 - Nút “Lưu bản nháp”, “Gửi hồ sơ” và “Hủy”.
 
@@ -336,9 +337,9 @@ Giao diện 3: Vấn đề đã lưu và đề xuất dành cho nhóm
 
 - Profile được lấy từ hồ sơ nhóm đã lưu trên hệ thống.
 - Nhóm sinh viên nhập Approach để trình bày cách tiếp cận và giải quyết vấn đề.
-- Khi chọn “Lưu bản nháp”, hệ thống lưu nội dung để nhóm tiếp tục chỉnh sửa mà chưa gửi đến doanh nghiệp.
+- Khi chọn “Lưu bản nháp”, hệ thống lưu nội dung và tệp để nhóm tiếp tục chỉnh sửa mà chưa gửi đến doanh nghiệp.
 - Khi chọn “Gửi hồ sơ”, hệ thống kiểm tra các trường bắt buộc, quyền gửi hồ sơ của người thực hiện và trạng thái của vấn đề.
-- Nếu thông tin hợp lệ và vấn đề còn nhận ứng tuyển, hệ thống lưu hồ sơ với trạng thái “Đã gửi” và chuyển đến doanh nghiệp.
+- Nếu thông tin hợp lệ và vấn đề còn nhận ứng tuyển, hệ thống lưu hồ sơ với trạng thái “Đã gửi” và chuyển đến doanh nghiệp; tệp đính kèm bị khóa theo phiên bản.
 - Nếu thông tin chưa đầy đủ, nhóm không có quyền gửi hoặc vấn đề đã ngừng nhận hồ sơ, hệ thống không cho phép gửi và hiển thị thông báo tương ứng.
 - Mỗi nhóm chỉ có một hồ sơ ứng tuyển đang có hiệu lực đối với một vấn đề tại một thời điểm, nhằm tránh gửi trùng lặp.
 - Việc gửi Profile + Approach chỉ được xem là đăng ký tham gia, chưa đồng nghĩa với việc nhóm được lựa chọn hoặc phải bắt đầu thực hiện dự án.
@@ -365,6 +366,7 @@ Giao diện 3: Vấn đề đã lưu và đề xuất dành cho nhóm
 - Nếu nhóm không phản hồi trong thời hạn quy định, lời mời chuyển sang trạng thái “Hết hạn phản hồi”. Doanh nghiệp được thông báo để tiếp tục quá trình lựa chọn.
 - Nếu doanh nghiệp đã hoàn tất lựa chọn chính thức một nhóm khác, các hồ sơ ứng tuyển còn lại chuyển sang trạng thái “Không được lựa chọn”.
 - Nhóm sinh viên có thể chủ động rút hồ sơ khi chưa xác nhận hợp tác chính thức và chưa có lời mời đang chờ phản hồi. Khi đó, hồ sơ chuyển sang trạng thái “Đã rút” và không tiếp tục được xem xét.
+- Tệp đính kèm của hồ sơ đã rút được giữ riêng theo phiên bản để bảo toàn lịch sử, không xóa vật lý; việc tải xuống vẫn qua route kiểm tra quyền.
 - Sau khi xác nhận hợp tác thành công, hai bên chuyển sang bước trao đổi, thống nhất yêu cầu và chuẩn bị thực hiện Prototype/Solution Proposal.
 
 **Giao diện 3: Hồ sơ nhận được của doanh nghiệp**

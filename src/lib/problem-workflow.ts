@@ -57,7 +57,7 @@ export function isEffectiveApplicationStatus(status: string): boolean {
 }
 
 export function canEditApplication(status: string | null): boolean {
-  return status === null || status === "SUBMITTED";
+  return status === null || status === "DRAFT" || status === "SUBMITTED";
 }
 
 export function canCreatePendingInvitation(activeInvitationCount: number): boolean {

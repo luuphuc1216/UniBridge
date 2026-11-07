@@ -7,9 +7,11 @@ export const instant = false;
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   await requireAdmin();
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="group min-h-screen bg-background">
       <AdminNavigation />
-      {children}
+      <div className="lg:pl-64 group-has-[[data-sidebar-collapsed=true]]:lg:pl-20">
+        {children}
+      </div>
     </div>
   );
 }

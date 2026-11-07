@@ -393,11 +393,13 @@ model Application {
   profileSnapshot        Json?
   profileSnapshotVersion Int                     @default(1)
   approachLinks          Json?
+  attachmentVersion      Int                     @default(0)
   needsReview            Boolean                 @default(false)
   businessReviewNote     String?
   problem                Problem                 @relation(fields: [problemId], references: [id], onDelete: Cascade)
   team                   StudentTeam             @relation(fields: [teamId], references: [id], onDelete: Cascade)
   invitations            ApplicationInvitation[]
+  approachAttachments    ApproachAttachment[]
   solutionProposal       SolutionProposal?
   proposals              Proposal[]
   project                Project?
@@ -406,6 +408,20 @@ model Application {
 
   @@unique([problemId, teamId])
   @@index([status])
+}
+
+model ApproachAttachment {
+  id               String      @id @default(cuid())
+  applicationId    String
+  submissionVersion Int
+  originalName     String
+  contentType      String
+  sizeBytes        Int
+  storageKey       String      @unique
+  createdAt        DateTime    @default(now())
+  application      Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, submissionVersion])
 }
 
 model ApplicationInvitation {

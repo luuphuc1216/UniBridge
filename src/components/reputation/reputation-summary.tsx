@@ -4,7 +4,14 @@ function formatRate(rate: number | null): string {
   return rate === null ? "Chưa có dữ liệu" : `${rate}%`;
 }
 
-export function ReputationSummary({ reputation }: { reputation: TeamReputation }) {
+export function ReputationSummary({
+  reputation,
+  presentation = "default",
+}: {
+  reputation: TeamReputation;
+  presentation?: "default" | "public";
+}) {
+  const isPublic = presentation === "public";
   const metrics = [
     ["Đánh giá trung bình", reputation.ratingAverage === null ? "Chưa có đánh giá" : `${reputation.ratingAverage.toFixed(1)} / 5`],
     ["Số đánh giá", String(reputation.ratingCount)],
@@ -16,18 +23,34 @@ export function ReputationSummary({ reputation }: { reputation: TeamReputation }
   ];
 
   return (
-    <section aria-label="Reputation nhóm" className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+    <section
+      aria-label="Reputation nhóm"
+      className={`rounded-2xl border border-border bg-card p-5 sm:p-6 ${isPublic ? "shadow-sm" : ""}`}
+    >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold">Reputation nhóm</h2>
+          <h2 className={isPublic ? "text-lg font-semibold" : "text-xl font-bold"}>
+            Reputation nhóm
+          </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Điểm tổng hợp được làm mượt theo số lượng đánh giá; hồ sơ mới không bị một lượt
             đánh giá chi phối.
           </p>
         </div>
-        <p className="text-2xl font-bold text-primary">
-          {reputation.score === null ? "Chưa có dữ liệu" : `${reputation.score} / 100`}
-        </p>
+        {isPublic ? (
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-right">
+            <p className="text-xs font-medium text-muted-foreground">
+              Điểm tổng hợp
+            </p>
+            <p className="text-2xl font-bold text-primary">
+              {reputation.score === null ? "Chưa có dữ liệu" : `${reputation.score} / 100`}
+            </p>
+          </div>
+        ) : (
+          <p className="text-2xl font-bold text-primary">
+            {reputation.score === null ? "Chưa có dữ liệu" : `${reputation.score} / 100`}
+          </p>
+        )}
       </div>
       {reputation.ratingCount > 0 && (
         <p className="mt-2 text-sm text-muted-foreground">
@@ -36,7 +59,10 @@ export function ReputationSummary({ reputation }: { reputation: TeamReputation }
       )}
       <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {metrics.map(([label, value]) => (
-          <div className="rounded-xl bg-muted/50 p-3" key={label}>
+          <div
+            className={`rounded-xl p-3 ${isPublic ? "border border-border bg-background" : "bg-muted/50"}`}
+            key={label}
+          >
             <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
             <dd className="mt-1 font-semibold">{value}</dd>
           </div>

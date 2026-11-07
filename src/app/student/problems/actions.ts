@@ -49,35 +49,55 @@ export async function searchProblemsAction(formData: FormData): Promise<void> {
   redirect(`/student/problems${params.size ? `?${params.toString()}` : ""}`);
 }
 
-export async function toggleSavedProblemAction(formData: FormData): Promise<void> {
+export type SavedProblemActionState = {
+  error: string | null;
+  message: string | null;
+};
+
+export async function toggleSavedProblemAction(
+  _previousState: SavedProblemActionState,
+  formData: FormData,
+): Promise<SavedProblemActionState> {
   const { userId } = await requireStudent();
   const problemId = readText(formData, "problemId");
   const intent = readText(formData, "intent");
   if (!problemId || !["save", "remove"].includes(intent)) {
-    throw new Error("Thao tác lưu bài toán không hợp lệ.");
+    return { error: "Thao tác lưu bài toán không hợp lệ.", message: null };
   }
 
-  if (intent === "save") {
-    const problem = await prisma.problem.findFirst({
-      where: {
-        id: problemId,
-        ...getStudentDiscoverableProblemWhere(),
-      },
-      select: { id: true },
-    });
-    if (!problem) {
-      throw new Error("Bài toán không còn được công khai.");
+  try {
+    if (intent === "save") {
+      const problem = await prisma.problem.findFirst({
+        where: {
+          id: problemId,
+          ...getStudentDiscoverableProblemWhere(),
+        },
+        select: { id: true },
+      });
+      if (!problem) {
+        return { error: "Bài toán không còn được công khai.", message: null };
+      }
+      await prisma.savedProblem.upsert({
+        where: { userId_problemId: { userId, problemId } },
+        update: {},
+        create: { userId, problemId },
+      });
+    } else {
+      await prisma.savedProblem.deleteMany({ where: { userId, problemId } });
     }
-    await prisma.savedProblem.upsert({
-      where: { userId_problemId: { userId, problemId } },
-      update: {},
-      create: { userId, problemId },
-    });
-  } else {
-    await prisma.savedProblem.deleteMany({ where: { userId, problemId } });
+  } catch (error) {
+    console.error("Cập nhật trạng thái lưu bài toán thất bại:", error);
+    return {
+      error: "Không thể cập nhật trạng thái lưu bài toán. Vui lòng thử lại.",
+      message: null,
+    };
   }
 
   revalidatePath("/student/problems");
   revalidatePath("/student/saved-problems");
   revalidatePath(`/student/problems/${problemId}`);
+  return {
+    error: null,
+    message: intent === "save" ? "Đã lưu bài toán." : "Đã bỏ lưu bài toán.",
+  };
 }

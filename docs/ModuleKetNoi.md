@@ -192,7 +192,7 @@ Module gồm 3 giao diện chính:
 
 
 ### **5. Luồng xử lý và phản hồi hệ thống**
-Khi nhóm sinh viên lưu bản nháp, hệ thống lưu nội dung để nhóm tiếp tục chỉnh sửa mà chưa gửi đến doanh nghiệp. Khi nhấn “Gửi hồ sơ”, hệ thống kiểm tra các trường bắt buộc, quyền gửi của nhóm và trạng thái của vấn đề. Nếu hợp lệ, hồ sơ được lưu với trạng thái “Đã gửi”.
+Khi nhóm sinh viên lưu bản nháp, hệ thống lưu nội dung và tệp đính kèm để nhóm tiếp tục chỉnh sửa mà chưa gửi đến doanh nghiệp. Khi nhấn “Gửi hồ sơ”, hệ thống kiểm tra các trường bắt buộc, quyền gửi của nhóm và trạng thái của vấn đề. Nếu hợp lệ, hồ sơ được lưu với trạng thái “Đã gửi”; tệp của phiên bản đó không thể sửa hoặc xóa.
 Nếu thiếu dữ liệu hoặc vấn đề không còn nhận hồ sơ, hệ thống hiển thị thông báo và không thực hiện gửi. Khi doanh nghiệp mở hồ sơ, hệ thống hiển thị đúng phiên bản Profile + Approach đã gửi để đảm bảo nội dung được đánh giá nhất quán.
 Doanh nghiệp chỉ được xem hồ sơ thuộc các vấn đề do mình đăng. Việc gửi hồ sơ không tự động tạo dự án chính thức hoặc phát sinh giao dịch thanh toán. Các trạng thái hồ sơ gồm “Bản nháp”, “Đã gửi”, “Đang xem xét”, “Được lựa chọn”, “Không được lựa chọn” và “Đã rút”.
 

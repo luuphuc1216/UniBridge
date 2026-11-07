@@ -1,10 +1,14 @@
 import Link from "next/link";
+import { ArrowLeft, Building2, CalendarClock, FileText, Wallet } from "lucide-react";
 import { notFound } from "next/navigation";
 import {
   AiProblemReviewPanel,
   ProblemOverrideForm,
   ProblemReviewForm,
 } from "@/components/admin/problem-review-form";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { buttonVariants } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin-access";
 import { prisma } from "@/lib/prisma";
 import { getPrototypeProblemStatusLabel } from "@/lib/prototype-status";
@@ -20,6 +24,23 @@ function formatCurrency(amount: number | null): string {
         maximumFractionDigits: 0,
       }).format(amount);
 }
+
+function getStatusVariant(status: string) {
+  if (status === "PENDING_REVIEW") return "warning" as const;
+  if (status === "REJECTED") return "destructive" as const;
+  if (["APPROVED", "PUBLISHED", "TEAM_SELECTED"].includes(status)) {
+    return "success" as const;
+  }
+  if (["NEEDS_REVISION", "CHANGES_REQUESTED"].includes(status)) {
+    return "warning" as const;
+  }
+  return "secondary" as const;
+}
+
+const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
 
 export default async function AdminProblemDetailPage({
   params,
@@ -49,157 +70,245 @@ export default async function AdminProblemDetailPage({
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
+    <main className="mx-auto w-full max-w-[1440px] px-4 py-7 sm:px-6 sm:py-9 lg:px-8">
       <Link
-        className="text-sm font-semibold text-primary hover:underline"
+        className={`${buttonVariants({ variant: "outline" })} mb-5`}
         href="/admin/problems"
       >
-        ← Danh sách bài toán
+          <ArrowLeft aria-hidden="true" className="size-4" />
+          Danh sách vấn đề
       </Link>
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-primary">{problem.field}</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">{problem.title}</h1>
-        </div>
-        <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-800">
-          {getPrototypeProblemStatusLabel(problem)}
-        </span>
-      </div>
 
-      <section className="mt-6 rounded-2xl border border-border bg-card p-5 sm:p-7">
-        <h2 className="text-lg font-semibold">Thông tin doanh nghiệp</h2>
-        <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-muted-foreground">Tên doanh nghiệp</dt>
-            <dd className="mt-1 font-medium">{problem.businessProfile.companyName}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Lĩnh vực hoạt động</dt>
-            <dd className="mt-1 font-medium">{problem.businessProfile.industry}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Người liên hệ</dt>
-            <dd className="mt-1 font-medium">{problem.businessProfile.user.name}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Email</dt>
-            <dd className="mt-1 break-all font-medium">{problem.businessProfile.user.email}</dd>
-          </div>
-          {problem.businessProfile.website && (
-            <div>
-              <dt className="text-muted-foreground">Website</dt>
-              <dd className="mt-1 break-all font-medium">{problem.businessProfile.website}</dd>
-            </div>
-          )}
-          <div className="sm:col-span-2">
-            <dt className="text-muted-foreground">Giới thiệu doanh nghiệp</dt>
-            <dd className="mt-1 whitespace-pre-wrap leading-6">
-              {problem.businessProfile.description}
-            </dd>
-          </div>
-        </dl>
-      </section>
-
-      <div className="mt-5 grid gap-5">
-        <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">
-          <h2 className="text-lg font-semibold">Thông tin bài toán</h2>
-          <dl className="mt-4 grid gap-5 text-sm sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <dt className="font-semibold">Mô tả vấn đề</dt>
-              <dd className="mt-2 whitespace-pre-wrap leading-7 text-muted-foreground">
-                {problem.description}
-              </dd>
-            </div>
-            <div className="sm:col-span-2">
-              <dt className="font-semibold">Mục tiêu</dt>
-              <dd className="mt-2 whitespace-pre-wrap leading-7 text-muted-foreground">
-                {problem.goal}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold">Lĩnh vực</dt>
-              <dd className="mt-2 text-muted-foreground">{problem.field}</dd>
-            </div>
-            <div>
-              <dt className="font-semibold">Thời gian dự kiến</dt>
-              <dd className="mt-2 text-muted-foreground">{problem.expectedDuration}</dd>
-            </div>
-            <div className="sm:col-span-2">
-              <dt className="font-semibold">Yêu cầu đối với nhóm sinh viên</dt>
-              <dd className="mt-2 whitespace-pre-wrap leading-7 text-muted-foreground">
-                {problem.requirements}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold">Ngân sách tham khảo</dt>
-              <dd className="mt-2 text-muted-foreground">
-                {formatCurrency(problem.budgetMin)} – {formatCurrency(problem.budgetMax)}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold">Thời điểm gửi duyệt</dt>
-              <dd className="mt-2 text-muted-foreground">
+      <header className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-7">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Building2 aria-hidden="true" className="size-4 shrink-0" />
+              <span className="break-words">{problem.businessProfile.companyName}</span>
+            </p>
+            <h1 className="mt-3 break-words text-2xl font-bold tracking-tight sm:text-3xl">
+              {problem.title}
+            </h1>
+            <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+              <span>{problem.field}</span>
+              <span className="flex items-center gap-1.5">
+                <CalendarClock aria-hidden="true" className="size-4" />
+                Gửi lúc{" "}
                 {problem.submittedAt
-                  ? new Intl.DateTimeFormat("vi-VN", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    }).format(problem.submittedAt)
+                  ? dateFormatter.format(problem.submittedAt)
                   : "Chưa gửi"}
-              </dd>
+              </span>
+            </p>
+          </div>
+          <Badge
+            className="w-fit shrink-0 px-3 py-1.5 text-sm"
+            variant={getStatusVariant(problem.status)}
+          >
+            {getPrototypeProblemStatusLabel(problem)}
+          </Badge>
+        </div>
+      </header>
+
+      <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.85fr)]">
+        <div className="grid min-w-0 gap-5">
+          <Card className="min-w-0 p-5 sm:p-7">
+            <div className="border-b border-border pb-4">
+              <h2 className="text-lg font-semibold">Nội dung vấn đề</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Thông tin do doanh nghiệp cung cấp để Admin rà soát.
+              </p>
             </div>
-          </dl>
-        </section>
+            <dl className="mt-5 grid min-w-0 gap-x-6 gap-y-5 text-sm sm:grid-cols-2">
+              <div className="min-w-0 sm:col-span-2">
+                <dt className="font-semibold">Mô tả vấn đề</dt>
+                <dd className="mt-2 whitespace-pre-wrap break-words leading-7 text-muted-foreground">
+                  {problem.description}
+                </dd>
+              </div>
+              <div className="min-w-0 sm:col-span-2">
+                <dt className="font-semibold">Mục tiêu</dt>
+                <dd className="mt-2 whitespace-pre-wrap break-words leading-7 text-muted-foreground">
+                  {problem.goal}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold">Lĩnh vực</dt>
+                <dd className="mt-2 text-muted-foreground">{problem.field}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold">Thời gian dự kiến</dt>
+                <dd className="mt-2 text-muted-foreground">
+                  {problem.expectedDuration}
+                </dd>
+              </div>
+              <div className="min-w-0 sm:col-span-2">
+                <dt className="font-semibold">Yêu cầu đối với nhóm sinh viên</dt>
+                <dd className="mt-2 whitespace-pre-wrap break-words leading-7 text-muted-foreground">
+                  {problem.requirements}
+                </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="flex items-center gap-2 font-semibold">
+                  <Wallet aria-hidden="true" className="size-4" />
+                  Ngân sách tham khảo
+                </dt>
+                <dd className="mt-2 text-muted-foreground">
+                  {formatCurrency(problem.budgetMin)} – {formatCurrency(problem.budgetMax)}
+                </dd>
+              </div>
+            </dl>
+          </Card>
 
-        <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">
-          <h2 className="text-lg font-semibold">Tài liệu đính kèm</h2>
-          {problem.attachments.length > 0 ? (
-            <ul className="mt-3 divide-y divide-border">
-              {problem.attachments.map((attachment) => (
-                <li className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between" key={attachment.id}>
-                  <a
-                    className="break-all text-sm font-medium text-primary hover:underline"
-                    href={`/api/business/attachments/${attachment.id}`}
+          <Card className="min-w-0 p-5 sm:p-7">
+            <div className="flex items-start gap-3">
+              <FileText
+                aria-hidden="true"
+                className="mt-0.5 size-5 shrink-0 text-primary"
+              />
+              <div>
+                <h2 className="text-lg font-semibold">Tài liệu đính kèm</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Tệp do doanh nghiệp gửi kèm vấn đề.
+                </p>
+              </div>
+            </div>
+            {problem.attachments.length > 0 ? (
+              <ul className="mt-4 divide-y divide-border rounded-xl border border-border px-4">
+                {problem.attachments.map((attachment) => (
+                  <li
+                    className="flex min-w-0 flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"
+                    key={attachment.id}
                   >
-                    {attachment.originalName}
-                  </a>
-                  <span className="text-sm text-muted-foreground">
-                    {(attachment.sizeBytes / 1024 / 1024).toFixed(2)} MB
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-sm text-muted-foreground">Không có tài liệu đính kèm.</p>
+                    <a
+                      className="min-w-0 break-all text-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      href={`/api/business/attachments/${attachment.id}`}
+                    >
+                      {attachment.originalName}
+                    </a>
+                    <span className="text-sm text-muted-foreground sm:shrink-0">
+                      {attachment.contentType} ·{" "}
+                      {(attachment.sizeBytes / 1024 / 1024).toFixed(2)} MB
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-4 rounded-xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                Không có tài liệu đính kèm.
+              </p>
+            )}
+          </Card>
+
+          {problem.reviewNote && (
+            <section
+              aria-labelledby="previous-review-heading"
+              className="rounded-2xl border border-warning/40 bg-warning/10 p-5 sm:p-6"
+            >
+              <h2 className="font-semibold" id="previous-review-heading">
+                {problem.status === "REJECTED"
+                  ? "Lý do từ chối"
+                  : "Lý do chỉnh sửa trước đó"}
+              </h2>
+              <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">
+                {problem.reviewNote}
+              </p>
+            </section>
           )}
-        </section>
+        </div>
 
-        {problem.reviewNote && (
-          <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-            <h2 className="font-semibold">
-              {problem.status === "REJECTED" ? "Lý do từ chối" : "Lý do chỉnh sửa trước đó"}
-            </h2>
-            <p className="mt-1 whitespace-pre-wrap">{problem.reviewNote}</p>
-          </section>
-        )}
+        <aside className="grid min-w-0 gap-5">
+          <Card className="min-w-0 p-5 sm:p-6">
+            <div className="border-b border-border pb-4">
+              <h2 className="text-lg font-semibold">Thông tin doanh nghiệp</h2>
+              <p className="mt-1 break-words font-medium text-foreground">
+                {problem.businessProfile.companyName}
+              </p>
+            </div>
+            <dl className="mt-4 grid min-w-0 gap-4 text-sm">
+              <div>
+                <dt className="text-muted-foreground">Lĩnh vực hoạt động</dt>
+                <dd className="mt-1 break-words font-medium">
+                  {problem.businessProfile.industry}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Người liên hệ</dt>
+                <dd className="mt-1 break-words font-medium">
+                  {problem.businessProfile.user.name}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Email</dt>
+                <dd className="mt-1 break-all font-medium">
+                  {problem.businessProfile.user.email}
+                </dd>
+              </div>
+              {problem.businessProfile.website && (
+                <div>
+                  <dt className="text-muted-foreground">Website</dt>
+                  <dd className="mt-1 break-all font-medium">
+                    {problem.businessProfile.website}
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt className="text-muted-foreground">Giới thiệu doanh nghiệp</dt>
+                <dd className="mt-1 whitespace-pre-wrap break-words leading-6">
+                  {problem.businessProfile.description}
+                </dd>
+              </div>
+            </dl>
+          </Card>
 
-        {problem.aiReviews[0] && (
-          <AiProblemReviewPanel
-            problemId={problem.id}
-            initialResult={{
-              checklist: (problem.aiReviews[0].checklist as { key: string; passed: boolean; reason: string }[]),
-              conclusion: problem.aiReviews[0].conclusion ?? "UNCERTAIN",
-              reason: problem.aiReviews[0].reason ?? "",
-            }}
-          />
-        )}
-        {problem.status === "PENDING_REVIEW" ? (
-          <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">
-            <h2 className="mb-5 text-lg font-semibold">Kết quả kiểm duyệt</h2>
-            <ProblemReviewForm problemId={problem.id} />
+          {problem.aiReviews[0] ? (
+            <AiProblemReviewPanel
+              initialResult={{
+                checklist: problem.aiReviews[0].checklist as {
+                  key: string;
+                  passed: boolean;
+                  reason: string;
+                }[],
+                conclusion: problem.aiReviews[0].conclusion ?? "UNCERTAIN",
+                reason: problem.aiReviews[0].reason ?? "",
+              }}
+              problemId={problem.id}
+            />
+          ) : (
+            <section
+              aria-labelledby="ai-review-empty-heading"
+              className="min-w-0 rounded-2xl border border-primary/20 bg-primary/5 p-5 sm:p-6"
+            >
+              <Badge className="mb-3" variant="outline">
+                Công cụ hỗ trợ
+              </Badge>
+              <h2 className="text-lg font-semibold" id="ai-review-empty-heading">
+                AI hỗ trợ kiểm duyệt
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Chưa có kết quả AI được lưu cho vấn đề này. AI chỉ mang tính tham khảo và không thay thế quyết định của Admin.
+              </p>
+            </section>
+          )}
+
+          <section className="min-w-0 rounded-2xl border-2 border-primary/20 bg-card p-5 shadow-sm sm:p-6">
+            <div className="mb-5">
+              <p className="text-sm font-semibold text-primary">Quyết định của Admin</p>
+              <h2 className="mt-1 text-lg font-semibold">
+                {problem.status === "PENDING_REVIEW"
+                  ? "Kiểm duyệt vấn đề"
+                  : "Điều chỉnh trạng thái kiểm duyệt"}
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Kết quả AI chỉ mang tính tham khảo. Quyết định cuối cùng do Admin thực hiện.
+              </p>
+            </div>
+            {problem.status === "PENDING_REVIEW" ? (
+              <ProblemReviewForm problemId={problem.id} />
+            ) : (
+              <ProblemOverrideForm problemId={problem.id} />
+            )}
           </section>
-        ) : (
-          <ProblemOverrideForm problemId={problem.id} />
-        )}
+        </aside>
       </div>
     </main>
   );

@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { attachmentStorage } from "@/lib/storage";
+import { canDownloadProblemAttachment } from "@/lib/business-attachments/access";
 
 export async function GET(
   _request: Request,
@@ -19,6 +20,7 @@ export async function GET(
         select: {
           status: true,
           approvedAt: true,
+          hiddenByAdmin: true,
           businessProfile: { select: { userId: true } },
         },
       },
@@ -28,21 +30,16 @@ export async function GET(
     return new Response("Không tìm thấy tài liệu.", { status: 404 });
   }
 
-  const isAdmin = session.user.role === "ADMIN";
-  const isOwner =
-    session.user.role === "BUSINESS" &&
-    attachment.problem.businessProfile.userId === session.user.id;
-  const isStudentWithPublicProblem =
-    session.user.role === "STUDENT" &&
-    attachment.problem.approvedAt !== null &&
-    [
-      "APPROVED",
-      "PUBLISHED",
-      "TEAM_SELECTED",
-      "PROTOTYPING",
-      "EVALUATING",
-    ].includes(attachment.problem.status);
-  if (!isAdmin && !isOwner && !isStudentWithPublicProblem) {
+  if (
+    !canDownloadProblemAttachment({
+      role: session.user.role,
+      userId: session.user.id,
+      businessUserId: attachment.problem.businessProfile.userId,
+      status: attachment.problem.status,
+      approvedAt: attachment.problem.approvedAt,
+      hiddenByAdmin: attachment.problem.hiddenByAdmin,
+    })
+  ) {
     return new Response("Bạn không có quyền tải tài liệu này.", { status: 403 });
   }
 

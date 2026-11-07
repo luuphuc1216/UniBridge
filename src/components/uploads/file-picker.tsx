@@ -1,7 +1,8 @@
 "use client";
 
 import { useId, useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { Upload, X } from "lucide-react";
+import { FileText, Upload, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   ALLOWED_ATTACHMENT_EXTENSIONS,
   ALLOWED_ATTACHMENT_TYPES,
@@ -22,6 +23,7 @@ type FilePickerProps = {
   existingCount?: number;
   existingBytes?: number;
   onFilesChange?: () => void;
+  presentation?: "default" | "business-problem";
 };
 
 function formatSize(bytes: number): string {
@@ -48,6 +50,7 @@ export function FilePicker({
   existingCount = 0,
   existingBytes = 0,
   onFilesChange,
+  presentation = "default",
 }: FilePickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -57,8 +60,19 @@ export function FilePicker({
   const allowedFormats = ALLOWED_ATTACHMENT_EXTENSIONS.map(
     (extension) => ALLOWED_ATTACHMENT_TYPES[extension as keyof typeof ALLOWED_ATTACHMENT_TYPES].label,
   ).join(", ");
-  const remainingCount = Math.max(0, limits.count - existingCount);
+  const isBusinessProblemPresentation = presentation === "business-problem";
   const totalSelectedBytes = files.reduce((total, file) => total + file.size, 0);
+  const remainingCount = Math.max(0, limits.count - existingCount);
+  const availableCount = Math.max(
+    0,
+    limits.count - existingCount - files.length,
+  );
+  const remainingBytes = Math.max(
+    0,
+    limits.totalBytes - existingBytes - totalSelectedBytes,
+  );
+  const remainingSizeLabel =
+    remainingBytes === 0 ? "0 MB" : formatSize(remainingBytes);
 
   function addFiles(incomingFiles: File[]) {
     const nextFiles = [...files, ...incomingFiles];
@@ -99,9 +113,15 @@ export function FilePicker({
 
   return (
     <div>
-      <span className="mb-1.5 block text-sm font-medium">{label}</span>
+      {!isBusinessProblemPresentation && (
+        <span className="mb-1.5 block text-sm font-medium">{label}</span>
+      )}
       <div
-        className={`relative rounded-xl border-2 border-dashed p-5 text-center transition sm:p-7 ${
+        className={`relative rounded-xl border-2 border-dashed p-5 text-center transition ${
+          isBusinessProblemPresentation
+            ? "min-h-48 motion-reduce:transition-none sm:min-h-52"
+            : ""
+        } ${
           isDragging
             ? "border-primary bg-primary/10"
             : "border-border bg-muted/20 hover:border-primary/70 hover:bg-primary/5"
@@ -130,41 +150,114 @@ export function FilePicker({
           type="file"
         />
         <Upload aria-hidden="true" className="mx-auto h-8 w-8 text-primary" />
-        <p className="mt-2 font-semibold">Bấm để chọn tệp hoặc kéo thả vào đây</p>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Định dạng: {allowedFormats}. Tối đa {remainingCount} tệp, mỗi tệp{" "}
-          {formatSize(limits.fileSizeBytes)}, tổng dung lượng{" "}
-          {formatSize(limits.totalBytes - existingBytes)}.
-        </p>
+        {isBusinessProblemPresentation ? (
+          <>
+            <p className="mt-3 font-semibold">{label}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Chọn tệp từ thiết bị hoặc kéo thả vào khu vực này.
+            </p>
+            <span className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm">
+              Chọn tệp
+            </span>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+              Hỗ trợ: {allowedFormats}.
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Tối đa {limits.count} tệp ({availableCount} vị trí còn lại), mỗi tệp{" "}
+              {formatSize(limits.fileSizeBytes)}, tổng {formatSize(limits.totalBytes)}{" "}
+              ({remainingSizeLabel} còn trống).
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mt-2 font-semibold">Bấm để chọn tệp hoặc kéo thả vào đây</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Định dạng: {allowedFormats}. Tối đa {remainingCount} tệp, mỗi tệp{" "}
+              {formatSize(limits.fileSizeBytes)}, tổng dung lượng{" "}
+              {formatSize(Math.max(0, limits.totalBytes - existingBytes))}.
+            </p>
+          </>
+        )}
       </div>
 
-      {files.length > 0 && (
-        <ul aria-label="Danh sách tệp đã chọn" className="mt-3 space-y-2">
-          {files.map((file, index) => (
-            <li
-              className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-sm"
-              key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
-            >
-              <span className="min-w-0">
-                <span className="block break-all font-medium">{file.name}</span>
-                <span className="text-xs text-muted-foreground">{formatSize(file.size)}</span>
-              </span>
-              <button
-                aria-label={`Xóa tệp ${file.name}`}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-sm font-semibold text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                onClick={() => removeFile(index)}
-                type="button"
+        {isBusinessProblemPresentation && files.length === 0 && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Chưa có tệp mới nào được chọn.
+          </p>
+        )}
+
+        {files.length > 0 && (
+          <ul
+            aria-label={
+              isBusinessProblemPresentation
+                ? "Danh sách tệp mới đã chọn"
+                : "Danh sách tệp đã chọn"
+            }
+            className="mt-3 space-y-2"
+          >
+            {files.map((file, index) => (
+              <li
+                className={
+                  isBusinessProblemPresentation
+                    ? "flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-3 py-3 text-sm shadow-sm"
+                    : "flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-sm"
+                }
+                key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
               >
-                <X aria-hidden="true" className="h-4 w-4" />
-                Xóa
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+                {isBusinessProblemPresentation ? (
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <span className="mt-0.5 shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
+                      <FileText aria-hidden="true" className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-all font-medium">{file.name}</span>
+                      <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>{formatSize(file.size)}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{file.name.split(".").pop()?.toUpperCase()}</span>
+                        <Badge
+                          className="motion-reduce:transition-none"
+                          variant="secondary"
+                        >
+                          Tệp mới
+                        </Badge>
+                      </span>
+                    </span>
+                  </div>
+                ) : (
+                  <span className="min-w-0">
+                    <span className="block break-all font-medium">{file.name}</span>
+                    <span className="text-xs text-muted-foreground">{formatSize(file.size)}</span>
+                  </span>
+                )}
+                <button
+                  aria-label={`Xóa tệp ${file.name}`}
+                  className={
+                    isBusinessProblemPresentation
+                      ? "inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 motion-reduce:transition-none"
+                      : "inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-sm font-semibold text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  }
+                  onClick={() => removeFile(index)}
+                  type="button"
+                >
+                  <X aria-hidden="true" className="h-4 w-4" />
+                  Xóa
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
 
       {error && (
-        <p className="mt-2 text-sm text-destructive" id={errorId} role="alert">
+        <p
+          className={
+            isBusinessProblemPresentation
+              ? "mt-3 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+              : "mt-2 text-sm text-destructive"
+          }
+          id={errorId}
+          role="alert"
+        >
           {error}
         </p>
       )}

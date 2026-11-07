@@ -1,4 +1,14 @@
 import Link from "next/link";
+import {
+  Activity,
+  BriefcaseBusiness,
+  CheckCircle2,
+  ClipboardList,
+  FileCheck2,
+  FolderKanban,
+  MessageSquareText,
+  Sparkles,
+} from "lucide-react";
 import { requireBusinessProfile } from "@/lib/business-access";
 import { prisma } from "@/lib/prisma";
 import { ensureBusinessCreditNotifications } from "@/lib/business-credit-notifications";
@@ -7,6 +17,9 @@ import {
   BUSINESS_PROBLEM_STATUS_GROUPS,
   getEffectiveApplicationCounts,
 } from "@/lib/business-dashboard";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function BusinessDashboard() {
   const { businessProfileId } = await requireBusinessProfile();
@@ -64,81 +77,298 @@ export default async function BusinessDashboard() {
   const changesRequestedCount = statusCounts.get("CHANGES_REQUESTED") ?? 0;
   const totalNeedsRevision = needsRevisionCount + changesRequestedCount;
   return (
-    <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <p className="text-sm font-semibold text-primary">Khu vực doanh nghiệp</p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight">Tổng quan</h1>
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          ["Bài toán", problems.length],
-          ["Hồ sơ nhận được", totalEffectiveApplications],
-          ["Dự án đang thực hiện", activeProjects],
-          ["Dự án hoàn tất", completedProjects],
-        ].map(([label, value]) => (
-          <div className="rounded-2xl border border-border bg-card p-5" key={label as string}>
-            <p className="text-sm text-muted-foreground">{label as string}</p>
-            <p className="mt-2 text-3xl font-bold">{value as number}</p>
-          </div>
-        ))}
-      </section>
-      <section className="mt-6 rounded-2xl border border-border bg-card p-6">
-        <h2 className="text-lg font-semibold">Phân loại bài toán</h2>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {problemStatusLinks.map(({ status, label, count }) => (
-            <Link
-              className="flex items-center justify-between rounded-xl border border-border px-4 py-3 text-sm hover:bg-muted"
-              href={`/business/problems?status=${status}`}
-              key={status}
-            >
-              <span>{label}</span>
-              <strong>{count}</strong>
-            </Link>
-          ))}
-        </div>
-      </section>
-      <section className="mt-6 rounded-2xl border border-border bg-card p-6">
-        <h2 className="text-lg font-semibold">Cần xử lý</h2>
-        <div className="mt-4 grid gap-2 text-sm">
-          {totalNeedsRevision > 0 && <Link className="text-primary hover:underline" href="/business/problems?status=NEEDS_REVISION">Bài toán cần chỉnh sửa ({totalNeedsRevision})</Link>}
-          {pendingReview > 0 && <Link className="text-primary hover:underline" href="/business/problems">Hồ sơ cần xem xét ({pendingReview})</Link>}
-          {pendingInvitations > 0 && <Link className="text-primary hover:underline" href="/business/problems">Lời mời đang chờ nhóm phản hồi ({pendingInvitations}) — hạn gần nhất: {pendingInvitationDeadline ? new Intl.DateTimeFormat("vi-VN").format(pendingInvitationDeadline.expiresAt) : "chưa xác định"}</Link>}
-          {pendingProposals > 0 && <Link className="text-primary hover:underline" href="/business/projects">Proposal chờ đánh giá ({pendingProposals})</Link>}
-          {pendingMilestones > 0 && <Link className="text-primary hover:underline" href="/business/projects">Milestone chờ nghiệm thu ({pendingMilestones})</Link>}
-          {pendingAgreements > 0 && <Link className="text-primary hover:underline" href="/business/problems">Thỏa thuận chờ xác nhận ({pendingAgreements})</Link>}
-          {unreadMessages > 0 && <Link className="text-primary hover:underline" href="/business/messages">Tin nhắn chưa đọc ({unreadMessages})</Link>}
-          {pendingReview === 0 && pendingInvitations === 0 && pendingProposals === 0 && pendingMilestones === 0 && pendingAgreements === 0 && unreadMessages === 0 && totalNeedsRevision === 0 && <p className="text-muted-foreground">Không có việc cần xử lý.</p>}
-        </div>
-      </section>
-      <section className="mt-6 rounded-2xl border border-border bg-card p-6">
-        <h2 className="text-lg font-semibold">Hoạt động gần đây</h2>
-        <ul className="mt-4 grid gap-3 text-sm">
-          {notifications.length === 0 ? <li className="text-muted-foreground">Chưa có hoạt động mới.</li> : notifications.map((notification) => (
-            <li className="border-b border-border pb-2 last:border-0" key={notification.id}>{notification.title} — {notification.message}</li>
-          ))}
-        </ul>
-      </section>
-      <section className="mt-6 rounded-2xl border border-dashed border-border bg-card p-6">
-        <h2 className="text-lg font-semibold">Hạn mức</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Lượt đăng còn lại: {remaining}. {subscription ? `Premium đến ${new Intl.DateTimeFormat("vi-VN").format(subscription.endsAt)}.` : "Chưa có gói Premium đang hoạt động."}</p>
-        {remaining === 0 && (
-          <p className="mt-4 rounded-xl bg-amber-100 px-4 py-3 text-sm text-amber-900">
-            Bạn đã hết lượt đăng. Hãy mua thêm lượt hoặc Premium trước khi gửi bài toán.
+    <main className="mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-9 lg:px-8">
+      <section className="flex flex-col gap-5 rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-primary">Khu vực doanh nghiệp</p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            Tổng quan
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+            Theo dõi bài toán, dự án và những công việc cần doanh nghiệp xử lý.
           </p>
-        )}
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Link
-            className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
             href="/business/problems/new"
           >
+            <BriefcaseBusiness aria-hidden="true" className="mr-2 size-4" />
             Đăng bài toán
           </Link>
           <Link
-            className="rounded-xl border border-border px-5 py-3 text-sm font-semibold hover:bg-muted"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
             href="/business/problems"
           >
-            Bài toán của tôi
+            Quản lý bài toán
           </Link>
-          <Link className="rounded-xl border border-border px-5 py-3 text-center text-sm font-semibold hover:bg-muted" href="/business/profile">Hồ sơ doanh nghiệp</Link>
         </div>
+      </section>
+
+      <section aria-label="Tổng quan hoạt động" className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: "Bài toán", value: problems.length, icon: BriefcaseBusiness },
+          { label: "Hồ sơ nhận được", value: totalEffectiveApplications, icon: FileCheck2 },
+          { label: "Dự án đang thực hiện", value: activeProjects, icon: FolderKanban },
+          { label: "Dự án hoàn tất", value: completedProjects, icon: CheckCircle2 },
+        ].map(({ label, value, icon: Icon }) => (
+          <Card className="min-w-0 p-5 sm:p-6" key={label}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-muted-foreground">{label}</p>
+                <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">{value}</p>
+              </div>
+              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                <Icon aria-hidden="true" className="size-5" />
+              </span>
+            </div>
+          </Card>
+        ))}
+      </section>
+
+      <section className="mt-6">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle>Phân loại bài toán</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Mở danh sách bài toán theo từng trạng thái.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {problemStatusLinks.map(({ status, label, count }) => (
+            <Link
+              className="flex min-h-12 min-w-0 items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 text-sm transition-colors hover:border-primary/30 hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+              href={`/business/problems?status=${status}`}
+              key={status}
+            >
+              <span className="min-w-0 break-words text-foreground">{label}</span>
+              <Badge className="shrink-0" variant="outline">{count}</Badge>
+            </Link>
+          ))}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="mt-6">
+        <Card className="border-primary/20">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-warning/15 text-foreground">
+                <ClipboardList aria-hidden="true" className="size-5" />
+              </span>
+              <div>
+                <CardTitle>Cần xử lý</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Các mục cần doanh nghiệp xem xét hoặc phản hồi.
+                </p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {totalNeedsRevision > 0 && (
+                <Link
+                  className="flex min-h-16 items-center justify-between gap-3 rounded-xl border border-border p-3 text-sm transition-colors hover:border-primary/30 hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+                  href="/business/problems?status=NEEDS_REVISION"
+                >
+                  <span className="font-medium text-foreground">Bài toán cần chỉnh sửa</span>
+                  <Badge className="shrink-0" variant="warning">{totalNeedsRevision}</Badge>
+                </Link>
+              )}
+              {pendingReview > 0 && (
+                <Link
+                  className="flex min-h-16 items-center justify-between gap-3 rounded-xl border border-border p-3 text-sm transition-colors hover:border-primary/30 hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+                  href="/business/problems"
+                >
+                  <span className="font-medium text-foreground">Hồ sơ cần xem xét</span>
+                  <Badge className="shrink-0" variant="default">{pendingReview}</Badge>
+                </Link>
+              )}
+              {pendingInvitations > 0 && (
+                <Link
+                  className="flex min-h-16 items-center justify-between gap-3 rounded-xl border border-border p-3 text-sm transition-colors hover:border-primary/30 hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+                  href="/business/problems"
+                >
+                  <span className="min-w-0">
+                    <span className="block font-medium text-foreground">
+                      Lời mời đang chờ nhóm phản hồi
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Hạn gần nhất:{" "}
+                      {pendingInvitationDeadline
+                        ? new Intl.DateTimeFormat("vi-VN").format(
+                            pendingInvitationDeadline.expiresAt,
+                          )
+                        : "chưa xác định"}
+                    </span>
+                  </span>
+                  <Badge className="shrink-0" variant="warning">{pendingInvitations}</Badge>
+                </Link>
+              )}
+              {pendingProposals > 0 && (
+                <Link
+                  className="flex min-h-16 items-center justify-between gap-3 rounded-xl border border-border p-3 text-sm transition-colors hover:border-primary/30 hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+                  href="/business/projects"
+                >
+                  <span className="font-medium text-foreground">Proposal chờ đánh giá</span>
+                  <Badge className="shrink-0" variant="default">{pendingProposals}</Badge>
+                </Link>
+              )}
+              {pendingMilestones > 0 && (
+                <Link
+                  className="flex min-h-16 items-center justify-between gap-3 rounded-xl border border-border p-3 text-sm transition-colors hover:border-primary/30 hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+                  href="/business/projects"
+                >
+                  <span className="font-medium text-foreground">Milestone chờ nghiệm thu</span>
+                  <Badge className="shrink-0" variant="warning">{pendingMilestones}</Badge>
+                </Link>
+              )}
+              {pendingAgreements > 0 && (
+                <Link
+                  className="flex min-h-16 items-center justify-between gap-3 rounded-xl border border-border p-3 text-sm transition-colors hover:border-primary/30 hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+                  href="/business/problems"
+                >
+                  <span className="font-medium text-foreground">Thỏa thuận chờ xác nhận</span>
+                  <Badge className="shrink-0" variant="warning">{pendingAgreements}</Badge>
+                </Link>
+              )}
+              {unreadMessages > 0 && (
+                <Link
+                  className="flex min-h-16 items-center justify-between gap-3 rounded-xl border border-border p-3 text-sm transition-colors hover:border-primary/30 hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+                  href="/business/messages"
+                >
+                  <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+                    <MessageSquareText aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                    Tin nhắn chưa đọc
+                  </span>
+                  <Badge className="shrink-0" variant="default">{unreadMessages}</Badge>
+                </Link>
+              )}
+              {pendingReview === 0 &&
+                pendingInvitations === 0 &&
+                pendingProposals === 0 &&
+                pendingMilestones === 0 &&
+                pendingAgreements === 0 &&
+                unreadMessages === 0 &&
+                totalNeedsRevision === 0 && (
+                  <EmptyState
+                    className="sm:col-span-2 xl:col-span-3"
+                    description="Các mục cần doanh nghiệp quan tâm sẽ xuất hiện tại đây."
+                    icon={<CheckCircle2 aria-hidden="true" className="size-5" />}
+                    title="Không có việc cần xử lý."
+                  />
+                )}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="mt-6">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                <Activity aria-hidden="true" className="size-5" />
+              </span>
+              <div>
+                <CardTitle>Hoạt động gần đây</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Cập nhật mới nhất từ tài khoản doanh nghiệp.
+                </p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {notifications.length === 0 ? (
+              <EmptyState
+                description="Thông báo mới sẽ được hiển thị tại đây."
+                icon={<Activity aria-hidden="true" className="size-5" />}
+                title="Chưa có hoạt động mới."
+              />
+            ) : (
+              <ul className="divide-y divide-border">
+                {notifications.map((notification) => (
+                  <li
+                    className="flex min-w-0 gap-3 py-4 first:pt-1 last:pb-1"
+                    key={notification.id}
+                  >
+                    <span className="mt-1 grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                      <Activity aria-hidden="true" className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-semibold text-foreground">
+                        {notification.title}
+                      </p>
+                      <p className="mt-1 break-words text-sm leading-6 text-muted-foreground">
+                        {notification.message}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="mt-6">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                <Sparkles aria-hidden="true" className="size-5" />
+              </span>
+              <div>
+                <CardTitle>Hạn mức và Premium</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Theo dõi lượt đăng hiện có và gói đang sử dụng.
+                </p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4 rounded-2xl bg-muted/60 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+              <div>
+                <p className="text-sm text-muted-foreground">Lượt đăng còn lại</p>
+                <p className="mt-1 text-3xl font-bold tracking-tight text-foreground">
+                  {remaining}
+                </p>
+              </div>
+              <Badge className="w-fit" variant={subscription ? "success" : "outline"}>
+                {subscription
+                  ? `Premium đến ${new Intl.DateTimeFormat("vi-VN").format(subscription.endsAt)}`
+                  : "Chưa có gói Premium đang hoạt động"}
+              </Badge>
+            </div>
+            {remaining === 0 && (
+              <p className="mt-4 rounded-xl border border-warning/30 bg-warning/15 px-4 py-3 text-sm leading-6 text-foreground">
+                Bạn đã hết lượt đăng. Hãy mua thêm lượt hoặc Premium trước khi gửi bài toán.
+              </p>
+            )}
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Link
+                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+                href="/business/problems/new"
+              >
+                Đăng bài toán
+              </Link>
+              <Link
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+                href="/business/problems"
+              >
+                Bài toán của tôi
+              </Link>
+              <Link
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+                href="/business/profile"
+              >
+                Hồ sơ doanh nghiệp
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
       </section>
     </main>
   );

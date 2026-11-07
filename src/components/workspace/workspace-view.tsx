@@ -789,6 +789,7 @@ function ClosePrototypeForm({
 
 export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
   const { problem, messages, proposals, isBusiness } = data;
+  const isStudent = !isBusiness;
   const readonly = ["CLOSED", "READY_FOR_IMPLEMENTATION", "COMPLETED"].includes(problem.status);
   const latestProposal = proposals[0];
   const maxRevisionRequests =
@@ -816,24 +817,53 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
     ["implementationDecision", "Quyết định triển khai quá hạn"],
   ] as const;
   return (
-    <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-10">
-      <p className="text-sm font-semibold text-primary">Không gian làm việc chung</p>
-      <div className="mt-2 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{problem.title}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {problem.companyName} · Nhóm {problem.teamName}
-          </p>
+    <main className={`mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-10 ${isStudent ? "lg:px-8" : ""}`}>
+      {isStudent && (
+        <Link
+          className="inline-flex min-h-10 items-center text-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          href="/student/applications"
+        >
+          ← Hồ sơ đã gửi
+        </Link>
+      )}
+      {isStudent ? (
+        <div className="mt-3 flex flex-col justify-between gap-4 rounded-3xl border border-border bg-card p-5 shadow-sm sm:flex-row sm:items-start sm:p-8">
+          <div>
+            <p className="text-sm font-semibold text-primary">Không gian làm việc chung</p>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{problem.title}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {problem.companyName} · Nhóm {problem.teamName}
+            </p>
+          </div>
+          <span className="w-fit rounded-full bg-primary/10 px-3 py-1.5 text-sm font-semibold text-primary">
+            {getPrototypeProblemStatusLabel(problem)}
+          </span>
         </div>
-        <span className="w-fit rounded-full bg-primary/10 px-3 py-1.5 text-sm font-semibold text-primary">
-          {getPrototypeProblemStatusLabel(problem)}
-        </span>
-      </div>
+      ) : (
+        <>
+          <p className="text-sm font-semibold text-primary">Không gian làm việc chung</p>
+          <div className="mt-2 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{problem.title}</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {problem.companyName} · Nhóm {problem.teamName}
+              </p>
+            </div>
+            <span className="w-fit rounded-full bg-primary/10 px-3 py-1.5 text-sm font-semibold text-primary">
+              {getPrototypeProblemStatusLabel(problem)}
+            </span>
+          </div>
+        </>
+      )}
       {overdueLabels
         .filter(([kind]) => data.problem.overdue[kind])
         .map(([, label]) => (
           <p
-            className="mt-3 w-fit rounded-full bg-rose-100 px-3 py-1.5 text-sm font-semibold text-rose-800"
+            className={`mt-3 w-fit rounded-full px-3 py-1.5 text-sm font-semibold ${
+              isStudent
+                ? "border border-destructive/20 bg-destructive/10 text-destructive"
+                : "bg-rose-100 text-rose-800"
+            }`}
             key={label}
           >
             Quá hạn · {label}

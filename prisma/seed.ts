@@ -59,6 +59,41 @@ async function ensureSeedAttachment(
   }
 }
 
+async function ensureSeedApproachAttachment(
+  applicationId: string,
+  attachmentId: string,
+  originalName: string,
+  content: Uint8Array,
+) {
+  const existingAttachment = await prisma.approachAttachment.findUnique({
+    where: { id: attachmentId },
+  });
+  if (existingAttachment) return;
+
+  const storageKey = randomUUID();
+  await attachmentStorage.save(storageKey, content);
+  try {
+    await prisma.approachAttachment.create({
+      data: {
+        id: attachmentId,
+        applicationId,
+        submissionVersion: 1,
+        originalName,
+        contentType: "text/csv",
+        sizeBytes: content.byteLength,
+        storageKey,
+      },
+    });
+  } catch (error) {
+    try {
+      await attachmentStorage.delete(storageKey);
+    } catch (cleanupError) {
+      console.error("Không thể dọn tệp Approach seed sau lỗi tạo metadata:", cleanupError);
+    }
+    throw error;
+  }
+}
+
 async function ensureSeedProposalFile(
   proposalId: string,
   fileId: string,
@@ -1207,6 +1242,28 @@ async function main() {
       },
     });
   }
+
+  const sampleApproachTeam = await prisma.studentTeam.findUniqueOrThrow({
+    where: { slug: "nextgen-digital" },
+  });
+  const sampleApproachApplication = await prisma.application.findUniqueOrThrow({
+    where: {
+      problemId_teamId: {
+        problemId: applicationProblem.id,
+        teamId: sampleApproachTeam.id,
+      },
+    },
+  });
+  await prisma.application.update({
+    where: { id: sampleApproachApplication.id },
+    data: { attachmentVersion: 1 },
+  });
+  await ensureSeedApproachAttachment(
+    sampleApproachApplication.id,
+    "seed-approach-attachment",
+    "Tai-lieu-minh-hoa.csv",
+    new TextEncoder().encode("chi_so,gia_tri\nDon_hang,120\nDoanh_thu,5400000\n"),
+  );
 
   const invitationStates = [
     { teamSlug: "nextgen-digital", status: "PENDING_CONFIRMATION", days: 5 },

@@ -5,9 +5,11 @@ export const instant = false;
 
 export default function BusinessLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="group min-h-screen bg-muted/30">
       <BusinessNavigation />
-      {children}
+      <div className="min-w-0 lg:ml-64 group-has-[[data-sidebar-collapsed=true]]:lg:ml-20">
+        {children}
+      </div>
     </div>
   );
 }

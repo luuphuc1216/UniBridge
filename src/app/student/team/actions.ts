@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireStudent } from "@/lib/student-access";
+import { saveTeamProfileCore } from "@/lib/team-profile-core";
 
 export type TeamProfileActionState = { error: string | null };
 
@@ -22,17 +23,6 @@ function parseMembers(value: string) {
     members.push({ name: parts[0], major: parts[1] });
   }
   return members;
-}
-
-function toSlug(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
 }
 
 export async function saveTeamProfileAction(
@@ -64,9 +54,6 @@ export async function saveTeamProfileAction(
   if (!members) {
     return { error: "Mỗi thành viên cần nhập đúng định dạng: Tên thành viên | Chuyên ngành." };
   }
-  if (members.length === 0) {
-    return { error: "Hãy thêm ít nhất một thành viên kèm chuyên ngành." };
-  }
   if (
     name.length > 100 ||
     university.length > 160 ||
@@ -82,63 +69,17 @@ export async function saveTeamProfileAction(
   }
 
   try {
-    const existingTeam = await prisma.studentTeam.findUnique({
-      where: { ownerId: userId },
-    });
-    const teamId = existingTeam?.id;
-    const slug = existingTeam?.slug ?? `${toSlug(name) || "nhom-sinh-vien"}-${userId.slice(-8)}`;
-
-    await prisma.$transaction(async (transaction) => {
-      const team = teamId
-        ? await transaction.studentTeam.update({
-            where: { id: teamId, ownerId: userId },
-            data: {
-              name,
-              university,
-              description,
-              experience,
-              relevantProducts,
-              achievements,
-              interests,
-            },
-          })
-        : await transaction.studentTeam.create({
-            data: {
-              ownerId: userId,
-              name,
-              slug,
-              university,
-              description,
-              experience,
-              relevantProducts,
-              achievements,
-              interests,
-            },
-          });
-
-      await transaction.teamMembership.deleteMany({ where: { teamId: team.id } });
-      await transaction.teamSkill.deleteMany({ where: { teamId: team.id } });
-      for (const skillName of skills) {
-        const skill = await transaction.skill.upsert({
-          where: { name: skillName },
-          update: {},
-          create: { name: skillName },
-        });
-        await transaction.teamSkill.create({
-          data: { teamId: team.id, skillId: skill.id },
-        });
-      }
-      await transaction.teamMembership.createMany({
-        data: members.map((member, index) => ({
-          teamId: team.id,
-          studentProfileId: null,
-          name: member.name,
-          major: member.major,
-          title: index === 0 ? "Trưởng nhóm" : "Thành viên",
-          isLead: index === 0,
-        })),
-      });
-    });
+    await saveTeamProfileCore(userId, {
+      name,
+      university,
+      description,
+      experience,
+      relevantProducts,
+      achievements,
+      interests,
+      members,
+      skills,
+    }, prisma);
   } catch (error) {
     if (error instanceof Error) {
       return { error: error.message };
