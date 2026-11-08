@@ -9,7 +9,7 @@ on:
 
 env:
   DATABASE_URL: file:/tmp/ci-unibridge.db
-  DIRECT_URL: file:/tmp/ci-unibridge.db
+  DIRECT_URL: postgresql://postgres:postgres@localhost:5432/unibridge?schema=public
 
 jobs:
   verify:
