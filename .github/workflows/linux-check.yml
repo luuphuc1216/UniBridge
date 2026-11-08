@@ -1,3 +1,4 @@
+
 name: linux-check
 
 on:
@@ -14,6 +15,22 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-24.04
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: unibridge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d unibridge"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v7
 
@@ -67,6 +84,7 @@ jobs:
 
   ignore-scripts-must-fail:
     runs-on: ubuntu-24.04
+
     steps:
       - uses: actions/checkout@v7
 
