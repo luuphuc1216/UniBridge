@@ -16,7 +16,7 @@ const navigationItems = [
 ];
 
 const linkClassName =
-  "rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2";
+  "whitespace-nowrap rounded-lg px-2 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 2xl:px-2.5";
 
 export function LandingNavigation({
   homePagePrefix = false,
@@ -35,7 +35,10 @@ export function LandingNavigation({
 
   return (
     <>
-      <nav aria-label="Điều hướng chính" className="hidden items-center gap-1 lg:flex">
+      <nav
+        aria-label="Điều hướng chính"
+        className="hidden min-w-0 items-center gap-0.5 xl:flex"
+      >
         {navigationItems.map((item) => (
           <Link className={linkClassName} href={getHref(item.href)} key={item.href}>
             {item.label}
@@ -43,7 +46,7 @@ export function LandingNavigation({
         ))}
       </nav>
 
-      <div className="relative lg:hidden">
+      <div className="relative xl:hidden">
         <Button
           aria-controls="landing-mobile-navigation"
           aria-expanded={isOpen}

@@ -99,6 +99,7 @@ export default function AboutPage() {
         <section
           aria-labelledby="about-title"
           className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-28"
+          id="gioi-thieu-unibridge"
         >
           <div className="max-w-3xl">
             <p className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-semibold text-primary">
@@ -132,10 +133,7 @@ export default function AboutPage() {
                   "Sinh viên có cơ hội tiếp cận các dự án thực tiễn, vận dụng kiến thức đã học và đề xuất giải pháp.",
                   "Hai bên có thể kết nối, trao đổi và hợp tác để tạo ra những giá trị thiết thực.",
                 ].map((item) => (
-                  <li
-                    className="flex gap-3 text-sm leading-6 text-muted-foreground sm:text-base"
-                    key={item}
-                  >
+                  <li className="flex gap-3 text-sm leading-6 text-muted-foreground sm:text-base" key={item}>
                     <span
                       aria-hidden="true"
                       className="mt-2 size-2 shrink-0 rounded-full bg-primary"
@@ -208,16 +206,18 @@ export default function AboutPage() {
 
               return (
                 <article
-                  className={`overflow-hidden rounded-3xl border bg-card shadow-sm transition-shadow hover:shadow-md ${
-                    isTeamLead ? "border-primary/40" : "border-border"
+                  className={`overflow-hidden rounded-3xl border bg-card transition-shadow hover:shadow-md ${
+                    isTeamLead
+                      ? "border-primary/40 shadow-sm"
+                      : "border-border shadow-sm"
                   }`}
                   key={member.name}
                 >
-                  <div className="relative aspect-[4/3] overflow-hidden bg-accent">
+                  <div className="relative aspect-[4/5] overflow-hidden bg-accent">
                     {photoExists ? (
                       <Image
                         alt={`Ảnh ${member.name}`}
-                        className="object-cover"
+                        className="object-cover object-[center_20%]"
                         fill
                         priority={index === 0}
                         sizes="(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 25vw"
