@@ -598,6 +598,13 @@ export async function respondToProjectAgreementVersion(
     now?: Date;
   },
 ): Promise<{ projectTitle: string; businessUserId: string; teamUserIds: string[]; awaitingPayment: boolean }> {
+  await transaction.$queryRaw`
+    SELECT "id"
+    FROM "Project"
+    WHERE "id" = ${projectId}
+    FOR UPDATE
+  `;
+
   const project = await transaction.project.findUnique({
     where: { id: projectId },
     include: {

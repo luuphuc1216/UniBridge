@@ -17,7 +17,7 @@ test("rejects sensitive fields from audit metadata", () => {
   );
 });
 
-test("writes audit events transactionally and rejects updates or deletion", async () => {
+test("writes audit events transactionally and rejects updates, deletion, or truncation", async () => {
   const database = await createTestDatabase("unibridge-audit-log");
   try {
     await database.prisma.$transaction((transaction) =>
@@ -39,6 +39,9 @@ test("writes audit events transactionally and rejects updates or deletion", asyn
       }),
     );
     await assert.rejects(database.prisma.auditLog.delete({ where: { id: log.id } }));
+    await assert.rejects(
+      database.prisma.$executeRawUnsafe('TRUNCATE TABLE "AuditLog"'),
+    );
     assert.equal(
       await database.prisma.auditLog.findUniqueOrThrow({ where: { id: log.id } }).then(({ action }) => action),
       "TEST_ACTION",

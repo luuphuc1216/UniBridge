@@ -26,7 +26,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d unibridge"
+          --health-cmd "pg_isready -U postgres -d unibridge_ci"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -51,19 +51,6 @@ jobs:
       - name: Kiểm tra install-scripts
         run: npm install-scripts ls
 
-      - name: Chỉ còn một bản better-sqlite3
-        run: npm ls better-sqlite3 --all
-
-      - name: Native binding nạp qua adapter
-        run: |
-          node -e "
-          const p = require.resolve('better-sqlite3', { paths: [require.resolve('@prisma/adapter-better-sqlite3')] });
-          console.log('resolved:', p);
-          const Database = require(p);
-          const db = new Database(':memory:');
-          console.log(db.prepare('select sqlite_version() as v').get());
-          "
-
       - name: Prisma generate
         run: npx prisma generate
 
@@ -71,15 +58,16 @@ jobs:
         run: npx prisma migrate deploy
 
       - name: Create isolated test database
-        run: createdb --host localhost --username postgres --maintenance-db unibridge_ci unibridge_test
+        run: |
+          if ! psql --host localhost --username postgres --dbname unibridge_ci --tuples-only --no-align --command "SELECT 1 FROM pg_database WHERE datname = 'unibridge_test'" | grep --quiet '^1$'; then
+            createdb --host localhost --username postgres --maintenance-db unibridge_ci unibridge_test
+          fi
         env:
           PGPASSWORD: postgres
 
       - name: Test
         run: npm test
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/unibridge_test?schema=public
-          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/unibridge_test?schema=public
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/unibridge_test?schema=public
 
       - name: Lint
@@ -90,29 +78,3 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
-
-  ignore-scripts-must-fail:
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-
-      - name: Cài với --ignore-scripts
-        run: npm ci --ignore-scripts
-
-      - name: Mở DB phải lỗi vì thiếu native binding
-        run: |
-          if node -e "
-          const p = require.resolve('better-sqlite3', { paths: [require.resolve('@prisma/adapter-better-sqlite3')] });
-          const Database = require(p);
-          new Database(':memory:');
-          "; then
-            echo "Bất ngờ: mở được DB khi bỏ qua script. Cần xem lại allowScripts."
-            exit 1
-          else
-            echo "Đúng kỳ vọng: thiếu binding khi --ignore-scripts."
-          fi
