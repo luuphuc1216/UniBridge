@@ -239,9 +239,20 @@ describe("saveTeamProfileCore", () => {
   it("rolls back team, display membership, and skill changes when a database write fails", async () => {
     const { prisma } = database;
     await prisma.$executeRawUnsafe(
+      `CREATE FUNCTION test_fail_team_skill_insert()
+       RETURNS trigger
+       LANGUAGE plpgsql
+       AS $$
+       BEGIN
+         RAISE EXCEPTION 'forced skill write failure';
+       END;
+       $$`,
+    );
+    await prisma.$executeRawUnsafe(
       `CREATE TRIGGER "fail_team_skill_insert"
        BEFORE INSERT ON "TeamSkill"
-       BEGIN SELECT RAISE(ABORT, 'forced skill write failure'); END;`,
+       FOR EACH ROW
+       EXECUTE FUNCTION test_fail_team_skill_insert()`,
     );
 
     await assert.rejects(

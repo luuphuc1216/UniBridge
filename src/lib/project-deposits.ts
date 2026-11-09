@@ -57,6 +57,13 @@ export async function recordProjectDeposit(
   });
   try {
     return await database.$transaction(async (transaction) => {
+      await transaction.$queryRaw`
+        SELECT "id"
+        FROM "Project"
+        WHERE "id" = ${projectId}
+        FOR UPDATE
+      `;
+
       const project = await transaction.project.findUnique({
         where: { id: projectId },
         include: {

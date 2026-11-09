@@ -445,12 +445,23 @@ describe("Prototype handoff workflow", () => {
 
   it("rolls back Proposal and file rows and removes files when the transaction fails", async () => {
     await database.prisma.$executeRawUnsafe(`
-      CREATE TRIGGER fail_proposal_handoff_notification
-      BEFORE INSERT ON Notification
-      WHEN NEW.title = 'Có Proposal cần kiểm tra bàn giao'
+      CREATE FUNCTION test_fail_proposal_handoff_notification()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
       BEGIN
-        SELECT RAISE(ABORT, 'notification write failed');
+        IF NEW."title" = 'Có Proposal cần kiểm tra bàn giao' THEN
+          RAISE EXCEPTION 'notification write failed';
+        END IF;
+        RETURN NEW;
       END;
+      $$
+    `);
+    await database.prisma.$executeRawUnsafe(`
+      CREATE TRIGGER fail_proposal_handoff_notification
+      BEFORE INSERT ON "Notification"
+      FOR EACH ROW
+      EXECUTE FUNCTION test_fail_proposal_handoff_notification()
     `);
     await assert.rejects(submit());
     assert.equal(await database.prisma.proposal.count(), 0);
