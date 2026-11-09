@@ -11,24 +11,33 @@ const navigationItems = [
   { href: "#doanh-nghiep", label: "Doanh nghiệp" },
   { href: "#sinh-vien", label: "Sinh viên" },
   { href: "#quy-trinh", label: "Quy trình" },
+  { href: "/ve-chung-toi", label: "Về chúng tôi" },
   { href: "#cau-hoi", label: "Câu hỏi thường gặp" },
 ];
 
 const linkClassName =
   "rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2";
 
-export function LandingNavigation() {
+export function LandingNavigation({
+  homePagePrefix = false,
+}: {
+  homePagePrefix?: boolean;
+}) {
   const [isOpen, setIsOpen] = useState(false);
 
   function closeMenu() {
     setIsOpen(false);
   }
 
+  function getHref(href: string) {
+    return homePagePrefix && href.startsWith("#") ? `/${href}` : href;
+  }
+
   return (
     <>
       <nav aria-label="Điều hướng chính" className="hidden items-center gap-1 lg:flex">
         {navigationItems.map((item) => (
-          <Link className={linkClassName} href={item.href} key={item.href}>
+          <Link className={linkClassName} href={getHref(item.href)} key={item.href}>
             {item.label}
           </Link>
         ))}
@@ -56,7 +65,7 @@ export function LandingNavigation() {
             {navigationItems.map((item) => (
               <Link
                 className={linkClassName}
-                href={item.href}
+                href={getHref(item.href)}
                 key={item.href}
                 onClick={closeMenu}
               >
