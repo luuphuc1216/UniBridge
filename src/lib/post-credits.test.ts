@@ -5,6 +5,7 @@ import {
   POST_CREDIT_SOURCES,
 } from "@/lib/business-post-config";
 import {
+  CreditAlreadyProcessedError,
   consumePostCredit,
   purchasePremium,
   purchasePostCredits,
@@ -104,75 +105,10 @@ describe("post credit transactions", () => {
         },
       });
 
-      it("keeps a new problem as a complete draft when no credit is available", async () => {
-        const database = await createTestDatabase();
-        try {
-          await database.prisma.problem.create({
-            data: problemData("problem", "DRAFT"),
-          });
-          const result = await database.prisma.$transaction((transaction) =>
-            submitProblemForReview(transaction, {
-              businessProfileId: "business",
-              problemId: "problem",
-            }),
-          );
-          assert.deepEqual(result, { status: "no_credits" });
-          const problem = await database.prisma.problem.findUniqueOrThrow({
-            where: { id: "problem" },
-          });
-          assert.equal(problem.status, "DRAFT");
-          assert.equal(problem.consumedCreditId, null);
-          assert.equal(problem.title, "problem");
-        } finally {
-          await database.close();
-        }
-      });
-
-      it("resubmits NEEDS_REVISION without consuming another credit", async () => {
-        const database = await createTestDatabase();
-        try {
-          await database.prisma.postCredit.create({
-            data: {
-              id: "free",
-              businessProfileId: "business",
-              source: POST_CREDIT_SOURCES.FREE,
-              remaining: 1,
-              updatedAt: new Date(),
-            },
-          });
-          await database.prisma.problem.create({
-            data: problemData("problem", "DRAFT"),
-          });
-          const first = await database.prisma.$transaction((transaction) =>
-            submitProblemForReview(transaction, {
-              businessProfileId: "business",
-              problemId: "problem",
-            }),
-          );
-          await database.prisma.problem.update({
-            where: { id: "problem" },
-            data: { status: "NEEDS_REVISION" },
-          });
-          const second = await database.prisma.$transaction((transaction) =>
-            submitProblemForReview(transaction, {
-              businessProfileId: "business",
-              problemId: "problem",
-            }),
-          );
-          assert.equal(first.status, "submitted");
-          assert.equal(second.status, "submitted");
-          assert.equal(
-            (await database.prisma.postCredit.findUniqueOrThrow({ where: { id: "free" } })).remaining,
-            0,
-          );
-        } finally {
-          await database.close();
-        }
-      });
       await database.prisma.problem.create({
         data: problemData("problem", "DRAFT"),
       });
-      const results = await Promise.all(
+      const results = await Promise.allSettled(
         [1, 2].map(() =>
           database.prisma.$transaction((transaction) =>
             consumePostCredit(transaction, {
@@ -182,11 +118,93 @@ describe("post credit transactions", () => {
           ),
         ),
       );
-      assert.equal(results.filter((result) => result.status === "consumed").length, 1);
+      assert.equal(
+        results.filter(
+          (result) =>
+            result.status === "fulfilled" && result.value.status === "consumed",
+        ).length,
+        1,
+      );
+      assert.equal(
+        results.filter(
+          (result) =>
+            (result.status === "fulfilled" &&
+              result.value.status === "already_processed") ||
+            (result.status === "rejected" &&
+              result.reason instanceof CreditAlreadyProcessedError),
+        ).length,
+        1,
+      );
       const credit = await database.prisma.postCredit.findUniqueOrThrow({
         where: { id: "free" },
       });
       assert.equal(credit.remaining, 1);
+    } finally {
+      await database.close();
+    }
+  });
+
+  it("keeps a new problem as a complete draft when no credit is available", async () => {
+    const database = await createTestDatabase();
+    try {
+      await database.prisma.problem.create({
+        data: problemData("problem", "DRAFT"),
+      });
+      const result = await database.prisma.$transaction((transaction) =>
+        submitProblemForReview(transaction, {
+          businessProfileId: "business",
+          problemId: "problem",
+        }),
+      );
+      assert.deepEqual(result, { status: "no_credits" });
+      const problem = await database.prisma.problem.findUniqueOrThrow({
+        where: { id: "problem" },
+      });
+      assert.equal(problem.status, "DRAFT");
+      assert.equal(problem.consumedCreditId, null);
+      assert.equal(problem.title, "problem");
+    } finally {
+      await database.close();
+    }
+  });
+
+  it("resubmits NEEDS_REVISION without consuming another credit", async () => {
+    const database = await createTestDatabase();
+    try {
+      await database.prisma.postCredit.create({
+        data: {
+          id: "free",
+          businessProfileId: "business",
+          source: POST_CREDIT_SOURCES.FREE,
+          remaining: 1,
+          updatedAt: new Date(),
+        },
+      });
+      await database.prisma.problem.create({
+        data: problemData("problem", "DRAFT"),
+      });
+      const first = await database.prisma.$transaction((transaction) =>
+        submitProblemForReview(transaction, {
+          businessProfileId: "business",
+          problemId: "problem",
+        }),
+      );
+      await database.prisma.problem.update({
+        where: { id: "problem" },
+        data: { status: "NEEDS_REVISION" },
+      });
+      const second = await database.prisma.$transaction((transaction) =>
+        submitProblemForReview(transaction, {
+          businessProfileId: "business",
+          problemId: "problem",
+        }),
+      );
+      assert.equal(first.status, "submitted");
+      assert.equal(second.status, "submitted");
+      assert.equal(
+        (await database.prisma.postCredit.findUniqueOrThrow({ where: { id: "free" } })).remaining,
+        0,
+      );
     } finally {
       await database.close();
     }
