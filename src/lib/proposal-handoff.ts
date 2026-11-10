@@ -18,7 +18,7 @@ export type ProposalHandoffFile = {
   originalName: string;
   contentType: string;
   sizeBytes: number;
-  content: Uint8Array;
+  content?: Uint8Array;
 };
 
 export function validateProposalHandoffCompleteness(input: {
@@ -324,6 +324,7 @@ export async function submitPrototypeProposal({
   type,
   description,
   files,
+  storedFileKeys,
   clock = systemProposalHandoffClock,
 }: {
   database: PrismaClient;
@@ -334,11 +335,21 @@ export async function submitPrototypeProposal({
   type: string;
   description: string;
   files: ProposalHandoffFile[];
+  storedFileKeys?: (string | null)[];
   clock?: ProposalHandoffClock;
 }) {
   const storageKeys: string[] = [];
   try {
-    for (const file of files) {
+    if (storedFileKeys && storedFileKeys.length !== files.length) {
+      throw new Error("Danh sách tệp đã lưu không khớp với Proposal.");
+    }
+    for (const [index, file] of files.entries()) {
+      const preStoredKey = storedFileKeys?.[index];
+      if (preStoredKey) {
+        storageKeys.push(preStoredKey);
+        continue;
+      }
+      if (!file.content) throw new Error("Thiếu nội dung tệp Proposal.");
       const storageKey = randomUUID();
       storageKeys.push(storageKey);
       await storage.save(storageKey, file.content);

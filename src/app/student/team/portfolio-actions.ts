@@ -6,6 +6,11 @@ import { prisma } from "@/lib/prisma";
 import { validateAttachment } from "@/lib/business-attachments/validation";
 import { attachmentStorage } from "@/lib/storage";
 import { randomUUID } from "node:crypto";
+import {
+  completeUploadTokens,
+  parseUploadTokens,
+  type CompletedUpload,
+} from "@/lib/storage/upload-grants";
 
 async function requirePortfolioManager(teamId: string, userId: string) {
   const team = await prisma.studentTeam.findFirst({
@@ -22,7 +27,28 @@ async function requirePortfolioManager(teamId: string, userId: string) {
   return team;
 }
 
-async function getOptionalPortfolioFile(formData: FormData) {
+async function getOptionalPortfolioFile(
+  formData: FormData,
+  userId: string,
+  teamId: string,
+  itemId?: string,
+): Promise<CompletedUpload | { storageKey: string; originalName: string } | null> {
+  const tokens = parseUploadTokens(formData, "file");
+  if (tokens.length > 1) throw new Error("Portfolio chỉ nhận một tệp.");
+  const uploaded = (
+    await completeUploadTokens(tokens, userId, "STUDENT", {
+      kind: "portfolio",
+      teamId,
+      ...(itemId ? { itemId } : {}),
+    })
+  )[0];
+  if (uploaded) {
+    if (!["image/png", "image/jpeg", "application/pdf"].includes(uploaded.contentType)) {
+      await attachmentStorage.delete(uploaded.storageKey);
+      throw new Error("Portfolio chỉ nhận tệp PNG, JPG hoặc PDF.");
+    }
+    return uploaded;
+  }
   const value = formData.get("file");
   if (!(value instanceof File) || value.size === 0) return null;
   const validated = await validateAttachment(value);
@@ -31,7 +57,7 @@ async function getOptionalPortfolioFile(formData: FormData) {
   }
   const storageKey = randomUUID();
   await attachmentStorage.save(storageKey, validated.content);
-  return { storageKey, fileName: validated.originalName };
+  return { storageKey, originalName: validated.originalName };
 }
 
 export async function savePortfolioItem(formData: FormData) {
@@ -39,18 +65,23 @@ export async function savePortfolioItem(formData: FormData) {
   const teamId = String(formData.get("teamId") ?? "");
   if (!session?.user || session.user.role !== "STUDENT") throw new Error("Bạn cần đăng nhập.");
   await requirePortfolioManager(teamId, session.user.id);
-  const file = await getOptionalPortfolioFile(formData);
-  await prisma.portfolioItem.create({
-    data: {
-      teamId,
-      title: String(formData.get("title") ?? "").trim(),
-      description: String(formData.get("description") ?? "").trim(),
-      demoUrl: String(formData.get("demoUrl") ?? "").trim() || null,
-      field: String(formData.get("field") ?? "").trim(),
-      fileStorageKey: file?.storageKey,
-      fileName: file?.fileName,
-    },
-  });
+  const file = await getOptionalPortfolioFile(formData, session.user.id, teamId);
+  try {
+    await prisma.portfolioItem.create({
+      data: {
+        teamId,
+        title: String(formData.get("title") ?? "").trim(),
+        description: String(formData.get("description") ?? "").trim(),
+        demoUrl: String(formData.get("demoUrl") ?? "").trim() || null,
+        field: String(formData.get("field") ?? "").trim(),
+        fileStorageKey: file?.storageKey,
+        fileName: file?.originalName,
+      },
+    });
+  } catch (error) {
+    if (file) await attachmentStorage.delete(file.storageKey);
+    throw error;
+  }
   revalidatePath("/student/team");
 }
 
@@ -64,17 +95,22 @@ export async function updatePortfolioItem(formData: FormData) {
   });
   if (!item) throw new Error("Không tìm thấy mục portfolio.");
   await requirePortfolioManager(item.teamId, session.user.id);
-  const file = await getOptionalPortfolioFile(formData);
-  await prisma.portfolioItem.update({
-    where: { id },
-    data: {
-      title: String(formData.get("title") ?? "").trim(),
-      description: String(formData.get("description") ?? "").trim(),
-      demoUrl: String(formData.get("demoUrl") ?? "").trim() || null,
-      field: String(formData.get("field") ?? "").trim(),
-      ...(file ? { fileStorageKey: file.storageKey, fileName: file.fileName } : {}),
-    },
-  });
+  const file = await getOptionalPortfolioFile(formData, session.user.id, item.teamId, id);
+  try {
+    await prisma.portfolioItem.update({
+      where: { id },
+      data: {
+        title: String(formData.get("title") ?? "").trim(),
+        description: String(formData.get("description") ?? "").trim(),
+        demoUrl: String(formData.get("demoUrl") ?? "").trim() || null,
+        field: String(formData.get("field") ?? "").trim(),
+        ...(file ? { fileStorageKey: file.storageKey, fileName: file.originalName } : {}),
+      },
+    });
+  } catch (error) {
+    if (file) await attachmentStorage.delete(file.storageKey);
+    throw error;
+  }
   if (file && item.fileStorageKey) await attachmentStorage.delete(item.fileStorageKey);
   revalidatePath("/student/team");
 }

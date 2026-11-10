@@ -18,6 +18,8 @@ export function MilestoneSubmissionForm({
   milestoneId: string;
 }) {
   const [pending, setPending] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResetSignal, setUploadResetSignal] = useState(0);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -33,8 +35,15 @@ export function MilestoneSubmissionForm({
       const files = formData
         .getAll("files")
         .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+      const uploadedTokens = JSON.parse(
+        String(formData.get("filesUploadTokens") || "[]"),
+      ) as unknown[];
       const links = parseMilestoneSubmissionLinks(String(formData.get("links") ?? ""));
-      const validationError = validateMilestoneSubmission(note, files.length, links);
+      const validationError = validateMilestoneSubmission(
+        note,
+        files.length + uploadedTokens.length,
+        links,
+      );
       if (validationError) throw new Error(validationError);
 
       const response = await fetch(
@@ -42,6 +51,7 @@ export function MilestoneSubmissionForm({
         { method: "POST", body: formData },
       );
       const result = (await response.json()) as { error?: string; success?: string };
+      setUploadResetSignal((current) => current + 1);
       if (!response.ok) throw new Error(result.error ?? "Không thể nộp kết quả.");
       form.reset();
       setMessage(result.success ?? "Đã nộp kết quả.");
@@ -90,12 +100,15 @@ export function MilestoneSubmissionForm({
           totalBytes: MAX_PROPOSAL_FILE_TOTAL_BYTES,
         }}
         name="files"
+        scope={{ kind: "milestone", milestoneId }}
+        onUploadStateChange={setUploading}
+        resetSignal={uploadResetSignal}
       />
       {error && <p className="text-sm font-medium text-rose-700">{error}</p>}
       {message && <p className="text-sm font-medium text-emerald-700">{message}</p>}
       <button
         className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-        disabled={pending}
+        disabled={pending || uploading}
         type="submit"
       >
         {pending ? "Đang nộp..." : "Nộp Milestone"}

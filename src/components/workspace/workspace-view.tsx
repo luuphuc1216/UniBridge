@@ -390,40 +390,52 @@ function ProposalForm({
   problemId,
   applicationId,
   returnedProposal,
+  legacy,
 }: {
   problemId: string;
   applicationId: string;
   returnedProposal?: Proposal;
+  legacy: boolean;
 }) {
   const [pending, startPendingTransition] = useTransition();
   const [fileError, setFileError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResetSignal, setUploadResetSignal] = useState(0);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (pending || isUploading) return;
     setFileError(null);
 
     const form = event.currentTarget;
-    const fileInput = form.elements.namedItem("files");
-    const files =
-      fileInput instanceof HTMLInputElement && fileInput.files
-        ? Array.from(fileInput.files).filter((file) => file.name !== "")
-        : [];
-    const validationError = validateSelectedAttachments(files, 0, 0, {
+    let tokenCount = 0;
+    try {
+      const tokens = JSON.parse(
+        String(new FormData(form).get("filesUploadTokens") || "[]"),
+      ) as unknown;
+      tokenCount = Array.isArray(tokens) ? tokens.length : MAX_PROPOSAL_FILE_COUNT + 1;
+    } catch {
+      tokenCount = MAX_PROPOSAL_FILE_COUNT + 1;
+    }
+    const validationError = validateSelectedAttachments([], 0, 0, {
       count: MAX_PROPOSAL_FILE_COUNT,
       fileSizeBytes: MAX_PROPOSAL_FILE_SIZE_BYTES,
       totalBytes: MAX_PROPOSAL_FILE_TOTAL_BYTES,
     });
-    if (validationError) {
-      setFileError(validationError);
+    if (validationError || tokenCount > MAX_PROPOSAL_FILE_COUNT) {
+      setFileError(validationError ?? `Mỗi phiên bản được đính kèm tối đa ${MAX_PROPOSAL_FILE_COUNT} tệp.`);
       return;
     }
 
     const formData = new FormData(form);
     startPendingTransition(() => {
       void submitProposalAction({ error: null }, formData)
-        .then((result) => setFileError(result.error))
+        .then((result) => {
+          setFileError(result.error);
+          setUploadResetSignal((current) => current + 1);
+        })
         .catch((error: unknown) => {
+          setUploadResetSignal((current) => current + 1);
           const message = error instanceof Error ? error.message : "";
           setFileError(
             /unexpected end of form/i.test(message)
@@ -478,7 +490,10 @@ function ProposalForm({
           totalBytes: MAX_PROPOSAL_FILE_TOTAL_BYTES,
         }}
         name="files"
+        scope={{ kind: "proposal", problemId, applicationId, legacy }}
+        resetSignal={uploadResetSignal}
         onFilesChange={() => setFileError(null)}
+        onUploadStateChange={setIsUploading}
       />
       {fileError && (
         <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive" role="alert">
@@ -487,7 +502,7 @@ function ProposalForm({
       )}
       <button
         className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60 sm:w-auto"
-        disabled={pending}
+        disabled={pending || isUploading}
         type="submit"
       >
         {pending ? "Đang nộp..." : "Nộp để đánh giá"}
@@ -1113,6 +1128,7 @@ export function WorkspaceView({ data }: { data: WorkspaceViewData }) {
               </p>
               <ProposalForm
                 applicationId={problem.applicationId}
+                legacy={problem.prototypeLegacy}
                 problemId={problem.id}
                 returnedProposal={returnedProposal}
               />

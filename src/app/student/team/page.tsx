@@ -2,6 +2,7 @@ import { requireStudent } from "@/lib/student-access";
 import { prisma } from "@/lib/prisma";
 import { getOwnedTeam } from "@/lib/student-team";
 import { TeamProfileForm } from "@/components/student/team-profile-form";
+import { DirectUploadField } from "@/components/uploads/direct-upload-field";
 import { ReputationSummary } from "@/components/reputation/reputation-summary";
 import { ReviewList, TeamHistory } from "@/components/reputation/review-list";
 import { Badge } from "@/components/ui/badge";
@@ -229,11 +230,11 @@ export default async function StudentTeamPage({
                   </label>
                   <label className="grid gap-2 text-sm font-medium sm:col-span-2">
                     Tệp minh họa
-                    <Input
+                    <DirectUploadField
                       accept="image/png,image/jpeg,application/pdf"
                       className="h-auto min-h-11 py-2 text-base motion-reduce:transition-none sm:text-sm"
                       name="file"
-                      type="file"
+                      scope={{ kind: "portfolio", teamId: team.id }}
                     />
                     <span className="text-xs font-normal text-muted-foreground">
                       Tệp PNG, JPG hoặc PDF.
@@ -321,11 +322,15 @@ export default async function StudentTeamPage({
                             </label>
                             <label className="grid gap-2 text-sm font-medium">
                               Tệp minh họa
-                              <Input
+                              <DirectUploadField
                                 accept="image/png,image/jpeg,application/pdf"
                                 className="h-auto min-h-11 py-2 text-base motion-reduce:transition-none sm:text-sm"
                                 name="file"
-                                type="file"
+                                scope={{
+                                  kind: "portfolio",
+                                  teamId: team.id,
+                                  itemId: item.id,
+                                }}
                               />
                               <span className="text-xs font-normal text-muted-foreground">
                                 Tệp PNG, JPG hoặc PDF.

@@ -30,7 +30,25 @@ export function validateProductionEnvironment(env) {
     errors.push("AUTH_SECRET");
   }
 
-  if (!env.UPLOADS_DIR || !isAbsolute(env.UPLOADS_DIR)) {
+  const storageProvider = env.STORAGE_PROVIDER?.trim().toLowerCase();
+  const cloudStorage = ["s3", "r2"].includes(storageProvider ?? "");
+  if (storageProvider && !["local", "s3", "r2"].includes(storageProvider)) {
+    errors.push("STORAGE_PROVIDER");
+  }
+  if (env.VERCEL && !cloudStorage) {
+    errors.push("STORAGE_PROVIDER");
+  }
+  if (cloudStorage) {
+    for (const name of [
+      "STORAGE_BUCKET",
+      "STORAGE_REGION",
+      "STORAGE_ENDPOINT",
+      "STORAGE_ACCESS_KEY_ID",
+      "STORAGE_SECRET_ACCESS_KEY",
+    ]) {
+      if (!env[name]?.trim()) errors.push(name);
+    }
+  } else if (!env.VERCEL && (!env.UPLOADS_DIR || !isAbsolute(env.UPLOADS_DIR))) {
     errors.push("UPLOADS_DIR");
   }
 

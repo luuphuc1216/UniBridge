@@ -8,6 +8,10 @@ import { validateAttachment } from "@/lib/business-attachments/validation";
 import { prisma } from "@/lib/prisma";
 import { attachmentStorage } from "@/lib/storage";
 import {
+  completeUploadTokens,
+  parseUploadTokens,
+} from "@/lib/storage/upload-grants";
+import {
   findAuthorizedWorkspace,
   isFinalWorkspaceStatus,
   isWorkspaceMessageWritableApplicationStatus,
@@ -254,7 +258,13 @@ export async function submitProposalAction(
   const uploadedFiles = formData
     .getAll("files")
     .filter((file): file is File => file instanceof File && (file.size > 0 || file.name !== ""));
-  if (uploadedFiles.length > MAX_PROPOSAL_FILE_COUNT) {
+  let uploadTokens: string[];
+  try {
+    uploadTokens = parseUploadTokens(formData, "files");
+  } catch (error) {
+    return actionError(error, "Kiểm tra tệp Proposal");
+  }
+  if (uploadedFiles.length + uploadTokens.length > MAX_PROPOSAL_FILE_COUNT) {
     return { error: `Mỗi phiên bản được đính kèm tối đa ${MAX_PROPOSAL_FILE_COUNT} tệp.` };
   }
 
@@ -276,14 +286,39 @@ export async function submitProposalAction(
     ) {
       throw new Error("Chỉ chủ nhóm được chọn mới có thể nộp Proposal.");
     }
+    const directUploads = await completeUploadTokens(
+      uploadTokens,
+      session.user.id,
+      "STUDENT",
+      {
+        kind: "proposal",
+        problemId,
+        applicationId: application.id,
+        legacy: workspace.prototypeLegacy,
+      },
+    );
+    legacyStoredKeys.push(...directUploads.map(({ storageKey }) => storageKey));
     const validatedFiles = await Promise.all(uploadedFiles.map(validateAttachment));
     if (
+      directUploads.reduce((total, file) => total + file.sizeBytes, 0) +
       validatedFiles.reduce((total, file) => total + file.sizeBytes, 0) >
       MAX_PROPOSAL_FILE_TOTAL_BYTES
     ) {
       throw new Error("Tổng dung lượng tệp đính kèm vượt quá giới hạn cho phép.");
     }
     if (!workspace.prototypeLegacy) {
+      const handoffFiles = [
+        ...directUploads.map((file) => ({
+          originalName: file.originalName,
+          contentType: file.contentType,
+          sizeBytes: file.sizeBytes,
+        })),
+        ...validatedFiles.map((file) => ({
+          originalName: file.originalName,
+          contentType: file.contentType,
+          sizeBytes: file.sizeBytes,
+        })),
+      ];
       await submitPrototypeProposal({
         database: prisma,
         storage: attachmentStorage,
@@ -295,17 +330,25 @@ export async function submitProposalAction(
         submitterId: session.user.id,
         type,
         description,
-        files: validatedFiles.map((file) => ({
+        files: handoffFiles.map((file, index) => ({
           originalName: file.originalName,
           contentType: file.contentType,
           sizeBytes: file.sizeBytes,
-          content: file.content,
+          ...(index >= directUploads.length
+            ? { content: validatedFiles[index - directUploads.length]?.content }
+            : {}),
         })),
+        storedFileKeys: [
+          ...directUploads.map(({ storageKey }) => storageKey),
+          ...validatedFiles.map(() => null),
+        ],
       });
     } else {
+      const legacyFileKeys: string[] = [];
       for (const file of validatedFiles) {
         const storageKey = randomUUID();
         legacyStoredKeys.push(storageKey);
+        legacyFileKeys.push(storageKey);
         await attachmentStorage.save(storageKey, file.content);
       }
 
@@ -333,12 +376,20 @@ export async function submitProposalAction(
             type,
             description,
             files: {
-              create: validatedFiles.map((file, index) => ({
-                originalName: file.originalName,
-                contentType: file.contentType,
-                sizeBytes: file.sizeBytes,
-                storageKey: legacyStoredKeys[index],
-              })),
+              create: [
+                ...directUploads.map((file) => ({
+                  originalName: file.originalName,
+                  contentType: file.contentType,
+                  sizeBytes: file.sizeBytes,
+                  storageKey: file.storageKey,
+                })),
+                ...validatedFiles.map((file, index) => ({
+                  originalName: file.originalName,
+                  contentType: file.contentType,
+                  sizeBytes: file.sizeBytes,
+                  storageKey: legacyFileKeys[index],
+                })),
+              ],
             },
           },
         });

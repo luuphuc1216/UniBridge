@@ -29,6 +29,10 @@ export type BusinessProfileSaveState = {
 
 export type BusinessProfileLogoRequest = {
   file: File | null;
+  uploadedFile?: {
+    storageKey: string;
+    contentType: string;
+  } | null;
   logoUrl: string;
   removeLogo: boolean;
 };
@@ -105,17 +109,22 @@ export async function saveBusinessProfileWithLogo(
   request: BusinessProfileLogoRequest,
   dependencies: BusinessProfileLogoSaveDependencies,
 ): Promise<BusinessProfileSaveState> {
-  const hasFile = Boolean(request.file && request.file.size > 0);
+  const hasFile = Boolean(
+    (request.file && request.file.size > 0) || request.uploadedFile,
+  );
   const logoUrl = request.logoUrl.trim();
   const hasLogoUrl = Boolean(logoUrl);
+  let newStorageKey = request.uploadedFile?.storageKey ?? null;
 
   if (request.removeLogo && (hasFile || hasLogoUrl)) {
+    if (newStorageKey) await deleteNewLogoAfterFailedSave(newStorageKey, dependencies);
     return {
       error: "Hãy chọn xóa logo hoặc thay logo, không thể thực hiện cả hai cùng lúc.",
       success: null,
     };
   }
   if (hasFile && hasLogoUrl) {
+    if (newStorageKey) await deleteNewLogoAfterFailedSave(newStorageKey, dependencies);
     return {
       error: "Hãy chọn tải tệp logo hoặc nhập URL logo, không thể dùng cả hai cùng lúc.",
       success: null,
@@ -124,11 +133,16 @@ export async function saveBusinessProfileWithLogo(
 
   let nextLogo = currentProfile.logo;
   let nextLogoMimeType = currentProfile.logoMimeType;
-  let newStorageKey: string | null = null;
-
   if (request.removeLogo) {
     nextLogo = null;
     nextLogoMimeType = null;
+  } else if (request.uploadedFile) {
+    if (!["image/png", "image/jpeg"].includes(request.uploadedFile.contentType)) {
+      await deleteNewLogoAfterFailedSave(request.uploadedFile.storageKey, dependencies);
+      return { error: "Logo chỉ nhận tệp PNG hoặc JPG.", success: null };
+    }
+    nextLogo = newStorageKey;
+    nextLogoMimeType = request.uploadedFile.contentType;
   } else if (hasFile && request.file) {
     let validatedFile: ValidatedAttachment;
     try {
