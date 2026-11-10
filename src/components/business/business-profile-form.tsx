@@ -1,9 +1,7 @@
 "use client";
 
 import {
-  useEffect,
   useActionState,
-  useRef,
   useState,
   type ChangeEvent,
 } from "react";
@@ -36,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DirectUploadField } from "@/components/uploads/direct-upload-field";
 
 type Profile = {
   companyName: string;
@@ -143,17 +142,8 @@ export function BusinessProfileForm({ profile }: { profile: Profile }) {
   });
   const [removeLogo, setRemoveLogo] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState("");
-  const logoFileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const syncFileSelection = window.setTimeout(() => {
-      setSelectedFileName(
-        logoFileInputRef.current?.files?.[0]?.name ?? "",
-      );
-    }, 0);
-
-    return () => window.clearTimeout(syncFileSelection);
-  }, [state]);
+  const [logoResetSignal, setLogoResetSignal] = useState(0);
+  const [logoUploading, setLogoUploading] = useState(false);
 
   function updateTextField(
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -162,13 +152,9 @@ export function BusinessProfileForm({ profile }: { profile: Profile }) {
     setValues((current) => ({ ...current, [name]: value }));
   }
 
-  function updateLogoFile(event: ChangeEvent<HTMLInputElement>) {
-    setSelectedFileName(event.currentTarget.files?.[0]?.name ?? "");
-  }
-
   function clearLogoFile() {
-    if (logoFileInputRef.current) logoFileInputRef.current.value = "";
     setSelectedFileName("");
+    setLogoResetSignal((current) => current + 1);
   }
 
   function renderTextField({ name, label, required, placeholder, helper }: TextField) {
@@ -335,15 +321,16 @@ export function BusinessProfileForm({ profile }: { profile: Profile }) {
                 Tải logo mới
               </label>
               <div className="relative">
-                <Input
+                <DirectUploadField
                   accept="image/png,image/jpeg"
                   className="h-12 cursor-pointer py-2.5 pr-2 text-base file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-primary"
                   disabled={removeLogo || Boolean(values.logo)}
                   id="logoFile"
                   name="logoFile"
-                  onChange={updateLogoFile}
-                  ref={logoFileInputRef}
-                  type="file"
+                  onUploadComplete={(names) => setSelectedFileName(names[0] ?? "")}
+                  onUploadStateChange={setLogoUploading}
+                  resetSignal={logoResetSignal}
+                  scope={{ kind: "business-logo" }}
                   aria-describedby="logoFile-help"
                 />
               </div>
@@ -453,12 +440,12 @@ export function BusinessProfileForm({ profile }: { profile: Profile }) {
         </a>
         <Button
           className="w-full sm:w-auto"
-          disabled={pending}
+          disabled={pending || logoUploading}
           size="lg"
           type="submit"
-          aria-busy={pending}
+          aria-busy={pending || logoUploading}
         >
-          {pending ? (
+          {pending || logoUploading ? (
             <>
               <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />
               Đang lưu hồ sơ...

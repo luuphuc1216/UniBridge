@@ -133,7 +133,9 @@ export function ProblemForm({
   const [state, setState] = useState<ProblemActionState>({ error: null });
   const [isPending, startPendingTransition] = useTransition();
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
+  const [uploadResetSignal, setUploadResetSignal] = useState(0);
   const [clientError, setClientError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [aiBrief, setAiBrief] = useState("");
   const [aiSuggestion, setAiSuggestion] = useState<AiDraftSuggestion | null>(null);
   const [aiAppliedFields, setAiAppliedFields] = useState<
@@ -245,7 +247,7 @@ export function ProblemForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isPending) return;
+    if (isPending || isUploading) return;
     setClientError(null);
     setState({ error: null });
 
@@ -273,8 +275,12 @@ export function ProblemForm({
         : new FormData(form);
     startPendingTransition(() => {
       void action(state, formData)
-        .then(setState)
+        .then((result) => {
+          setState(result);
+          setUploadResetSignal((current) => current + 1);
+        })
         .catch((error: unknown) => {
+          setUploadResetSignal((current) => current + 1);
           const message = error instanceof Error ? error.message : "";
           setClientError(
             /unexpected end of form/i.test(message)
@@ -752,10 +758,16 @@ export function ProblemForm({
               totalBytes: MAX_ATTACHMENT_TOTAL_BYTES,
             }}
             name="attachments"
+            scope={{
+              kind: "business-problem",
+              ...(problem ? { problemId: problem.id } : {}),
+            }}
+            resetSignal={uploadResetSignal}
             onFilesChange={() => {
               setClientError(null);
               setState({ error: null });
             }}
+            onUploadStateChange={setIsUploading}
             presentation="business-problem"
           />
 
@@ -801,7 +813,7 @@ export function ProblemForm({
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button
             className="w-full motion-reduce:transition-none sm:w-auto"
-            disabled={isPending}
+            disabled={isPending || isUploading}
             name="intent"
             variant="outline"
             type="submit"

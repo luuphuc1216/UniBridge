@@ -11,6 +11,10 @@ import { submitPaidMilestone } from "@/lib/project-milestone-workflow";
 import { prisma } from "@/lib/prisma";
 import { attachmentStorage } from "@/lib/storage";
 import {
+  completeUploadTokens,
+  parseUploadTokens,
+} from "@/lib/storage/upload-grants";
+import {
   parseMilestoneSubmissionLinks,
   validateMilestoneSubmission,
 } from "@/lib/milestone-submission-validation";
@@ -84,30 +88,45 @@ export async function POST(
     const files = formData
       .getAll("files")
       .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+    const uploadTokens = parseUploadTokens(formData, "files");
     const links = parseMilestoneSubmissionLinks(String(formData.get("links") ?? ""));
-    const validationError = validateMilestoneSubmission(note, files.length, links);
+    const validationError = validateMilestoneSubmission(
+      note,
+      files.length + uploadTokens.length,
+      links,
+    );
     if (validationError) {
       return Response.json({ error: validationError }, { status: 400 });
     }
-    if (files.length > MAX_PROPOSAL_FILE_COUNT) {
+    if (files.length + uploadTokens.length > MAX_PROPOSAL_FILE_COUNT) {
       return Response.json({ error: `Mỗi lần nộp được đính kèm tối đa ${MAX_PROPOSAL_FILE_COUNT} tệp.` }, { status: 400 });
     }
+    const directUploads = await completeUploadTokens(
+      uploadTokens,
+      session.user.id,
+      "STUDENT",
+      { kind: "milestone", milestoneId },
+    );
+    storedKeys.push(...directUploads.map(({ storageKey }) => storageKey));
     const validatedFiles = await Promise.all(files.map(validateAttachment));
     if (
+      directUploads.reduce((total, file) => total + file.sizeBytes, 0) +
       validatedFiles.reduce((total, file) => total + file.sizeBytes, 0) >
       MAX_PROPOSAL_FILE_TOTAL_BYTES
     ) {
-      return Response.json({ error: "Tổng dung lượng tệp vượt quá giới hạn cho phép." }, { status: 400 });
+      throw new Error("Tổng dung lượng tệp vượt quá giới hạn cho phép.");
     }
+    const legacyStorageKeys: string[] = [];
     for (const file of validatedFiles) {
       const storageKey = randomUUID();
       storedKeys.push(storageKey);
+      legacyStorageKeys.push(storageKey);
       await attachmentStorage.save(storageKey, file.content);
     }
-
-    if (!project.legacyTermsExempt) {
-      const submissionFiles = validatedFiles.map((file, index) => {
-        const storageKey = storedKeys[index];
+    const submissionFiles = [
+      ...directUploads,
+      ...validatedFiles.map((file, index) => {
+        const storageKey = legacyStorageKeys[index];
         if (!storageKey) throw new Error("Không thể liên kết tệp bàn giao đã tải lên.");
         return {
           originalName: file.originalName,
@@ -115,7 +134,10 @@ export async function POST(
           sizeBytes: file.sizeBytes,
           storageKey,
         };
-      });
+      }),
+    ];
+
+    if (!project.legacyTermsExempt) {
       await submitPaidMilestone(prisma, {
         projectId: project.id,
         milestoneId,
@@ -169,12 +191,7 @@ export async function POST(
           note,
           links: JSON.stringify(links),
           files: {
-            create: validatedFiles.map((file, index) => ({
-              originalName: file.originalName,
-              contentType: file.contentType,
-              sizeBytes: file.sizeBytes,
-              storageKey: storedKeys[index],
-            })),
+            create: submissionFiles,
           },
         },
       });

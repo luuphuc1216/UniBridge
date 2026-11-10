@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { Buffer } from "node:buffer";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { attachmentStorage } from "@/lib/storage";
+import { createAttachmentDownloadResponse } from "@/lib/storage/download-response";
 import { canViewPortfolioFile } from "@/lib/portfolio-access";
 
 export async function GET(
@@ -36,18 +35,16 @@ export async function GET(
     return item.isVisible ? new NextResponse("Unauthorized", { status: 401 }) : new NextResponse("Not found", { status: 404 });
   }
   try {
-    const content = await attachmentStorage.read(item.fileStorageKey);
     const contentType = item.fileName?.toLowerCase().endsWith(".pdf")
       ? "application/pdf"
       : item.fileName?.toLowerCase().endsWith(".png")
         ? "image/png"
         : "image/jpeg";
-    return new NextResponse(Buffer.from(content), {
-      headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": `inline; filename="${encodeURIComponent(item.fileName ?? "portfolio-file")}"`,
-        "X-Content-Type-Options": "nosniff",
-      },
+    return await createAttachmentDownloadResponse({
+      storageKey: item.fileStorageKey,
+      contentType,
+      fileName: item.fileName ?? "portfolio-file",
+      inline: true,
     });
   } catch {
     return new NextResponse("Not found", { status: 404 });

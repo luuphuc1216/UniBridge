@@ -1,6 +1,13 @@
 "use client";
 
-import { useId, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+} from "react";
 import { FileText, Upload, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,6 +18,11 @@ import {
   MAX_ATTACHMENT_TOTAL_BYTES,
 } from "@/lib/business-attachments/config";
 import { validateSelectedAttachments } from "@/lib/business-attachments/client-validation";
+import {
+  discardPendingUploads,
+  uploadFilesDirectly,
+} from "@/lib/storage/direct-upload";
+import type { UploadScope } from "@/lib/storage/upload-grants";
 
 type FilePickerProps = {
   name: string;
@@ -23,7 +35,10 @@ type FilePickerProps = {
   existingCount?: number;
   existingBytes?: number;
   onFilesChange?: () => void;
+  onUploadStateChange?: (uploading: boolean) => void;
   presentation?: "default" | "business-problem";
+  scope: UploadScope;
+  resetSignal?: number;
 };
 
 function formatSize(bytes: number): string {
@@ -40,6 +55,18 @@ function setInputFiles(input: HTMLInputElement, files: File[]) {
 }
 
 export function FilePicker({
+  resetSignal,
+  ...props
+}: FilePickerProps) {
+  return (
+    <FilePickerInstance
+      key={`${props.name}:${resetSignal ?? 0}`}
+      {...props}
+    />
+  );
+}
+
+function FilePickerInstance({
   name,
   label = "Tệp đính kèm",
   limits = {
@@ -50,12 +77,18 @@ export function FilePicker({
   existingCount = 0,
   existingBytes = 0,
   onFilesChange,
+  onUploadStateChange,
   presentation = "default",
-}: FilePickerProps) {
+  scope,
+}: Omit<FilePickerProps, "resetSignal">) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadTokens, setUploadTokens] = useState<string[]>([]);
+  const uploadTokensRef = useRef<string[]>([]);
+  const isUploadingRef = useRef(false);
   const errorId = useId();
   const allowedFormats = ALLOWED_ATTACHMENT_EXTENSIONS.map(
     (extension) => ALLOWED_ATTACHMENT_TYPES[extension as keyof typeof ALLOWED_ATTACHMENT_TYPES].label,
@@ -74,7 +107,27 @@ export function FilePicker({
   const remainingSizeLabel =
     remainingBytes === 0 ? "0 MB" : formatSize(remainingBytes);
 
-  function addFiles(incomingFiles: File[]) {
+  useEffect(() => {
+    return () => {
+      void discardPendingUploads(uploadTokensRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const form = inputRef.current?.form;
+    if (!form) return;
+    const handleSubmit = (event: Event) => {
+      if (isUploadingRef.current) {
+        event.preventDefault();
+        return;
+      }
+    };
+    form.addEventListener("submit", handleSubmit);
+    return () => form.removeEventListener("submit", handleSubmit);
+  }, []);
+
+  async function addFiles(incomingFiles: File[]) {
+    if (isUploading || incomingFiles.length === 0) return;
     const nextFiles = [...files, ...incomingFiles];
     const validationError = validateSelectedAttachments(
       nextFiles,
@@ -84,13 +137,32 @@ export function FilePicker({
     );
     if (validationError) {
       setError(validationError);
-      if (inputRef.current) setInputFiles(inputRef.current, files);
+      if (inputRef.current) setInputFiles(inputRef.current, []);
       return;
     }
-    setFiles(nextFiles);
     setError(null);
-    if (inputRef.current) setInputFiles(inputRef.current, nextFiles);
-    onFilesChange?.();
+    setIsUploading(true);
+    isUploadingRef.current = true;
+    onUploadStateChange?.(true);
+    try {
+      const newTokens = await uploadFilesDirectly(incomingFiles, scope);
+      setFiles(nextFiles);
+      uploadTokensRef.current = [...uploadTokensRef.current, ...newTokens];
+      setUploadTokens((current) => [...current, ...newTokens]);
+      if (inputRef.current) setInputFiles(inputRef.current, []);
+      onFilesChange?.();
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Không thể tải tệp lên. Vui lòng thử lại.",
+      );
+      if (inputRef.current) setInputFiles(inputRef.current, []);
+    } finally {
+      setIsUploading(false);
+      isUploadingRef.current = false;
+      onUploadStateChange?.(false);
+    }
   }
 
   function handleInputChange(event: ChangeEvent<HTMLInputElement>) {
@@ -105,9 +177,14 @@ export function FilePicker({
 
   function removeFile(index: number) {
     const nextFiles = files.filter((_, fileIndex) => fileIndex !== index);
+    const removedToken = uploadTokens[index];
+    if (removedToken) void discardPendingUploads([removedToken]);
+    const nextTokens = uploadTokens.filter((_, fileIndex) => fileIndex !== index);
+    uploadTokensRef.current = nextTokens;
+    setUploadTokens(nextTokens);
     setFiles(nextFiles);
     setError(null);
-    if (inputRef.current) setInputFiles(inputRef.current, nextFiles);
+    if (inputRef.current) setInputFiles(inputRef.current, []);
     onFilesChange?.();
   }
 
@@ -144,7 +221,7 @@ export function FilePicker({
           aria-label={label}
           className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
           multiple
-          name={name}
+          disabled={isUploading}
           onChange={handleInputChange}
           ref={inputRef}
           type="file"
@@ -247,7 +324,17 @@ export function FilePicker({
             ))}
           </ul>
         )}
+        {isUploading && (
+          <p aria-live="polite" className="mt-3 text-sm text-muted-foreground" role="status">
+            Đang tải tệp trực tiếp lên kho lưu trữ...
+          </p>
+        )}
 
+      <input
+        name={`${name}UploadTokens`}
+        type="hidden"
+        value={JSON.stringify(uploadTokens)}
+      />
       {error && (
         <p
           className={

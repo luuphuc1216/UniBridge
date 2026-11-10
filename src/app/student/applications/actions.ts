@@ -6,6 +6,11 @@ import { prisma } from "@/lib/prisma";
 import { requireStudent } from "@/lib/student-access";
 import { requireOwnedTeam } from "@/lib/student-team";
 import { attachmentStorage } from "@/lib/storage";
+import {
+  completeUploadTokens,
+  parseUploadTokens,
+  type CompletedUpload,
+} from "@/lib/storage/upload-grants";
 import { validateAttachment } from "@/lib/business-attachments/validation";
 import {
   assertApproachAttachmentSetWithinLimits,
@@ -133,9 +138,11 @@ export async function saveApplicationAction(
   let proposedBudget: number | null;
   let approachLinks: string[];
   let uploadedAttachments: Awaited<ReturnType<typeof validateAttachment>>[];
+  let uploadedTokens: string[];
   try {
     proposedBudget = parseBudget(readText(formData, "proposedBudget"));
     approachLinks = parseApproachLinks(formData);
+    uploadedTokens = parseUploadTokens(formData, "approachAttachments");
     uploadedAttachments = await Promise.all(
       getApproachAttachmentFiles(formData).map(validateAttachment),
     );
@@ -161,6 +168,20 @@ export async function saveApplicationAction(
     return { error: "Một số nội dung vượt quá độ dài cho phép." };
   }
 
+  let directUploads: CompletedUpload[];
+  try {
+    directUploads = await completeUploadTokens(
+      uploadedTokens,
+      userId,
+      "STUDENT",
+      { kind: "approach", problemId },
+    );
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Không thể xác minh tài liệu tải lên.",
+    };
+  }
+
   const storedAttachmentRecords: {
     applicationId: string;
     submissionVersion: number;
@@ -173,6 +194,16 @@ export async function saveApplicationAction(
   let problemBusinessUserId = "";
   let wasNewSubmission = false;
   try {
+    storedAttachmentRecords.push(
+      ...directUploads.map((upload) => ({
+        applicationId: "",
+        submissionVersion: 0,
+        originalName: upload.originalName,
+        contentType: upload.contentType,
+        sizeBytes: upload.sizeBytes,
+        storageKey: upload.storageKey,
+      })),
+    );
     for (const attachment of uploadedAttachments) {
       const storageKey = randomUUID();
       await attachmentStorage.save(storageKey, attachment.content);

@@ -36,6 +36,71 @@ describe("production environment validation", () => {
     }
   });
 
+  it("accepts private S3-compatible storage on Vercel without a filesystem directory", () => {
+    const result = validateProductionEnvironment({
+      ...validEnvironment,
+      VERCEL: "1",
+      STORAGE_PROVIDER: "r2",
+      STORAGE_BUCKET: "unibridge",
+      STORAGE_REGION: "auto",
+      STORAGE_ENDPOINT: "https://account-id.r2.cloudflarestorage.com",
+      STORAGE_ACCESS_KEY_ID: "test-access-key",
+      STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+      UPLOADS_DIR: undefined,
+    });
+    assert.deepEqual(result, { errors: [], warnings: [] });
+  });
+
+  it("accepts Supabase S3 settings with an explicitly configured project region", () => {
+    const result = validateProductionEnvironment({
+      ...validEnvironment,
+      VERCEL: "1",
+      STORAGE_PROVIDER: "s3",
+      STORAGE_BUCKET: "unibridge-storage",
+      STORAGE_REGION: "ap-southeast-1",
+      STORAGE_ENDPOINT: "https://project-ref.storage.supabase.co/storage/v1/s3",
+      STORAGE_ACCESS_KEY_ID: "test-access-key",
+      STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+      UPLOADS_DIR: undefined,
+    });
+    assert.deepEqual(result, { errors: [], warnings: [] });
+  });
+
+  it("rejects a blank Supabase S3 region", () => {
+    const result = validateProductionEnvironment({
+      ...validEnvironment,
+      VERCEL: "1",
+      STORAGE_PROVIDER: "s3",
+      STORAGE_BUCKET: "unibridge-storage",
+      STORAGE_REGION: "   ",
+      STORAGE_ENDPOINT: "https://project-ref.storage.supabase.co/storage/v1/s3",
+      STORAGE_ACCESS_KEY_ID: "test-access-key",
+      STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+      UPLOADS_DIR: undefined,
+    });
+    assert.ok(result.errors.includes("STORAGE_REGION"));
+  });
+
+  it("rejects filesystem uploads on Vercel and requires all cloud credentials", () => {
+    assert.ok(
+      validateProductionEnvironment({
+        ...validEnvironment,
+        VERCEL: "1",
+      }).errors.includes("STORAGE_PROVIDER"),
+    );
+    const result = validateProductionEnvironment({
+      ...validEnvironment,
+      VERCEL: "1",
+      STORAGE_PROVIDER: "r2",
+      STORAGE_BUCKET: "unibridge",
+      STORAGE_REGION: "auto",
+      STORAGE_ENDPOINT: "https://account-id.r2.cloudflarestorage.com",
+    });
+    assert.ok(result.errors.includes("STORAGE_ACCESS_KEY_ID"));
+    assert.ok(result.errors.includes("STORAGE_SECRET_ACCESS_KEY"));
+    assert.ok(!result.errors.includes("UPLOADS_DIR"));
+  });
+
   it("rejects relative and non-file database URLs", () => {
     for (const DATABASE_URL of ["file:./dev.db", "postgresql://localhost/app"]) {
       assert.ok(

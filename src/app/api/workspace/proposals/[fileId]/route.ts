@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { attachmentStorage } from "@/lib/storage";
+import { createAttachmentDownloadResponse } from "@/lib/storage/download-response";
 import { findAuthorizedProposalFile } from "@/lib/proposal-handoff-access";
 
 export async function GET(
@@ -17,19 +17,10 @@ export async function GET(
   }
 
   try {
-    const content = await attachmentStorage.read(file.storageKey);
-    const body = new ArrayBuffer(content.byteLength);
-    new Uint8Array(body).set(content);
-    return new Response(body, {
-      headers: {
-        "Content-Type": file.contentType,
-        "Content-Length": String(file.sizeBytes),
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(
-          file.originalName,
-        )}`,
-        "Cache-Control": "private, no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
+    return await createAttachmentDownloadResponse({
+      storageKey: file.storageKey,
+      contentType: file.contentType,
+      fileName: file.originalName,
     });
   } catch (error) {
     console.error("Không thể đọc tệp Proposal:", error);

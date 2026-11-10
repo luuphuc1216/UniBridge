@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { attachmentStorage } from "@/lib/storage";
+import { createAttachmentDownloadResponse } from "@/lib/storage/download-response";
 import { canDownloadProblemAttachment } from "@/lib/business-attachments/access";
 
 export async function GET(
@@ -44,19 +44,10 @@ export async function GET(
   }
 
   try {
-    const content = await attachmentStorage.read(attachment.storageKey);
-    const body = new ArrayBuffer(content.byteLength);
-    new Uint8Array(body).set(content);
-    return new Response(body, {
-      headers: {
-        "Content-Type": attachment.contentType,
-        "Content-Length": String(attachment.sizeBytes),
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(
-          attachment.originalName,
-        )}`,
-        "Cache-Control": "private, no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
+    return await createAttachmentDownloadResponse({
+      storageKey: attachment.storageKey,
+      contentType: attachment.contentType,
+      fileName: attachment.originalName,
     });
   } catch (error) {
     console.error("Không thể đọc tệp đính kèm:", error);

@@ -9,6 +9,11 @@ import { validateAttachment } from "@/lib/business-attachments/validation";
 import { prisma } from "@/lib/prisma";
 import { attachmentStorage } from "@/lib/storage";
 import {
+  completeUploadTokens,
+  parseUploadTokens,
+  type CompletedUpload,
+} from "@/lib/storage/upload-grants";
+import {
   getInvitationDeadline,
   getInvitationReminderAt,
 } from "@/lib/invitation-config";
@@ -128,24 +133,24 @@ function makeSlug(title: string): string {
 async function validateAndStoreFiles(
   files: File[],
   existingCount: number,
+  uploaded: CompletedUpload[] = [],
 ) {
-  if (files.length + existingCount > MAX_ATTACHMENT_COUNT) {
-    throw new Error(`Mỗi bài toán được đính kèm tối đa ${MAX_ATTACHMENT_COUNT} tệp.`);
-  }
-
-  const validated = [];
-  for (const file of files) {
-    validated.push(await validateAttachment(file));
-  }
-
-  const stored: Array<{
-    storageKey: string;
-    originalName: string;
-    contentType: string;
-    sizeBytes: number;
-  }> = [];
+  const stored = [...uploaded];
 
   try {
+    if (files.length + uploaded.length + existingCount > MAX_ATTACHMENT_COUNT) {
+      throw new Error(`Mỗi bài toán được đính kèm tối đa ${MAX_ATTACHMENT_COUNT} tệp.`);
+    }
+    const validated = [];
+    for (const file of files) {
+      validated.push(await validateAttachment(file));
+    }
+    const totalBytes =
+      uploaded.reduce((sum, file) => sum + file.sizeBytes, 0) +
+      validated.reduce((sum, file) => sum + file.sizeBytes, 0);
+    if (totalBytes > MAX_ATTACHMENT_COUNT * 20 * 1024 * 1024) {
+      throw new Error("Tổng dung lượng tài liệu vượt quá 60 MB.");
+    }
     for (const attachment of validated) {
       const storageKey = randomUUID();
       await attachmentStorage.save(storageKey, attachment.content);
@@ -178,10 +183,16 @@ export async function createProblemAction(
   let stored: Awaited<ReturnType<typeof validateAndStoreFiles>> = [];
   let problemId: string;
   try {
-    const { businessProfileId } = await getBusinessContext();
+    const { userId, businessProfileId } = await getBusinessContext();
     const fields = validateProblemFields(formData);
     const files = getUploadedFiles(formData);
-    stored = await validateAndStoreFiles(files, 0);
+    const uploaded = await completeUploadTokens(
+      parseUploadTokens(formData, "attachments"),
+      userId,
+      "BUSINESS",
+      { kind: "business-problem" },
+    );
+    stored = await validateAndStoreFiles(files, 0, uploaded);
     const problem = await prisma.problem.create({
       data: {
         ...fields,
@@ -259,7 +270,8 @@ export async function updateProblemAction(
   const shouldSubmit = getText(formData, "intent") === "submit";
 
   try {
-    ({ businessProfileId } = await getBusinessContext());
+    const context = await getBusinessContext();
+    businessProfileId = context.businessProfileId;
     const problem = await prisma.problem.findFirst({
       where: {
         id: problemId,
@@ -298,7 +310,17 @@ export async function updateProblemAction(
         id: { notIn: attachmentsToDelete.map(({ id }) => id) },
       },
     });
-    stored = await validateAndStoreFiles(getUploadedFiles(formData), currentCount);
+    const uploaded = await completeUploadTokens(
+      parseUploadTokens(formData, "attachments"),
+      context.userId,
+      "BUSINESS",
+      { kind: "business-problem", problemId },
+    );
+    stored = await validateAndStoreFiles(
+      getUploadedFiles(formData),
+      currentCount,
+      uploaded,
+    );
     const submittedSkillIds = formData
       .getAll("skillIds")
       .filter((value): value is string => typeof value === "string")

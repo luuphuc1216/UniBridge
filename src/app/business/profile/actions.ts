@@ -11,6 +11,10 @@ import {
 } from "@/lib/business-profile-core";
 import { validateAttachment } from "@/lib/business-attachments/validation";
 import { attachmentStorage } from "@/lib/storage";
+import {
+  completeUploadTokens,
+  parseUploadTokens,
+} from "@/lib/storage/upload-grants";
 
 export type BusinessProfileActionState = BusinessProfileSaveState;
 
@@ -48,12 +52,28 @@ export async function saveBusinessProfileAction(
       phone: text(formData, "phone") || null,
       representative: text(formData, "representative"),
     };
+    const logoTokens = parseUploadTokens(formData, "logoFile");
+    if (logoTokens.length > 1) throw new Error("Logo chỉ được tải lên một tệp.");
+    const uploadedLogo = (
+      await completeUploadTokens(
+        logoTokens,
+        session.user.id,
+        "BUSINESS",
+        { kind: "business-logo" },
+      )
+    )[0];
 
     return await saveBusinessProfileWithLogo(
       { logo: profile.logo, logoMimeType: profile.logoMimeType },
       fields,
       {
         file: logoFile instanceof File && logoFile.size > 0 ? logoFile : null,
+        uploadedFile: uploadedLogo
+          ? {
+              storageKey: uploadedLogo.storageKey,
+              contentType: uploadedLogo.contentType,
+            }
+          : null,
         logoUrl: text(formData, "logo"),
         removeLogo: formData.get("removeLogo") === "true",
       },
@@ -89,7 +109,10 @@ export async function saveBusinessProfileAction(
   } catch (error) {
     console.error("Lưu hồ sơ doanh nghiệp thất bại:", error);
     return {
-      error: "Không thể lưu hồ sơ doanh nghiệp. Vui lòng thử lại.",
+      error:
+        error instanceof Error
+          ? error.message
+          : "Không thể lưu hồ sơ doanh nghiệp. Vui lòng thử lại.",
       success: null,
     };
   }

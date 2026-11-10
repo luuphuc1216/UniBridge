@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   saveApplicationAction,
   type ApplicationActionState,
@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { DirectUploadField } from "@/components/uploads/direct-upload-field";
 
 export type ApplicationFormData = {
   problemUnderstanding: string;
@@ -51,6 +52,7 @@ export function ApplicationForm({
     ApplicationActionState,
     FormData
   >(saveApplicationAction, { error: null });
+  const [isUploading, setIsUploading] = useState(false);
 
   return (
     <form action={formAction} className="mt-5 space-y-5">
@@ -169,12 +171,14 @@ export function ApplicationForm({
           )}
           <label className="grid gap-2 rounded-2xl border border-border bg-background/50 p-4 text-sm font-medium sm:p-5">
             Tài liệu minh họa (không bắt buộc, tối đa 3 tệp)
-            <input
+            <DirectUploadField
               accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.pptx,.csv"
               className="min-h-11 rounded-xl border border-border bg-background px-3 py-2.5 text-base font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-primary sm:text-sm"
-              multiple
               name="approachAttachments"
-              type="file"
+              multiple
+              allowRemove
+              onUploadStateChange={setIsUploading}
+              scope={{ kind: "approach", problemId }}
             />
             <span className="text-xs font-normal text-muted-foreground">
               PDF, PNG, JPG, DOCX, XLSX, PPTX hoặc CSV; tối đa 20 MB mỗi tệp,
@@ -230,7 +234,7 @@ export function ApplicationForm({
         {(application === null || application.status === "DRAFT") && (
           <Button
             className="motion-reduce:transition-none"
-            disabled={isPending}
+            disabled={isPending || isUploading}
             formNoValidate
             name="intent"
             type="submit"
@@ -242,7 +246,7 @@ export function ApplicationForm({
         )}
         <Button
           className="w-full motion-reduce:transition-none sm:w-auto"
-          disabled={isPending}
+          disabled={isPending || isUploading}
           name="intent"
           type="submit"
           value="submit"
