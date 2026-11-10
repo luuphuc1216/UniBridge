@@ -23,9 +23,14 @@ export async function openNotificationAction(formData: FormData): Promise<void> 
     throw new Error("Không tìm thấy thông báo của tài khoản này.");
   }
 
+  const destination = notification.href.trim();
+  if (!destination.startsWith("/")) {
+    throw new Error("Thông báo này không còn hợp lệ để mở.");
+  }
+
   await prisma.notification.updateMany({
     where: { id: notification.id, userId: session.user.id, readAt: null },
     data: { readAt: new Date() },
   });
-  redirect(notification.href);
+  redirect(destination);
 }
