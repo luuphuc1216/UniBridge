@@ -162,7 +162,7 @@ async function authorizeScope(userId: string, role: string, scope: UploadScope) 
       where: { problemId_teamId: { problemId: scope.problemId, teamId: team.id } },
       select: { id: true, status: true },
     });
-    if (!application || !canReplaceApproachAttachments(application.status)) {
+    if (application && !canReplaceApproachAttachments(application.status)) {
       throw new Error("Bạn không thể thay đổi tài liệu của hồ sơ này.");
     }
     return;
